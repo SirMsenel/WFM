@@ -1,0 +1,16 @@
+streamlit
+pandas
+openpyxl
+fastapi
+uvicorn
+python-multipart
+requests
+matplotlib
+xgboost
+lightgbm
+scikit-learn
+plotly
+shap
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
