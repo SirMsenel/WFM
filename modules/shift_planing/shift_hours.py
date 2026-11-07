@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from core.planning import preview_plan,calendar_grid,SHIFT_LABELS,LEAVE_LABELS
-from core.planning_ui import period_banner,coverage_summary,render_shortages,render_issues
+from core.planning_ui import period_banner,coverage_summary,render_shortages,render_issues,coverage_controls
 from core.shift_edits import edit_shifts,undo_edit
 from core.personnel import planner_people,WORK_LABELS
 from core.navigation import sections
@@ -26,58 +26,40 @@ def _cell_style(value):
 
 
 def _manual_form(state,result,context):
+    from core.manual_assignments import prepare_manual
     people={str(e['employee_id']):e for e in result['staff']}
     with st.expander('Elle Vardiya veya İzin Ekle',expanded=True):
-        picked=st.multiselect('Yerleştirilecek personeller',list(people),
-                              format_func=lambda eid:f"{people[eid].get('full_name',eid)} · {WORK_LABELS.get(people[eid].get('work_type'),'')}",key='manual_people_v2')
+        mode=st.radio('Kimlere yazılacak?',['Personel seç','Grup seç'],horizontal=True,key='manual_pick_mode')
+        if mode=='Grup seç':
+            groups=st.multiselect('Çalışma grupları',list(WORK_LABELS),format_func=WORK_LABELS.get,key='manual_groups')
+            picked=[eid for eid,e in people.items() if e['work_type'] in groups]
+            st.caption(f'{len(picked)} personel seçildi. Dolu günler korunur; yalnızca kurallara uygun boş günler yerleştirilir.')
+        else:
+            picked=st.multiselect('Yerleştirilecek personeller',list(people),format_func=lambda eid:f"{people[eid].get('full_name',eid)} · {WORK_LABELS.get(people[eid].get('work_type'),'')}",key='manual_people_v2')
         kind=st.selectbox('Kayıt türü',['WORK','OFF',*LEAVE_LABELS,'GECE','MESAI'],format_func=lambda k:SHIFT_LABELS[k],key='manual_kind_v2')
         working=kind in {'WORK','GECE','MESAI'}
         custom=st.checkbox('Bitiş saatini kendim belirleyeceğim',value=kind=='MESAI',key='manual_custom_end_v2') if working else False
-        with st.form('manual_assignment_v2'):
-            start,end=pd.Timestamp(context['start']).date(),pd.Timestamp(context['end']).date()
-            dates=st.date_input('Uygulanacak gün aralığı',value=(start,end),min_value=start,max_value=end,key=f'manual_dates_{start}_{end}')
-            begin,finish=None,None
-            if working:
-                a,b=st.columns(2)
-                begin=a.time_input('Başlangıç saati',value=time.fromisoformat(state['shift_rules']['general']['night_window_start']) if kind=='GECE' else time(8),key=f'manual_begin_{kind}')
-                if custom:
-                    finish=b.time_input('Bitiş saati',value=time(18),key=f'manual_finish_{kind}')
-                else:
-                    b.caption('Gece bitişi mesai kurallarından alınır.' if kind=='GECE' else 'Bitiş saati her personelin grup süresinden hesaplanır. Dış kaynak 10 saat, Full Time 9 saat; Akademi kendi üst sınırına göre.')
-            note=st.text_input('Not',key='manual_note_v2')
-            save=st.form_submit_button('Seçili Günlere Yerleştir',disabled=not picked,type='primary')
-        if save:
-            if len(dates)!=2:
-                st.error('Başlangıç ve bitiş gününü seçin.');return
-            protected={(r['employee_id'],r['date']) for r in result['source_rows'] if r.get('source') in {'fixed_external','approved_request','published_fixed'}}
-            additions=[];skipped=0
-            for eid in picked:
-                rule=state['shift_rules']['work_type'][people[eid]['work_type']]
-                for day in pd.date_range(dates[0],dates[1]):
-                    key=(eid,str(day.date()))
-                    if key in protected or (working and key in result['exam_keys']):
-                        skipped+=1;continue
-                    a,b=None,None
-                    if working:
-                        a=begin.strftime('%H:%M')
-                        if custom:
-                            b=finish.strftime('%H:%M')
-                        elif kind=='GECE':
-                            b=state['shift_rules']['general']['night_window_end']
-                        else:
-                            hours=rule.get('shift_total_hours',rule.get('shift_total_hours_max',7))
-                            minute=begin.hour*60+begin.minute+int(float(hours)*60)
-                            b=f'{(minute//60)%24:02d}:{minute%60:02d}'
-                    additions.append({'employee_id':eid,'date':str(day.date()),'group':people[eid]['work_type'],'shift_code':kind,
-                                      'start':a,'end':b,'source':'manual_single','note':note})
-            if not additions:
-                st.warning('Seçili günlerdeki kesin kayıt veya sınavlar nedeniyle yeni atama yapılamadı.');return
-            try:
-                edit_shifts(state,additions)
-                state['shift_notice']=f'{len(additions)} kayıt yerleştirildi. {skipped} kesin kayıt/sınav günü korundu.'
-                st.rerun()
-            except (ValueError,TypeError) as exc:
-                st.error(str(exc))
+        start,end=pd.Timestamp(context['start']).date(),pd.Timestamp(context['end']).date()
+        dates=st.date_input('Uygulanacak gün aralığı',value=(start,end),min_value=start,max_value=end,key=f'manual_dates_{start}_{end}')
+        begin,finish=None,None
+        if working:
+            a,b=st.columns(2)
+            begin=a.time_input('Başlangıç saati',value=time.fromisoformat(state['shift_rules']['general']['night_window_start']) if kind=='GECE' else time(8),key=f'manual_begin_{kind}')
+            if custom:finish=b.time_input('Bitiş saati',value=time(18),key=f'manual_finish_{kind}')
+            else:b.caption('Gece saatleri mesai kurallarından; diğer bitiş saatleri personelin grup süresinden hesaplanır.')
+        note=st.text_input('Not',key='manual_note_v2')
+        additions=[];warnings=[]
+        if picked and len(dates)==2:
+            try:additions,warnings=prepare_manual(state,picked,dates[0],dates[1],kind,begin,finish,note)
+            except (ValueError,TypeError,KeyError) as exc:st.error(str(exc))
+        if warnings:
+            st.warning(f'{len(warnings)} gün/kural kontrolü nedeniyle bazı girişler yazılmayacak. Mevcut vardiyalar değiştirilmez.')
+            st.dataframe(warnings,hide_index=True,use_container_width=True)
+        if additions:st.caption(f'{len(additions)} boş ve uygun güne yerleştirme yapılacak.')
+        if st.button('Seçili Günlere Yerleştir',disabled=not additions,type='primary',key='manual_place'):
+            edit_shifts(state,additions)
+            state['shift_notice']=f'{len(additions)} kayıt yerleştirildi. Dolu veya kurala aykırı günler korunarak atlandı.'
+            st.rerun()
 
 
 def _record_table(rows):
@@ -113,6 +95,7 @@ def render():
     st.subheader('Vardiya Saatleri ve Yerleştirmeler')
     context=period_banner(state)
     if not context:return
+    coverage_controls(state)
     planner_people(state)
     try:result=preview_plan(state,include_auto=True)
     except (ValueError,KeyError) as exc:
@@ -129,18 +112,6 @@ def render():
         dates=[c for c in grid if c!='Personel']
         st.dataframe(grid.style.map(_cell_style,subset=dates),hide_index=True,use_container_width=True,height=570)
         st.caption('Yeşil: çalışma · Mor: gece · Pembe: izin/rapor · Sarı: sınav · —: henüz yerleştirilmedi')
-    def show_sources():
-        rows=[r for r in result['source_rows'] if r.get('source')!='auto']
-        st.markdown('### Otomatik Gelen ve Elle Girilen Kayıtlar')
-        if rows:
-            grid=calendar_grid({**result,'source_rows':rows},context)
-            st.dataframe(grid.style.map(_cell_style,subset=[c for c in grid if c!='Personel']),hide_index=True,use_container_width=True,height=500)
-        else:st.info('Seçili dönemde kaynak kayıt yok.')
-        if result['exam_keys']:
-            names={str(e['employee_id']):e.get('full_name') for e in result['staff']}
-            st.markdown('#### Sınav Nedeniyle Kapalı Günler')
-            st.dataframe([{'Personel':names.get(eid,eid),'Tarih':day,'Kayıt':'Sınav'} for eid,day in sorted(result['exam_keys'])],hide_index=True,use_container_width=True)
-        render_issues(result)
     def show_night():
         rows=[r for r in result['source_rows'] if r.get('shift_code')=='GECE']
         st.markdown('### Gece Vardiyasına Yerleştirilmiş Personel')
@@ -150,9 +121,9 @@ def render():
             st.dataframe(grid.style.map(_cell_style,subset=[c for c in grid if c!='Personel']),hide_index=True,use_container_width=True,height=500)
         else:st.warning('Bu dönem için gece vardiyası kaydı yok.')
         night_issues=[r for r in result['issues'] if 'Gece' in r.get('Sorun','') or 'gece' in r.get('Sorun','')]
-        if night_issues:st.error('Gece yerleştirmelerinde eksik veya uyuşmazlık var.');st.dataframe(night_issues,hide_index=True,use_container_width=True)
+        if night_issues:render_issues({**result,'issues':night_issues})
         elif state['shift_rules'].get('night',{}).get('enabled'):st.success('Tanımlı gece kontrolleri sağlanıyor.')
-    sections('nav_shift_workbench',{'Takvim':show_calendar,'Kayıtlar ve İzinler':show_sources,'Gece Kontrolü':show_night,'Kalan İhtiyaç':lambda:render_shortages(result,'manual_gaps')})
+    sections('nav_shift_workbench',{'Takvim':show_calendar,'Gece Kontrolü':show_night,'Kalan İhtiyaç':lambda:render_shortages(result,'manual_gaps')})
     # Show actual errors immediately, even when another subview is selected.
     if result['issues']:
         with st.expander("Kayıtlardaki uyuşmazlıklar ve düzeltme adımları",expanded=True):render_issues(result)

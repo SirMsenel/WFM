@@ -10,7 +10,7 @@ from .engine import minutes
 from core.planning import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
@@ -143,7 +143,7 @@ def collect_inputs(state):
         if req.get("status") not in {"Uygulandı", "Onaylandı"} or req.get("queue") in {"TL", "TL_SWAP", "WFM"}:
             continue
         typ = req.get("type")
-        if typ in {"Ders Programı", "Sınav Takvimi"}:
+        if typ in {"Ders Programı", "Sınav Takvimi", "Genel Talep"}:
             continue  # Structured availability below is the source of truth.
         if typ not in codes:
             problem(req, "Onaylı talep otomatik uygulanamıyor; Vardiya Saatleri'nde elle atayıp talebi kapatın")

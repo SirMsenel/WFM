@@ -40,10 +40,26 @@ def render_daily():
         st.markdown('### Aynı Haftanın Model Tahminleri')
         daily_chart(joined,'Tarih',[o['name'] for o in options])
     tail=history[history.tarih<=pd.Timestamp(cutoff)].set_index('tarih').asfreq('D').reset_index()
-    tail['7 günlük hareketli ortalama']=tail.cagri_sayisi.rolling(7,min_periods=7).mean()
-    tail['30 günlük hareketli ortalama']=tail.cagri_sayisi.rolling(30,min_periods=30).mean()
-    st.markdown('### Gerçekleşen Çağrılar ve Hareketli Ortalamalar')
-    daily_chart(tail.tail(60),'tarih',['cagri_sayisi','7 günlük hareketli ortalama','30 günlük hareketli ortalama'])
+    st.markdown('### Hafta İçi ve Hafta Sonu Hareketli Ortalamaları')
+    tail=grouped_rolling(tail)
+    st.caption('7 ve 30 takvim günü içindeki yalnızca aynı gün türü kullanılır. Hafta içi değerleri hafta sonu ortalamasına katılmaz; eksik günler sıfır sayılmaz.')
+    columns=st.columns(2)
+    for col,kind in zip(columns,['Hafta içi','Hafta sonu']):
+        with col:
+            st.markdown('**'+kind+'**')
+            selected=tail[(tail['Gün türü']==kind)&(tail.tarih>tail.tarih.max()-pd.Timedelta(days=60))]
+            daily_chart(selected,'tarih',['cagri_sayisi','7 günlük hareketli ortalama','30 günlük hareketli ortalama'],height=260)
+
+
+def grouped_rolling(history):
+    out=history.copy().sort_values('tarih');out['tarih']=pd.to_datetime(out.tarih)
+    out['Gün türü']=np.where(out.tarih.dt.weekday<5,'Hafta içi','Hafta sonu')
+    for days in (7,30):
+        out[f'{days} günlük hareketli ortalama']=np.nan
+        for _,part in out.groupby('Gün türü'):
+            values=part.set_index('tarih').cagri_sayisi.rolling(f'{days}D',min_periods=1).mean()
+            out.loc[part.index,f'{days} günlük hareketli ortalama']=values.to_numpy()
+    return out
 
 
 def interval_references(raw,start,cutoff):
@@ -84,9 +100,11 @@ def render_interval():
     selected['Saat']=selected.Slot.map(lambda s:f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}')
     st.line_chart(selected.set_index('Saat')[['Geçen hafta aynı gün','Son 2 hafta aynı gün ort.','Son 30 gün aynı gün ort.']])
     st.caption('Bu görünüm çağrı adedidir; interval planlama ekranındaki dağılım yüzdesinden farklıdır. Eksik dilim boş gösterilir.')
+    from core.time_labels import slot_label
+    view=table.copy();view.insert(2,'Saat aralığı',view.Slot.map(slot_label));view=view.drop(columns='Slot')
     with st.expander('30 dakikalık karşılaştırma tablosu'):
-        st.dataframe(table,hide_index=True,use_container_width=True)
-    st.download_button('30 dk Analiz CSV İndir',table.to_csv(index=False).encode('utf-8-sig'),'30dk_gecmis.csv','text/csv')
+        st.dataframe(view,hide_index=True,use_container_width=True)
+    st.download_button('30 dk Analiz CSV İndir',view.to_csv(index=False).encode('utf-8-sig'),'30dk_gecmis.csv','text/csv')
 
 
 def render():

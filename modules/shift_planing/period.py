@@ -67,22 +67,24 @@ def render():
         else:
             st.info('Bu dönemi onaylayarak planlamaya devam et.')
         c1,c2,_=st.columns([1,1,2])
-        if c1.button('Dönemi Onayla',type='primary',key='vp_confirm'):
-            st.session_state['plan_ctx_confirmed']=True
-            save_keys(st.session_state);st.rerun()
-        if c2.button('Onayı Kaldır',disabled=not confirmed,key='vp_unconfirm'):
-            st.session_state['plan_ctx_confirmed']=False
-            save_keys(st.session_state);st.rerun()
+        def confirm(value):
+            st.session_state['plan_ctx_confirmed']=value;save_keys(st.session_state)
+        c1.button('Dönemi Onayla',type='primary',key='vp_confirm',on_click=confirm,args=(True,))
+        c2.button('Onayı Kaldır',disabled=not confirmed,key='vp_unconfirm',on_click=confirm,args=(False,))
     base=df[df.Tarih.between(start,end)].copy()
     if base.empty:
         st.warning('Seçilen dönemde ihtiyaç yok.');return
     a,b,c=st.columns(3)
-    a.metric('Planlanacak gün',(end-start).days+1)
-    b.metric('En yoğun dilimde ihtiyaç',int(base['Planlanan Agent'].max()))
-    c.metric('Tahmini çağrı',f"{base.get('Tahmin Çağrı',pd.Series(dtype=float)).sum():,.0f}")
+    with a.container(border=True):st.metric('Planlanacak gün',(end-start).days+1)
+    with b.container(border=True):st.metric('En yoğun dilimde ihtiyaç',int(base['Planlanan Agent'].max()))
+    with c.container(border=True):st.metric('Tahmini çağrı',f"{base.get('Tahmin Çağrı',pd.Series(dtype=float)).sum():,.0f}")
     daily=base.groupby('Tarih',as_index=False).agg(**{'Zirve ihtiyaç':('Planlanan Agent','max'),'Ortalama ihtiyaç':('Planlanan Agent','mean')})
     st.markdown('### Haftanın İhtiyaç Görünümü')
-    daily_chart(daily,'Tarih',['Zirve ihtiyaç','Ortalama ihtiyaç'],height=220,y_title='Personel ihtiyacı')
+    import altair as alt
+    plot=daily.copy();plot['Tarih']=pd.to_datetime(plot.Tarih).dt.strftime('%d.%m.%Y')
+    long=plot.melt(id_vars='Tarih',var_name='Gösterge',value_name='Personel')
+    chart=alt.Chart(long).mark_line(point=True,clip=True).encode(x=alt.X('Tarih:O',sort=plot.Tarih.tolist(),title=None,axis=alt.Axis(labelAngle=-25)),y=alt.Y('Personel:Q',scale=alt.Scale(zero=True),title='Personel ihtiyacı'),color=alt.Color('Gösterge:N',legend=alt.Legend(orient='top'),scale=alt.Scale(domain=['Zirve ihtiyaç','Ortalama ihtiyaç'],range=['#118b99','#626ac4'])),tooltip=['Tarih:N','Gösterge:N','Personel:Q']).properties(height=260)
+    st.altair_chart(chart,use_container_width=True,key='period_need_chart')
     if len(daily)<=7:
         columns=st.columns(len(daily))
         for col,record in zip(columns,daily.to_dict('records')):

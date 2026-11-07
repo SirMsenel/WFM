@@ -247,9 +247,9 @@ def _render_day_tables(profile_df: pd.DataFrame):
 # ----------------------------
 
 @st.cache_data(show_spinner=False,max_entries=8)
-def _weekly_model(raw,week,dt_col,calls_col,previous,used):
+def _weekly_model(raw,week,dt_col,calls_col,previous,used,use_iqr=False,iqr_k=1.5,iqr_mode="cap"):
     from core.interval_service import build_weekly_distribution
-    return build_weekly_distribution(raw,week,dt_col,calls_col,previous,used)
+    return build_weekly_distribution(raw,week,dt_col,calls_col,previous,used,use_iqr,iqr_k,iqr_mode)
 
 
 
@@ -291,15 +291,23 @@ def render():
                 count_col=b.selectbox('Çağrı sayısı sütunu',list(raw),index=list(raw).index(call_guess) if call_guess in raw else 0,key='interval_calls_column')
     if raw is None:
         st.info('Bir dosya seçin veya hazır veritabanını kullanın.');return
+    use_iqr=st.toggle('Aykırı değerleri IQR ile değerlendir',value=False,key='interval_iqr')
+    iqr_k=1.5;iqr_mode='cap'
+    if use_iqr:
+        a,b=st.columns(2)
+        iqr_k=a.number_input('IQR katsayısı',min_value=.5,max_value=5.,value=1.5,step=.5,key='interval_iqr_k')
+        iqr_mode=b.selectbox('Aykırı değer işlemi',['cap','drop'],format_func=lambda x:'Sınırla (günleri koru)' if x=='cap' else 'Aykırı günleri çıkar',key='interval_iqr_mode')
+        st.caption('Aynı haftanın günü ve aynı yarım saat karşılaştırılır. Temizlik yalnızca eğitim geçmişine uygulanır; başarı ölçümündeki gerçek çağrılar değiştirilmez.')
     try:
         dates,_,_,quality=prepare_intervals(raw,date_col,count_col)
         next_monday=dates.max().date()+pd.Timedelta(days=7-dates.max().weekday())
         chosen=st.date_input('Hangi hafta için dağılım oluşturulsun?',value=next_monday,key='interval_target_week')
         week=pd.Timestamp(chosen)-pd.Timedelta(days=chosen.weekday())
-        result=_weekly_model(raw,str(week.date()),date_col,count_col,state.get('interval_last_used_profile'),state.get('interval_used_profiles',{}))
+        result=_weekly_model(raw,str(week.date()),date_col,count_col,state.get('interval_last_used_profile'),state.get('interval_used_profiles',{}),use_iqr,iqr_k,iqr_mode)
     except (ValueError,TypeError,KeyError) as exc:
         st.error(str(exc));return
     meta=result['meta'];profile=result['profile']
+    if use_iqr:st.caption(f"IQR: {meta['iqr_changed_slots']} aykırı yarım saat saptandı; {meta['iqr_removed_days']} tam gün çıkarıldı.")
     st.info(f'{week:%d.%m.%Y} – {week+pd.Timedelta(days=6):%d.%m.%Y} · Her günün çağrıları kendi sütununda %100’e tamamlanır.')
     st.markdown('### Önerilen Haftalık Dağılım')
     slot_heatmap(profile)
@@ -311,15 +319,16 @@ def render():
         st.download_button('Haftalık Tabloyu CSV İndir',table.to_csv().encode('utf-8-sig'),'haftalik_slot_agirliklari.csv','text/csv')
     with st.expander('Bu dağılım neden önerildi?'):
         st.write('Son 2 hafta, 1 ay, 3 ay, 6 ay, 12 ay ve tüm geçmiş ayrı ayrı karşılaştırılır. Geçen tam haftayı daha iyi açıklayan geçmişlere daha fazla pay verilir; yeni günler eski günlerden daha etkilidir.')
-        scores=result['scores'][['Pencere','Başarı ağırlığı (%)','MAE (yüzde puan)']].rename(columns={'Başarı ağırlığı (%)':'Önerideki payı (%)','MAE (yüzde puan)':'Geçmiş haftadaki hata'})
-        st.dataframe(scores,hide_index=True,use_container_width=True,column_config={'Önerideki payı (%)':st.column_config.NumberColumn(format='%.1f'),'Geçmiş haftadaki hata':st.column_config.NumberColumn(format='%.3f')})
+        scores=result['scores'][['Pencere','Başarı ağırlığı (%)','MAE (yüzde puan)']].rename(columns={'Pencere':'Hesaplamada kullanılan geçmiş','Başarı ağırlığı (%)':'Son dağılıma katkısı (%)','MAE (yüzde puan)':'Geçen haftadaki ortalama sapma (yüzde puan)'})
+        st.caption('Her satır ayrı bir denemedir: örneğin Son 2 hafta, yalnızca son 14 günün dağılımını kullanır. Geçen tam hafta üzerinde hatası ölçülür. Katkı yüzdesi yüksek olan deneme son öneriyi daha çok etkiler; katkılar toplamı %100’dür. Sapma örneği: gerçek %4, tahmin %5 ise fark 1 yüzde puandır.')
+        st.dataframe(scores,hide_index=True,use_container_width=True,column_config={'Son dağılıma katkısı (%)':st.column_config.NumberColumn(format='%.1f'),'Geçen haftadaki ortalama sapma (yüzde puan)':st.column_config.NumberColumn(format='%.3f')})
         st.caption(f"Kontrol edilen hafta: {meta['validation_start']} – {meta['validation_end']}. Hatanın düşük olması daha iyi uyum demektir; gelecek hafta için garanti değildir.")
         flags=calendar_flags(pd.date_range(week,periods=7))
         labels={'EKSTRE_KESIM':'Ekstre kesim','SON_ODEME':'Son ödeme','Bayram':'Bayram','Arife':'Arife','Bayram_Sonrasi':'Bayram sonrası','Resmi_Tatil':'Resmi tatil','Ramazan':'Ramazan'}
         st.markdown('**Bu haftanın özel günleri**')
         special=[{'Gün':DAY_NAMES[d.weekday()],'Tarih':d.strftime('%d.%m.%Y'),'Etkiler':', '.join(labels[k] for k in flags if flags.loc[d,k]) or 'Standart gün'} for d in flags.index]
         st.dataframe(special,hide_index=True,use_container_width=True)
-        st.caption(f"{quality['Tam gün']} tam gün kullanıldı. {quality['Eksik veya sıfır gün']} eksik/sıfır gün değerlendirmeye alınmadı.")
+        st.caption(f"{meta['used_history_days']} geçmiş tam gün değerlendirildi. {quality['Eksik veya sıfır gün']} eksik/sıfır gün değerlendirmeye alınmadı.")
     st.markdown('### Planlamada Kullan')
     st.caption('Kaydettiğin dağılım aktif olur. Sonraki adım: Personel Hesap ekranında bu haftanın ihtiyacını hesapla.')
     with st.form('interval_save_form'):

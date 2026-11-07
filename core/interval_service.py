@@ -92,7 +92,25 @@ def profile_frame(values,dates):
                           'Oran(%)':float(values[i,s]*100)} for i,d in enumerate(dates) for s in range(48)])
 
 
-def build_weekly_distribution(raw,week_start,dt_col='tarih',calls_col='cagri_sayisi',previous_profile=None,previous_profiles=None):
+def clean_iqr(dates,shares,k=1.5,mode='cap'):
+    """Fit IQR within weekday/slot training groups; never alter holdout actuals."""
+    if k<=0 or mode not in {'cap','drop'}:raise ValueError('Geçersiz IQR ayarı.')
+    out=shares.copy();flagged=np.zeros(len(dates),dtype=bool);changed=0
+    for dow in range(7):
+        indices=np.flatnonzero(dates.weekday==dow)
+        if len(indices)<4:continue
+        values=out[indices];q1,q3=np.quantile(values,[.25,.75],axis=0);span=q3-q1
+        lo=np.maximum(0,q1-k*span);hi=q3+k*span
+        bad=(values<lo)|(values>hi);changed+=int(bad.sum());flagged[indices]=bad.any(axis=1)
+        if mode=='cap':out[indices]=np.clip(values,lo,hi)
+    keep=~flagged if mode=='drop' else np.ones(len(dates),dtype=bool)
+    out=out[keep];totals=out.sum(axis=1)
+    if (totals<=0).any() or keep.sum()<14:raise ValueError('IQR sonrası en az 14 kullanılabilir tam gün gerekli. Katsayıyı artırın veya sınırla yöntemini seçin.')
+    out=out/totals[:,None]
+    return dates[keep],out,{'iqr_used':True,'iqr_mode':mode,'iqr_k':float(k),'iqr_changed_slots':changed,'iqr_removed_days':int((~keep).sum())}
+
+
+def build_weekly_distribution(raw,week_start,dt_col='tarih',calls_col='cagri_sayisi',previous_profile=None,previous_profiles=None, use_iqr=False, iqr_k=1.5, iqr_mode="cap"):
     start=pd.Timestamp(week_start).normalize()
     if start.weekday()!=0:
         raise ValueError('Hafta başlangıcı Pazartesi olmalı.')
@@ -132,12 +150,18 @@ def build_weekly_distribution(raw,week_start,dt_col='tarih',calls_col='cagri_say
             except (ValueError,KeyError):
                 pass
     baseline_error=float(np.mean(np.abs(previous-actual))*100) if np.isfinite(previous).all() else None
+    train_dates,train_shares=dates[train],shares[train]
+    future_dates,future_shares=dates,shares
+    iqr_meta={'iqr_used':False}
+    if use_iqr:
+        train_dates,train_shares,_=clean_iqr(train_dates,train_shares,iqr_k,iqr_mode)
+        future_dates,future_shares,iqr_meta=clean_iqr(dates,shares,iqr_k,iqr_mode)
     rows=[];validation_predictions=[];future_predictions=[];notes=[]
     target_dates=pd.date_range(start,periods=7)
     for name,window in WINDOWS.items():
-        pred,_,n=_predict(dates[train],shares[train],flags,validation_dates,flags,window)
+        pred,_,n=_predict(train_dates,train_shares,flags,validation_dates,flags,window)
         error=float(np.mean(np.abs(pred-actual))*100)
-        future,explanations,n_future=_predict(dates,shares,flags,target_dates,flags,window)
+        future,explanations,n_future=_predict(future_dates,future_shares,flags,target_dates,flags,window)
         rows.append({'Pencere':name,'MAE (yüzde puan)':error,
                      'Önceki dağılıma göre iyileşme (puan)':None if baseline_error is None else baseline_error-error,
                      'Doğrulama eğitim günleri':n,'Güncel eğitim günleri':n_future})
@@ -155,12 +179,12 @@ def build_weekly_distribution(raw,week_start,dt_col='tarih',calls_col='cagri_say
             'predicted_validation':profile_frame(validation_mix,validation_dates),
             'validation_window_profiles':{name:profile_frame(p,validation_dates) for name,p in zip(WINDOWS,validation_predictions)},
             'meta':{'week_start':str(start.date()),'week_end':str((start+pd.Timedelta(days=6)).date()),
-                    'history_cutoff':str(dates.max().date()),'validation_start':str(valid_start.date()),
+                    'history_cutoff':str(dates.max().date()),'used_history_days':len(dates),'validation_start':str(valid_start.date()),
                     'validation_end':str((valid_start+pd.Timedelta(days=6)).date()),
                     'baseline_name':baseline_name,'baseline_mae':baseline_error,
                     'recency_formula':'1 / (1 + log(1 + yaş_gün / 7))',
                     'weights_method':'Ters MAE, 0.01 yüzde puan alt sınırı, toplam %100',
-                    'calendar_notes':list(dict.fromkeys(notes)),**quality}}
+                    'calendar_notes':list(dict.fromkeys(notes)),**quality,**iqr_meta}}
 
 
 def record_used_profile(state,forecast,profile):

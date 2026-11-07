@@ -68,3 +68,25 @@ SON VARDİYA GÜNCELLEMESİ
   açık onayla kabul edilebilir; dinlenme/kayıt ihlalleri düzeltilmeden yayınlanmaz.
 - Mevcut Plan > Çalışma Süreleri: grup için kişi başına aylık veya özel dönem saat üst sınırı.
   İhtiyaç fazlası vardiya yazdırmaz. Personel Özeti altında dönem saatleri ve ortalamalar bulunur.
+
+INTERVAL VE VARDİYA DÜZELTMELERİ
+- İntervalde isteğe bağlı IQR (sınırla / aykırı tam günleri çıkar) geri geldi.
+  Başarı ölçümündeki gerçekleşen çağrılar değiştirilmez; IQR yalnızca eğitim geçmişine uygulanır.
+- Katkı tablosu geçmiş aralığı, son öneriye katkı ve ölçülen sapmayı açıklar.
+- Gereksiz profil özet başlıkları kaldırıldı. Hesap parametreleri 5'er ilerler.
+  En yoğun dilim ve 30 dk karşılaştırma tablosu saat aralığı gösterir.
+- Günlük hareketli ortalamalar hafta içi/hafta sonu ayrı hesaplanır.
+- Plan dönemi özetleri üç karttır; grafik üst açıklaması ve gün kartları sabit kalır.
+- Personel Özeti altındaki çalışma saatlerinde bağımsız geçmiş tarih aralığı seçilir.
+  Yalnızca yayınlanmış vardiyalar kullanılır; personel detay tablosu kaldırıldı.
+- Elle girişte personel veya grup seçilir. Dolu günlerin üzerine yazılmaz.
+  Grup süresi, 11 saat dinlenme, okul, haftalık gün, üst üste gün ve dönem saati
+  kayıttan önce kontrol edilir. Geçersiz günler nedenleriyle gösterilir, yalnızca uygun boş günler yazılır.
+- Üst üste çalışma sınırı hafta değişince sıfırlanmaz. Mesai Kuralları'nda grup bazında ayarlanır.
+- Uyuşmazlık tablosu: personel/no, grup, tarih, mevcut vardiya, uygunsuzluk ve olması gereken.
+- Kayıtlar ve İzinler alt ekranı ve Okul takvimi açıklama alanı kaldırıldı; kurallar işlemeye devam eder.
+- 03:00–08:00 aralığı bir anahtarla ihtiyaç sayacından ve otomatik doldurma hedefinden çıkarılır.
+  Takvimdeki gece/07:00 girişleri, gerçek çalışma saati ve dinlenme süresi korunur.
+- Eksikleri Kabul Et ve Planı Yayınla düğmesi tek tıklamayla kaydeder ve yayınlanan takvimi gösterir.
+  Genel talepler vardiya değişikliği sayılmadığı için yayınlamayı engellemez.
+  Süre/dinlenme/çakışma ihlalleri ayrıca düzeltilmelidir.

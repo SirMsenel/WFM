@@ -44,7 +44,7 @@ def _limit(value):
 
 
 def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
-                  history=(), unavailable=None, auto_fill=True, strict_capacity=True, hour_targets=(), languages=None):
+                  history=(), unavailable=None, auto_fill=True, strict_capacity=True, hour_targets=(), languages=None, exclude_early_hours=False, reject_invalid_sources=()):
     """Return plan/coverage/issues. Never mutates caller-owned rows or tables.
 
     Fixed rows are ordered by source precedence. Conflicting rows are reported
@@ -89,6 +89,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                    for d, s in zip(df["Tarih"], slots)]
     stamp = np.array(slot_starts, dtype="datetime64[m]")
     covered = np.zeros(len(df), dtype=int)
+    effective=~df['Slot'].between(7,16).to_numpy() if exclude_early_hours else np.ones(len(df),dtype=bool)
     unavailable = {str(eid): list(intervals) for eid, intervals in (unavailable or {}).items()}
     # A day off/leave is a full calendar-day exclusion, including work which
     # started on the previous date and continues past midnight.
@@ -108,7 +109,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
     boost = rules.get("boosts", {})
 
     def issue(row, reason):
-        issues.append({"employee_id": str(row.get("employee_id", "")),
+        issues.append({"source":row.get("source"),"start":row.get("start"),"end":row.get("end"),"shift_code":row.get("shift_code"),"employee_id": str(row.get("employee_id", "")),
                        "date": str(row.get("date", "")), "Sorun": reason})
 
     def indices(interval):
@@ -131,7 +132,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             ns=minutes(general.get('night_window_start','00:00'));ne=minutes(general.get('night_window_end','08:00'))
             max_hours=((ne-ns)%1440 or 1440)/60
         if duration > max_hours:
-            problems.append("Günlük süre sınırı aşılıyor")
+            problems.append(f"Günlük süre sınırı aşılıyor: {duration:g} saat; izin verilen en fazla {max_hours:g} saat")
         if row.get("shift_code") not in {"MESAI", "GECE"} and "shift_total_hours" in rule and duration != float(rule["shift_total_hours"]):
             problems.append("Sabit vardiya süresi sağlanmıyor")
         night = row.get("shift_code") == "GECE"
@@ -173,7 +174,14 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         if group == "fulltime" and not rule.get("allow_6th_day", False):
             max_days = min(5, max_days)
         if len({d for d in working_days | {day} if d.isocalendar()[:2] == week}) > max_days:
-            problems.append("Haftalık çalışma günü sınırı aşılıyor")
+            problems.append(f"Haftalık çalışma günü sınırı aşılıyor: en fazla {max_days} gün")
+        consecutive=int(rule.get('max_consecutive_days',max_days))
+        all_work=working_days|{day};left=day;right=day
+        while left-timedelta(days=1) in all_work:left-=timedelta(days=1)
+        while right+timedelta(days=1) in all_work:right+=timedelta(days=1)
+        count=(right-left).days+1
+        if count>consecutive:
+            problems.append(f'Üst üste çalışma sınırı aşılıyor: {count} gün; en fazla {consecutive} gün')
         rest = max(11., float(rule.get("min_rest_hours", 11)))
         for other in prior:
             oi = bounds(other)
@@ -184,7 +192,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 break
             gap = min(abs((interval[0]-oi[1]).total_seconds()), abs((oi[0]-interval[1]).total_seconds())) / 3600
             if gap < rest:
-                problems.append("Minimum dinlenme süresi sağlanmıyor")
+                problems.append(f"Minimum dinlenme süresi sağlanmıyor: {gap:g} saat; en az {rest:g} saat olmalı")
                 break
         from core.work_hours import overlap_hours
         for target in hour_targets:
@@ -255,8 +263,9 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 if any(existing.get(k) != row.get(k) for k in ("shift_code", "start", "end")):
                     issue(row, "Öncelikli sabit kayıtla çakışma; ilk kayıt korundu")
                 continue
-            for reason in violations(row, by_employee[eid]):
-                issue(row, reason)
+            problems=violations(row, by_employee[eid])
+            for reason in problems:issue(row, reason)
+            if problems and row.get("source") in reject_invalid_sources:continue
             plan.append(row)
             occupied.add(key)
             by_employee[eid].append(row)
@@ -299,10 +308,14 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                                "end": f"{(finish//60)%24:02d}:{finish%60:02d}", "source": "auto", "note": ""}
                         interval = bounds(row)
                         ix = indices(interval)
-                        gain = int(np.count_nonzero(covered[ix] < required[ix]))
+                        active_ix=ix[effective[ix]]
+                        gain = int(np.count_nonzero(covered[active_ix] < required[active_ix]))
                         if not gain:
                             continue
-                        if strict_capacity and (len(ix)!=duration//30 or (covered[ix]>=required[ix]).any()):
+                        expected=duration//30
+                        if exclude_early_hours:
+                            expected=sum(not 180<=((begin+offset)%1440)<480 for offset in range(0,duration,30))
+                        if strict_capacity and (len(active_ix)!=expected or (covered[active_ix]>=required[active_ix]).any()):
                             continue
                         # Count all shift slots, including those outside the demand table.
                         excess = duration//30 - gain
@@ -339,7 +352,9 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         row["full_name"] = staff[row["employee_id"]].get("full_name", row["employee_id"])
     df["İhtiyaç"] = required
     df["Atanan"] = covered
-    df["Eksik"] = np.maximum(0, required-covered)
-    df["Fazla"] = np.maximum(0, covered-required)
+    df["Sayaca Dahil"] = effective
+    df["Ham Eksik"] = np.maximum(0, required-covered)
+    df["Eksik"] = np.where(effective,df["Ham Eksik"],0)
+    df["Fazla"] = np.where(effective,np.maximum(0, covered-required),0)
     return {"plan": sorted(plan, key=lambda r: (r["date"], r["employee_id"])),
-            "coverage": df, "issues": issues}
+            "coverage": df, "issues": issues,"rules":rules,"history":history}

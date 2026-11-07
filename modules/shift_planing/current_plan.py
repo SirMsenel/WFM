@@ -353,6 +353,11 @@ def render(profile=None):
                     key="rule_dk_max_days_week",
                 )
 
+        st.markdown('#### Üst üste çalışma günü sınırı')
+        columns=st.columns(3)
+        from core.personnel import WORK_LABELS
+        for col,(group,rule) in zip(columns,rules['work_type'].items()):
+            rule['max_consecutive_days']=col.number_input(WORK_LABELS.get(group,group),min_value=1,max_value=6,value=int(rule.get('max_consecutive_days',min(6,rule.get('max_days_per_week',rule.get('max_days_per_week_default',6))))),key='rule_consecutive_'+group)
         st.info('Tüm personeller için vardiyalar arasında en az 11 saat dinlenme zorunludur. Değişiklikler aşağıdaki düğmeyle uygulanır.')
         st.session_state['shift_rules_draft']=rules
         sync=st.checkbox('Seçili dönemdeki gece kayıtlarını seçtiğim başlangıç/bitiş saatlerine uyarla',value=True,key='rules_sync_nights')

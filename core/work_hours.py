@@ -12,10 +12,10 @@ def overlap_hours(row,start,end):
     return max(0.,(right-left).total_seconds()/3600)
 
 
-def personnel_hours(state,people,start,end):
+def personnel_hours(state,people,start,end,published_only=False):
     from modules.shift_planing.planning_data import collect_inputs
-    records={(str(r['employee_id']),str(r['date'])):r for key in ('published_shift_plan','draft_shift_plan') for r in state.get(key,[])}
-    if state.get('employees_cache') and state.get('plan_ctx'):
+    records={(str(r['employee_id']),str(r['date'])):r for key in (('published_shift_plan',) if published_only else ('published_shift_plan','draft_shift_plan')) for r in state.get(key,[])}
+    if not published_only and state.get('employees_cache') and state.get('plan_ctx'):
         source=dict(state);source['plan_ctx']={'start':start,'end':end};source['planning_languages']={'en':True,'ar':True}
         for r in collect_inputs(source)[1]:records[(str(r['employee_id']),str(r['date']))]=r
     days=(pd.Timestamp(end)-pd.Timestamp(start)).days+1

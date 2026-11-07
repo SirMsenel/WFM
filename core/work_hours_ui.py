@@ -7,19 +7,25 @@ from core.workspace_store import save_keys
 
 
 def render_hours_summary(state,people):
-    ctx=state.get('plan_ctx')
-    if not ctx:return
     st.markdown('### Seçili Dönemde Çalışma Saatleri')
-    st.caption(f"{pd.Timestamp(ctx['start']):%d.%m.%Y} – {pd.Timestamp(ctx['end']):%d.%m.%Y} · Takvim günü başına ortalama; izin ve boş günler 0 saat sayılır. Gece vardiyaları gerçek tarih sınırlarından bölünür.")
+    today=pd.Timestamp.today().date()
+    dates=st.date_input('Çalışma saatleri için geçmiş tarih aralığı',value=(today.replace(day=1),today),key='hours_history_range')
+    if len(dates)!=2:st.info('Başlangıç ve bitiş tarihini seçin.');return
+    ctx={'start':dates[0],'end':dates[1]}
+    st.caption('Yayınlanmış vardiyalardan hesaplanır. Günlük ortalama bütün takvim günlerini kapsar; izinler 0 saattir. Gece saatleri ilgili güne bölünür.')
     agents=[e for e in people if e.get('position','agent')=='agent']
     if not agents:st.info('Personel bulunamadı.');return
-    df=personnel_hours(state,agents,ctx['start'],ctx['end'])
+    ids={str(e['employee_id']) for e in agents}
+    published=[r for r in state.get('published_shift_plan',[]) if str(r['employee_id']) in ids and str(dates[0])<=str(r['date'])<=str(dates[1])]
+    if not published:
+        from core.work_hours import overlap_hours
+        if not any(str(r['employee_id']) in ids and overlap_hours(r,dates[0],dates[1])>0 for r in state.get('published_shift_plan',[])):
+            st.info('Bu tarih aralığında yayınlanmış vardiya kaydı yok.');return
+    df=personnel_hours(state,agents,ctx['start'],ctx['end'],published_only=True)
     table=df.groupby('Grup',as_index=False).agg(**{'Personel':('Personel','size'),'Toplam saat':('Toplam saat','sum'),'Kişi başı dönem ortalaması':('Toplam saat','mean'),'Kişi başı günlük ortalama':('Günlük ortalama saat','mean')})
     table.Grup=table.Grup.map(lambda g:WORK_LABELS.get(g,g))
     st.dataframe(table.style.format({c:'{:.1f}' for c in table if c not in {'Grup','Personel'}}),hide_index=True,use_container_width=True)
     st.bar_chart(table.set_index('Grup')[['Kişi başı dönem ortalaması']],color='#118aa1')
-    with st.expander('Personel bazında çalışma saatleri'):
-        df.Grup=df.Grup.map(lambda g:WORK_LABELS.get(g,g));st.dataframe(df,hide_index=True,use_container_width=True)
     st.caption('Çalışma Süreleri bölümünden grup için kişi başına aylık veya özel dönem saat hedefi tanımlayabilirsin.')
 
 

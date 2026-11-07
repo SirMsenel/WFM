@@ -236,3 +236,24 @@ için ihtiyaç fazlası üretmez. Aynı grup için çakışan hedef aralıkları
 Dönem çalışma saatleri takvim sınırlarına göre hesaplanır; gece vardiyasının ilgili
 güne düşen saatleri sayılır. Dönem ortalaması kişi başı toplam saat, günlük ortalama
 ise seçili dönemin bütün takvim günleri üzerinden hesaplanır.
+
+### Interval temizliği, elle giriş ve etkin ihtiyaç saatleri
+İsteğe bağlı IQR aynı haftanın günü/yarım saat grubundaki dağılım paylarını eğitim
+verisinde sınırlar veya aykırı günleri tamamen çıkarır. Doğrulama haftasının gerçekleri
+korunur; eğitim temizliği bu gerçeklerden öğrenmez. Profilde IQR ayarı ve etkisi saklanır.
+Günlük hareketli ortalamalar 7/30 takvim günü içinde hafta içi ve hafta sonu için ayrıdır.
+
+Elle giriş hem personel hem grup seçimini destekler. Mevcut gerçek kayıtlar ve açık
+izin günleri korunur; otomatik boş OFF yer tutucuları doldurulabilir. Süre, dinlenme,
+okul, haftalık/üst üste gün ve dönem saati kontrollerinden geçmeyen günler kaydedilmez.
+Üst üste çalışma sınırı ISO hafta sınırından bağımsızdır ve komşu geçmiş/fiks kayıtları kapsar.
+
+03:00–08:00 hariç tutma seçeneği ihtiyaç özetini, eksik/fazla matrisini ve otomatik
+atamanın hedefini etkiler. Hariç dilimler tabloda gri çizgiyle gösterilir; veri yokluğu
+sıfır açık olarak gösterilmez. 07:00 girişli vardiyalar halen oluşturulabilir. Çalışma
+bütçeleri ve 11 saat dinlenme gerçek vardiya sürelerinden hesaplanır.
+
+Eksikleri kabul ederek yayınlama artık ayrı bir checkbox gerektirmez: düğme doğrudan
+veritabanına yazar ve gerçek yayınlanan vardiya takvimini gösterir. Genel talepler
+vardiya ataması değildir ve yayın engeli oluşturmaz; gerçek kural ihlalleri engeldir.
+Çalışma saatleri geçmişi plan döneminden bağımsız seçilir ve yalnızca yayınlanmış kayıtları kullanır.

@@ -36,7 +36,7 @@ def preview_plan(state,include_auto=False):
                      and (str(r['employee_id']),str(r['date'])) not in fixed_keys]
         fixed=fixed+actual_auto
     result=generate_plan(staff,demand,state['shift_rules'],list(state['shift_rules']['work_type']),
-                         context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),languages=state.get('planning_languages'))
+                         context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False))
     result['issues']=issues+result['issues']
     start,end=str(context['start']),str(context['end'])
     source_rows=[];names={str(e['employee_id']):e.get('full_name',str(e['employee_id'])) for e in staff}

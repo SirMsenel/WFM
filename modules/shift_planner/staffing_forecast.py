@@ -150,15 +150,15 @@ def render():
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        aht = st.slider("AHT (sn)", 60, 600, 300, 10)
+        aht = st.slider("AHT (sn)", 60, 600, 300, 5)
     with c2:
-        sl_percent = st.slider("Service Level (%)", 50, 95, 80)
+        sl_percent = st.slider("Service Level (%)", 50, 95, 80, 5)
     with c3:
         target_time = st.slider("Hedef Süre (sn)", 5, 60, 20, 5)
     with c4:
-        shrinkage_percent = st.slider("Shrinkage (%)", 0, 50, 30)
+        shrinkage_percent = st.slider("Shrinkage (%)", 0, 50, 30, 5)
 
-    occ_percent = st.slider("Doluluk / Occupancy Hedefi (%)", 50, 95, 85)
+    occ_percent = st.slider("Doluluk / Occupancy Hedefi (%)", 50, 95, 85, 5)
     st.caption("Doluluk = Trafik (Erlang) / Agent. Hedef %85 ise, sistem doluluk %85’i aşmayacak şekilde agent artırır.")
 
     st.markdown("---")
@@ -278,7 +278,8 @@ def render():
 
                 r1c1, r1c2 = st.columns([2, 1])
                 r1c1.metric("Toplam Tahmin Çağrı", f"{total_calls:,.0f}")
-                r1c2.metric("Peak Slot", f"{peak_slot}")
+                from core.time_labels import slot_label
+                r1c2.metric("En yoğun saat aralığı", slot_label(peak_slot))
 
                 r2c1, r2c2 = st.columns([2, 1])
                 r2c1.metric("Max Planlanan Agent", f"{max_plan}")

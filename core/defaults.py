@@ -47,7 +47,9 @@ def enforce_current_rules(state):
         state['shift_rules']=rules
         state['plan_ctx_confirmed']=False
     if rules:
-        for group in rules.get('work_type',{}).values():group['min_rest_hours']=max(11,group.get('min_rest_hours',11))
+        for group in rules.get('work_type',{}).values():
+            group['min_rest_hours']=max(11,group.get('min_rest_hours',11))
+            group.setdefault('max_consecutive_days',min(6,group.get('max_days_per_week',group.get('max_days_per_week_default',6))))
     # A previous disabled widget may have cached the old display value.
     if state.get('rule_dk_shift_hours_fixed')!=10:
         state['rule_dk_shift_hours_fixed']=10
