@@ -87,7 +87,15 @@ def _all_agents() -> list[dict]:
     Bu iskelette PersonelTakip / my_shift tarafındaki pattern'e uyumlu basit bir kaynak bekleniyor.
     """
     # İleride burayı backend /employees/query ile genişleteceğiz.
-    return st.session_state.get("employees_cache", [])
+    cached = st.session_state.get("employees_cache", [])
+    if cached:
+        return cached
+    from .planning_data import fetch_employees
+    try:
+        return fetch_employees(st.session_state)
+    except Exception as exc:
+        st.warning(f"Personel listesi alınamadı: {exc}. Oluştur ekranından CSV/Excel yükleyebilirsin.")
+        return []
 
 
 def _fallback_agents_from_requests() -> list[dict]:
@@ -117,7 +125,7 @@ def _get_agents() -> list[dict]:
     items = _all_agents()
     if items:
         return items
-    return _fallback_agents_from_requests()
+    return []
 
 
 def _filter_agents(group: str, location: str, language: str) -> list[dict]:

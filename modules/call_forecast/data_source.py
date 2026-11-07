@@ -66,6 +66,12 @@ def _reset_all_call_forecast_state():
 
         # Alt ekran
         "cf_sub_page",
+        "cf_model_candidates",
+        "cf_candidate_context",
+        "cf_forecast_options",
+        "cf_forecast_ready",
+        "cf_forecast_df",
+        "cf_target_name",
 
         # Missing data (data_quality)
         "cf_backup_df_missing",
@@ -86,38 +92,22 @@ def render():
 
     st.subheader("Veri Yükleme ve Önizleme")
 
-    # ----------------------------
-    # Sidebar: backend kontrol + kaynak
-    # ----------------------------
-    with st.sidebar:
-        st.subheader("Bağlantı")
-        st.write("Backend:", BACKEND)
-
-        backend_ok = _backend_health_ok()
-        st.success("Backend OK ✅" if backend_ok else "Backend sorunlu ❌")
-
-        st.divider()
-        st.subheader("Veri Kaynağı")
-
-        options = ["Excel/CSV (Yükle)", "DB (sonra)", "Genesys API (sonra)"]
-        current = st.session_state.get("cf_source", options[0])
-        idx = options.index(current) if current in options else 0
-
-        source = st.radio("Seç", options, index=idx)
-        st.session_state["cf_source"] = source
-
-    if not backend_ok:
-        st.warning("Önce backend çalışmalı (uvicorn).")
-        st.stop()
-
-    if source != "Excel/CSV (Yükle)":
-        st.info("Şimdilik sadece Excel/CSV yükleme var. DB ve Genesys API sonraki adım.")
-        st.stop()
-
-    # ----------------------------
-    # Upload
-    # ----------------------------
-    uploaded = st.file_uploader("CSV veya Excel yükle", type=["csv", "xlsx", "xls"])
+    options = ["Hazır Demo Veritabanı", "Excel/CSV (Yükle)"]
+    source = st.radio("Çağrı geçmişi kaynağı",options,index=options.index(st.session_state.get("cf_source")) if st.session_state.get("cf_source") in options else 0,key="cf_source_picker")
+    st.session_state["cf_source"] = source
+    uploaded = None
+    if source == "Hazır Demo Veritabanı":
+        st.caption("SQLite içinde iki yıllık sentetik günlük ve 30 dakikalık çağrı/AHT verisi hazırdır.")
+        resolution=st.selectbox("Veri sıklığı",["Günlük","30 dakika"],key="cf_demo_resolution")
+        if st.button("Veritabanındaki Çağrı Geçmişini Kullan",key="cf_use_demo_calls"):
+            from core.demo_data import load_demo_history
+            load_demo_history(st.session_state,resolution=="30 dakika",st.session_state.get("workspace_db_path"))
+            st.rerun()
+    else:
+        if not _backend_health_ok():
+            st.warning("Dosya yüklemek için API bağlantısı gerekli.")
+            return
+        uploaded=st.file_uploader("CSV veya Excel yükle",type=["csv","xlsx","xls"],key="cf_history_upload")
 
     # Dosya seçilince otomatik yükle
     if uploaded is not None and uploaded.name != st.session_state.get("cf_last_filename"):
@@ -152,8 +142,8 @@ def render():
     df = st.session_state.get("cf_full_df")
 
     if meta is None or df is None or df_all is None:
-        st.info("Bir dosya seçtiğinde otomatik yüklenip tüm veri alınacak.")
-        st.stop()
+        st.info("Çağrı geçmişini veritabanından seçin veya dosya yükleyin.")
+        return
 
     # ✅ aktif işlenecek veri
     active_df = st.session_state.get("cf_full_df")

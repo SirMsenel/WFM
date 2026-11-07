@@ -134,6 +134,14 @@ def fetch_agents(
     search: str | None = None,
     limit: int = 500,
 ):
+    cached = st.session_state.get("employees_cache")
+    if cached:
+        rows = [r for r in cached
+                if (not work_type or r.get("work_type") == work_type)
+                and (not location or r.get("location") == location)
+                and (not language or r.get("language") == language)
+                and (not search or search.casefold() in str(r.get("full_name", "")).casefold())]
+        return rows[:limit]
     token = st.session_state.get("auth_token")
     params = {
         "position": "agent",

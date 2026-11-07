@@ -45,6 +45,7 @@ def render():
 
     _init_ctx(min_date)
     ctx = st.session_state["plan_ctx"]
+    previous_range = (ctx["start"], ctx["end"])
 
     tab1, tab2 = st.tabs(["📅 Dönem Seçimi", "📌 Dönem İhtiyaç Özeti"])
 
@@ -90,6 +91,8 @@ def render():
                         ctx["start"], ctx["end"] = start, end
                     st.success(f"Seçilen aralık: **{ctx['start']} → {ctx['end']}**")
 
+                if (ctx["start"], ctx["end"]) != previous_range:
+                    st.session_state["plan_ctx_confirmed"] = False
                 st.divider()
                 c1, c2 = st.columns(2)
                 with c1:

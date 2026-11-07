@@ -134,17 +134,17 @@ def _enrich_forecast_table(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def render():
+def _render_analysis():
     st.subheader("Tahmin Analizi")
     st.caption("Çağrı Tahmini ekranında üretilen tahminler burada görüntülenir ve planlamaya temel olur.")
     st.markdown("---")
 
-    if not st.session_state.get("cf_forecast_ready"):
+    if st.session_state.get("sp_forecast_df") is None:
         st.info("Henüz tahmin yok. **Çağrı Tahmini > Tahmin** sekmesinden tahmin üret.")
         return
 
-    meta = _format_meta(st.session_state.get("cf_forecast_meta", {}))
-    df_fc = st.session_state.get("cf_forecast_df")
+    meta = _format_meta(st.session_state.get("sp_forecast_meta", {}))
+    df_fc = st.session_state.get("sp_forecast_df")
 
     if df_fc is None or not isinstance(df_fc, pd.DataFrame) or df_fc.empty:
         st.warning("Tahmin verisi bulunamadı veya boş. Tekrar tahmin üret.")
@@ -178,7 +178,7 @@ def render():
             st.markdown(
                 f"""
                 <div style="text-align:center;">
-                    <div style="font-size:16px; font-weight:600;">🗓️ Bitiş</div>
+                    <div style="font-size:16px; font-weight:600;">🗓️ Tahmin aralığı</div>
                     <div style="font-size:26px; font-weight:800; margin-top:6px;">
                         {meta["horizon"]}
                     </div>
@@ -374,3 +374,57 @@ def render():
             else:
                 st.metric("Toplam Çağrı", f"{int(son_odeme_df['Tahmin (Çağrı)'].sum()):,}")
                 st.dataframe(son_odeme_df, use_container_width=True, hide_index=True)
+
+
+def render():
+    from core.forecast_service import activate_forecast
+    from datetime import date, timedelta
+    state = st.session_state
+    st.subheader("Planlamada Kullanılacak Çağrı Tahmini")
+    st.caption("Dört modelin tahminini karşılaştır, birini seç veya günlük çağrı sayılarını elle gir. Seçimi kaydetmeden aktif planlama kaynağı değişmez.")
+    options = state.get("cf_forecast_options", [])
+    mode = st.radio("Tahmin kaynağı", ["Model tahmini seç", "Elle günlük tahmin gir"], horizontal=True, key="sp_source_mode")
+    if mode == "Model tahmini seç":
+        if not options:
+            st.info("Çağrı Tahmini → Tahmin ekranından dört modelin tahminini üretin. Elle giriş de kullanabilirsiniz.")
+        else:
+            st.dataframe(pd.DataFrame([{"Sıra":o['rank'],"Model":o['name'],**o['metrics'],"Başlangıç":o['meta']['start'],"Bitiş":o['meta']['end']} for o in options]),hide_index=True,use_container_width=True)
+            combined = pd.concat([o['frame'].set_index('tarih').y_pred.rename(o['name']) for o in options],axis=1)
+            st.line_chart(combined)
+            names = {o['id']:o for o in options}
+            selected = st.selectbox("Kullanılacak model tahmini",list(names),key="sp_selected_model")
+            if st.button("Bu Tahmini Planlamada Kullan",key="sp_activate_model"):
+                try:
+                    activate_forecast(state,names[selected]['frame'],names[selected]['meta'])
+                    st.success("Planlama tahmini kaydedildi. Personel Hesap ekranında ihtiyacı yeniden hesaplayın.")
+                except ValueError as exc:
+                    st.error(str(exc))
+    else:
+        current = state.get("sp_forecast_df")
+        initial_start = current.tarih.min().date() if isinstance(current,pd.DataFrame) and not current.empty else date.today()
+        initial_end = current.tarih.max().date() if isinstance(current,pd.DataFrame) and not current.empty else initial_start+timedelta(days=6)
+        dates = st.date_input("Elle tahmin tarih aralığı",value=(initial_start,initial_end),key="sp_manual_dates")
+        if isinstance(dates,tuple) and len(dates)==2:
+            if (dates[1]-dates[0]).days > 366:
+                st.error("En fazla 367 gün seçin.")
+                return
+            grid = pd.DataFrame({'tarih':pd.date_range(dates[0],dates[1])})
+            if isinstance(current,pd.DataFrame):
+                grid = grid.merge(current[['tarih','y_pred']],how='left',on='tarih')
+            else:
+                grid['y_pred'] = np.nan
+            st.caption("Her günün çağrı sayısını girin; boş veya negatif kayıt kabul edilmez. Var olan planlama tahmini başlangıç değeri olarak gösterilir.")
+            edited = st.data_editor(grid,hide_index=True,use_container_width=True,disabled=['tarih'],
+                                    column_config={'tarih':st.column_config.DateColumn('Tarih'),
+                                                   'y_pred':st.column_config.NumberColumn('Çağrı sayısı',min_value=0,step=1,required=True)},
+                                    key=f"sp_manual_editor_{dates[0]}_{dates[1]}")
+            if st.button("Elle Girilen Tahmini Kullan",key="sp_activate_manual"):
+                try:
+                    activate_forecast(state,edited,{'model_name':'Elle girilen tahmin','horizon':f'{len(edited)} gün','start':str(dates[0]),'end':str(dates[1]),'created_at':pd.Timestamp.now().isoformat()})
+                    st.success("Elle girilen tahmin planlamaya alındı. Personel ihtiyacını yeniden hesaplayın.")
+                except ValueError as exc:
+                    st.error(str(exc))
+    active = state.get('sp_forecast_meta',{})
+    st.info(f"Aktif planlama kaynağı: {active.get('model_name','Henüz seçilmedi')} · {active.get('start','—')} → {active.get('end','—')}")
+    if state.get('sp_forecast_df') is not None:
+        _render_analysis()

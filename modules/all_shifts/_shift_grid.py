@@ -104,15 +104,21 @@ def build_shift_grid(employees: list[dict], year: int, month: int) -> pd.DataFra
         full_name = emp.get("full_name", "-")
         work_type = emp.get("work_type", "fulltime")
 
-        sch = gen_month_schedule_for_employee(emp_key, year, month, work_type)
+        published = [r for r in st.session_state.get("published_shift_plan", [])
+                     if str(r.get("employee_id")) == emp_key
+                     and str(r.get("date", "")).startswith(f"{year}-{month:02d}")]
+        values = {}
+        for record in published:
+            code = record.get("shift_code")
+            label = {"OFF": "OFF", "YILLIK_IZIN": "Yıllık İzin", "SINAV": "Sınav", "DERS": "Ders", "BAYRAM": "Bayram"}.get(code)
+            values[date.fromisoformat(record["date"])] = label or f"{record.get('start', '')}-{record.get('end', '')}"
 
         row = {
             "Ad Soyad": full_name,
         }
 
         for d in date_cols:
-            found = sch.loc[sch["date"] == d, "display"]
-            row[d] = found.iloc[0] if not found.empty else ""
+            row[d] = values.get(d, "")
 
         rows.append(row)
 

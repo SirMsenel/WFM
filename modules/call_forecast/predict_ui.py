@@ -16,11 +16,8 @@ def _daterange(start: dt.date, end: dt.date):
 
 
 def _detect_date_col(df: pd.DataFrame) -> str | None:
-    for col in df.columns:
-        parsed = pd.to_datetime(df[col], errors="coerce")
-        if parsed.notna().mean() > 0.8:
-            return col
-    return None
+    from core.forecast_service import date_column
+    return date_column(df)
 
 
 def _is_30min_series(dt_series: pd.Series) -> bool:
@@ -281,6 +278,9 @@ def _apply_date_bank_features(
 
         if "Slot30" in required_cols:
             out["Slot30"] = slot.astype(int)
+        for alias in ("slot", "Slot"):
+            if alias in required_cols:
+                out[alias] = slot.astype(int)
 
         if "Slot_Block" in required_cols:
             block = pd.cut(hour, bins=[-1, 6, 12, 17, 23], labels=[1, 2, 3, 4])
@@ -331,7 +331,9 @@ def _build_future_X_like_training(
         date_col = "__date__"
 
     # future base
-    future_dates = list(_daterange(start, end))
+    is_interval = date_col in df_full and _is_30min_series(pd.to_datetime(df_full[date_col]))
+    future_dates = pd.date_range(start, pd.Timestamp(end)+pd.Timedelta(days=1),
+                                 freq="30min" if is_interval else "D", inclusive="left")
     future_df = pd.DataFrame({date_col: pd.to_datetime(future_dates)})
 
     # son satır baz değerler
@@ -371,254 +373,42 @@ def _build_future_X_like_training(
 
 
 def render():
-    # ----------------------------
-    # UI: küçük modern CSS
-    # ----------------------------
-    st.markdown(
-        """
-        <style>
-          .cf-card{
-            background:#ffffff;
-            border:1px solid rgba(0,0,0,0.08);
-            border-radius:14px;
-            padding:14px 16px;
-            box-shadow:0 2px 10px rgba(0,0,0,0.04);
-            margin-bottom:10px;
-          }
-          .cf-title{
-            font-size:20px;
-            font-weight:800;
-            margin:0 0 4px 0;
-          }
-          .cf-sub{
-            opacity:0.75;
-            margin:0;
-            font-size:13px;
-          }
-          .cf-pill{
-            display:inline-block;
-            padding:4px 10px;
-            border-radius:999px;
-            border:1px solid rgba(0,0,0,0.10);
-            font-size:12px;
-            opacity:0.85;
-            margin-right:6px;
-            margin-top:6px;
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # ----------------------------
-    # Header
-    # ----------------------------
-    st.subheader("Tahmin")
-    st.markdown(
-        """
-        <div class="cf-card">
-          <p class="cf-sub">
-            Kısa / uzun vadeli çağrı tahmini üretir. Üretilen tahminler <b>Mesai Planı &gt; Tahmin</b> altında görüntülenir.
-          </p>
-          <span class="cf-pill">Gelecekte olmayan 0-1 feature → 0</span>
-          <span class="cf-pill">Dummy hizalama → eğitim kolonlarına göre</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # ----------------------------
-    # Model kontrol
-    # ----------------------------
-    required = ["cf_model", "cf_X_columns", "cf_full_df", "cf_model_features_used"]
-    miss = [k for k in required if k not in st.session_state]
-    if miss:
-        st.warning(f"Önce **Model Kur** ekranında modeli eğitip kaydetmelisin. Eksikler: {', '.join(miss)}")
-        return
-
-    model = st.session_state["cf_model"]
-    model_name = st.session_state.get("cf_model_name", model.__class__.__name__)
-    df_full = st.session_state["cf_full_df"]
-    X_columns = list(st.session_state["cf_X_columns"])
-    raw_features_used = list(st.session_state.get("cf_model_features_used", []))
-    date_col = st.session_state.get("cf_date_col_used", None)
-
-    if not isinstance(df_full, pd.DataFrame) or df_full.empty:
-        st.error("cf_full_df bulunamadı veya boş. Model Kur ekranında tekrar eğit/kaydet.")
-        return
-
+    from core.forecast_service import ranked_candidates, forecast_candidates, reference_models, daily_history
+    from core.workspace_store import save_keys
+    st.subheader("Dört Model ile Çağrı Tahmini")
+    st.caption("Aynı test döneminde RMSE'si en düşük dört model için aynı tarih aralığında ayrı tahmin üretilir.")
+    candidates = ranked_candidates(st.session_state)
+    if len(candidates) < 4:
+        st.info("Model Kur ekranında modelleri karşılaştırın veya günlük geçmişten hızlı karşılaştırma başlatın.")
+        if st.button("Günlük Geçmişten Modelleri Karşılaştır", key="cf_quick_compare"):
+            try:
+                raw = st.session_state.get("cf_raw_df")
+                if raw is None:
+                    raise ValueError("Önce veri kaynağından çağrı geçmişini yükleyin.")
+                target = st.session_state.get("cf_target_name")
+                with st.spinner("Modeller eğitiliyor..."):
+                    reference_models(st.session_state, daily_history(raw, target=target))
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+    if candidates:
+        st.dataframe(pd.DataFrame([{"Sıra": i, "Model": b["name"], **b["metrics"]} for i,b in enumerate(candidates,1)]), hide_index=True, use_container_width=True)
     today = dt.date.today()
-    scaler_on = bool(st.session_state.get("cf_scaler_used", False))
-    st.info(
-        f"Scaler: **{'Açık' if scaler_on else 'Kapalı'}**  •  Kolon hizalama: **{len(X_columns):,}**",
-        icon="ℹ️",
-    )
-
-    # ----------------------------
-    # Konfigürasyon kartı
-    # ----------------------------
-    st.markdown('<div class="cf-card">', unsafe_allow_html=True)
-    st.markdown('<div class="cf-title">⚙️ Tahmin Konfigürasyonu</div>', unsafe_allow_html=True)
-    st.markdown('<div class="cf-sub">Kısa/uzun vadeyi seç, ardından tarih aralığını belirle.</div>', unsafe_allow_html=True)
-
-    c1, c2 = st.columns([2.2, 1.1], vertical_alignment="bottom")
-    with c1:
-        horizon = st.radio(
-            "Tahmin tipi",
-            ["Kısa Vadeli", "Uzun Vadeli"],
-            horizontal=True,
-            label_visibility="visible",
-            key="cf_pred_horizon",
-        )
-    with c2:
-        use_custom = st.toggle("Özel aralık", value=True, key="cf_pred_custom")
-
-    st.markdown('<div class="cf-divider"></div>', unsafe_allow_html=True)
-
-    if horizon == "Kısa Vadeli":
-        default_end = today + dt.timedelta(days=14)
-        presets = {"7 gün": 7, "14 gün": 14, "30 gün": 30}
-        helper = ""
-    else:
-        default_end = today + dt.timedelta(days=90)
-        presets = {"3 ay": 90, "6 ay": 180, "12 ay": 365}
-        helper = ""
-
-    if use_custom:
-        d1, d2 = st.columns(2, vertical_alignment="bottom")
-        with d1:
-            start = st.date_input("Başlangıç", value=today, key="cf_pred_start")
-        with d2:
-            end = st.date_input("Bitiş", value=default_end, key="cf_pred_end")
-    else:
-        p1, p2 = st.columns([1.3, 1.7], vertical_alignment="bottom")
-        with p1:
-            preset = st.selectbox("Hazır aralık", list(presets.keys()), key="cf_pred_preset")
-        with p2:
-            st.caption(helper)
-        start = today
-        end = today + dt.timedelta(days=int(presets[preset]))
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ----------------------------
-    # validasyon + özet
-    # ----------------------------
-    if end < start:
-        st.error("Bitiş tarihi başlangıçtan küçük olamaz.")
-        return
-
-    days = (end - start).days + 1
-
-    k1, k2, k3, k4 = st.columns([2, 2, 1, 1])
-    k1.metric("🗓️ Başlangıç", f"{start}")
-    k2.metric("🗓️ Bitiş", f"{end}")
-    k3.metric("📆 Gün", f"{days:,}")
-    k4.metric("🧩 Ham Feature", f"{len(raw_features_used):,}")
-    st.markdown("---")
-
-    # ----------------------------
-    # Aksiyon
-    # ----------------------------
-    left, right = st.columns([1.3, 2.7])
-    with left:
-        run = st.button("🚀 Tahmini Üret ve Kaydet", use_container_width=True)
-    with right:
-        st.caption(
-            "Not: Tahmin; eğitimde kullanılan ham feature seti üzerinden geleceğe genişletilir, "
-            "sonra one-hot/dummy kolonları eğitim kolonlarına hizalanır."
-        )
-
-    if not run:
-        st.info("Tahmin almak için yukarıdan aralığı seçip **Tahmini Üret ve Kaydet** butonuna bas.", icon="👉")
-        return
-
-    # ----------------------------
-    # Tahmin üretimi
-    # ----------------------------
-    with st.spinner("Tahmin hazırlanıyor..."):
-        future_df, X_future, used_date_col = _build_future_X_like_training(
-            df_full=df_full,
-            X_columns=X_columns,
-            raw_features_used=raw_features_used,
-            date_col=date_col,
-            start=start,
-            end=end,
-        )
-
-        # scaler varsa uygula
-        if st.session_state.get("cf_scaler_used", False):
-            mean_ = st.session_state.get("cf_scaler_mean_", None)
-            scale_ = st.session_state.get("cf_scaler_scale_", None)
-            if mean_ is not None and scale_ is not None:
-                X_for_pred = _manual_standard_scale(X_future, mean_=mean_, scale_=scale_)
-            else:
-                X_for_pred = X_future.values
-        else:
-            X_for_pred = X_future.values
-
-        y_pred = model.predict(X_for_pred)
-        tarih_list = pd.to_datetime(list(_daterange(start, end)))
-
-        out = pd.DataFrame(
-            {
-                "tarih": tarih_list,
-                "y_pred": np.asarray(y_pred).reshape(-1),
-            }
-        )
-
-        out["Gun_Ismi"] = _day_name_tr(out["tarih"]).values
-        out = out[["tarih", "Gun_Ismi", "y_pred"]]
-
-        # ----------------------------
-        # Negatif tahmin düzeltme:
-        # Negatifse, aynı günün ortalamasına eşitle
-        # ----------------------------
-        out["Gun_Tarih"] = out["tarih"].dt.date
-        daily_mean = out.groupby("Gun_Tarih")["y_pred"].transform("mean")
-        global_mean = float(out["y_pred"].mean()) if len(out) else 0.0
-
-        neg_mask = out["y_pred"] < 0
-        out.loc[neg_mask, "y_pred"] = daily_mean[neg_mask]
-
-        # Hala negatif kalan (tek-kayıt-gün vb.) değerler için fallback
-        out.loc[out["y_pred"] < 0, "y_pred"] = max(global_mean, 0.0)
-
-        out.drop(columns=["Gun_Tarih"], inplace=True)
-
-    # session’a yaz
-    st.session_state["cf_forecast_df"] = out
-    st.session_state["cf_forecast_meta"] = {
-        "model_name": model_name,
-        "horizon": horizon,
-        "start": str(start),
-        "end": str(end),
-        "date_col_used": str(used_date_col),
-        "raw_feature_count": int(len(raw_features_used)),
-        "x_columns_count": int(len(X_columns)),
-        "created_at": dt.datetime.now().isoformat(timespec="seconds"),
-    }
-    st.session_state["cf_forecast_ready"] = True
-
-    st.success("✅ Tahmin kaydedildi. **Mesai Planı > Tahmin** kısmında görebilirsin.")
-
-    # ----------------------------
-    # Sonuçlar
-    # ----------------------------
-    t1, t2, t3 = st.tabs(["📋 Önizleme", "📈 Grafik", "🧪 Detay/Debug"])
-
-    with t1:
-        st.dataframe(out.head(50), use_container_width=True, hide_index=True)
-
-    with t2:
-        st.line_chart(out.set_index("tarih")[["y_pred"]], height=320)
-
-    with t3:
-        cA, cB, cC = st.columns(3)
-        cA.metric("Model X kolon", f"{len(X_columns):,}")
-        cB.metric("Future X kolon", f"{X_future.shape[1]:,}")
-        cC.metric("Tarih kolonu", str(used_date_col))
-
-        st.caption("Eğitimde olup gelecekte oluşmayan dummy kolonlar 0 olur. Yeni oluşan dummy kolonlar atılır.")
-        st.write("**Meta**")
-        st.json(st.session_state.get("cf_forecast_meta", {}), expanded=False)
+    c1,c2 = st.columns(2)
+    start = c1.date_input("Tahmin başlangıcı", value=today, key="cf_four_start")
+    end = c2.date_input("Tahmin bitişi", value=today+dt.timedelta(days=13), key="cf_four_end")
+    if st.button("En İyi 4 Modelin Tahminini Üret", disabled=len(candidates)<4, key="cf_forecast_four"):
+        try:
+            with st.spinner("Dört model için tahminler üretiliyor..."):
+                forecast_candidates(st.session_state,start,end)
+                save_keys(st.session_state)
+            st.success("Dört tahmin Mesai Planı → Tahmin Kaynağı ekranına aktarıldı. Kullanılacak kaynağı oradan seçin.")
+        except Exception as exc:
+            st.error(f"Tahmin üretilemedi: {exc}")
+    options = st.session_state.get("cf_forecast_options", [])
+    if options:
+        st.markdown("### Üretilen Tahminler")
+        combined = pd.concat([o["frame"].set_index("tarih").y_pred.rename(o["name"]) for o in options],axis=1)
+        st.line_chart(combined)
+        st.dataframe(combined.reset_index(),hide_index=True,use_container_width=True)
+        st.download_button("Dört Tahmini CSV İndir",combined.to_csv().encode("utf-8-sig"),"dort_model_tahmin.csv","text/csv")

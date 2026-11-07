@@ -79,132 +79,79 @@ def _blank_bayram_df():
 # -------------------------------------------------
 # REQUEST HELPERS
 # -------------------------------------------------
-def _cleanup_generated_requests(source: str, ref_key: str):
-    """
-    Aynı kayıt tekrar kaydedilince eski otomatik talepleri temizle.
-    """
-    items = st.session_state.get("trk_requests") or []
-    kept = []
-
-    for r in items:
-        if r.get("generated_from") == source and r.get("generated_ref") == ref_key:
-            continue
-        kept.append(r)
-
-    st.session_state["trk_requests"] = kept
+def _cleanup_generated_requests(source, ref_key):
+    from core.request_service import supersede_generated
+    supersede_generated(st.session_state,source,ref_key)
 
 
-def _push_request(
-    *,
-    req_type: str,
-    note: str,
-    start_date: str | None,
-    end_date: str | None,
-    generated_from: str,
-    generated_ref: str,
-    overtime_start: str | None = None,
-    overtime_end: str | None = None,
-):
-    tl = _team_lead()
-
-    item = {
-        "id": _make_req_id(generated_from.upper()),
-        "created_at": _now_str(),
-        "created_by": _username(),
-        "created_by_name": _full_name(),
-        "type": req_type,
-        "note": (note or "").strip(),
-        "status": "Beklemede",
-        "queue": "TL",
-        "assigned_tls": [tl] if tl else [],
-        "targets": [],
-        "start_date": start_date,
-        "end_date": end_date,
-        "overtime_start": overtime_start,
-        "overtime_end": overtime_end,
-        "last_action": None,
-        "last_action_by": None,
-        "last_action_at": None,
-        "generated_from": generated_from,   # class_schedule / exam / bayram
-        "generated_ref": generated_ref,     # unique ref
-    }
-
-    st.session_state["trk_requests"].append(item)
+def _push_request(*, req_type, note, start_date, end_date, generated_from, generated_ref,
+                  overtime_start=None, overtime_end=None):
+    from core.request_service import create_request
+    from core.workspace_store import save_keys
+    term=generated_ref.split("::",1)[-1]
+    source_key={"class_schedule":"acad_schedules","exam":"acad_exam_calendar","bayram":"acad_bayram_requests"}[generated_from]
+    data=(st.session_state.get(source_key) or {}).get(_username(),{}).get(term,{})
+    rows=pd.DataFrame(data).fillna("").to_dict("records")
+    if generated_from=="exam":
+        rows=[r for r in rows if str(r.get("Tarih"))==str(start_date)]
+    if generated_from=="bayram":
+        rows=[r for r in rows if str(r.get("Başlangıç"))==str(start_date)]
+    try:
+        create_request(st.session_state,{"type":req_type,"note":note,"start_date":start_date,"end_date":end_date,
+                       "generated_from":generated_from,"generated_ref":generated_ref,
+                       "overtime_start":overtime_start,"overtime_end":overtime_end},
+                       {"title":f"{term} · Gönderim anındaki kayıt", "rows":rows})
+        save_keys(st.session_state)
+        return True
+    except (ValueError,TypeError) as exc:
+        st.error(f"Bildirim gönderilemedi: {exc}")
+        return False
 
 
-def _create_schedule_request(term_key: str, edited: pd.DataFrame):
-    """
-    Bahar/Güz ders programı kaydından tek bir planlama talebi üret.
-    """
-    ref = f"{_username()}::{term_key}"
-    _cleanup_generated_requests("class_schedule", ref)
-
-    filled = edited.fillna("").astype(str).apply(lambda col: col.str.strip() != "").sum().sum()
-    if filled == 0:
-        return
-
-    _push_request(
-        req_type="Ders Programı",
-        note=f"{term_key} dönemine ait ders programı yüklendi. Dolu hücre sayısı: {int(filled)}",
-        start_date=None,
-        end_date=None,
-        generated_from="class_schedule",
-        generated_ref=ref,
-    )
+def _create_schedule_request(term_key, edited):
+    ref=f"{_username()}::{term_key}"
+    _cleanup_generated_requests("class_schedule",ref)
+    day_columns=[c for c in edited if c!="Saat"]
+    filled=edited[day_columns].fillna("").astype(str).apply(lambda c:c.str.strip().ne("")).sum().sum()
+    if not filled:
+        return False
+    return _push_request(req_type="Ders Programı",note=f"{term_key} · {filled} ders aralığı bildirildi.",
+                         start_date=None,end_date=None,generated_from="class_schedule",generated_ref=ref)
 
 
-def _create_bayram_requests(year_key: str, edited: pd.DataFrame):
-    ref_prefix = f"{_username()}::{year_key}"
-    _cleanup_generated_requests("bayram", ref_prefix)
-
-    for i, row in edited.fillna("").iterrows():
-        start = str(row.get("Başlangıç") or "").strip()
-        end = str(row.get("Bitiş") or "").strip()
-        talep_turu = str(row.get("Talep Türü") or "Bayram Talebi").strip()
-        aciklama = str(row.get("Açıklama") or "").strip()
-
-        if not start and not end and not aciklama:
-            continue
-
-        _push_request(
-            req_type="Bayram Talebi",
-            note=f"{talep_turu} | {aciklama}",
-            start_date=start or None,
-            end_date=end or None,
-            generated_from="bayram",
-            generated_ref=ref_prefix,
-        )
+def _create_bayram_requests(year_key, edited):
+    rows=[r for r in edited.fillna("").to_dict("records") if str(r.get("Başlangıç","")).strip()]
+    for r in rows:
+        a,b=pd.to_datetime(r.get("Başlangıç"),errors="coerce"),pd.to_datetime(r.get("Bitiş"),errors="coerce")
+        if pd.isna(a) or pd.isna(b) or a>b:
+            st.error("Bayram bildirimi için geçerli başlangıç/bitiş tarihi girin.")
+            return False
+    ref=f"{_username()}::{year_key}"
+    _cleanup_generated_requests("bayram",ref)
+    success=True
+    for r in rows:
+        success=_push_request(req_type="Bayram Talebi",note=str(r.get("Açıklama","")).strip(),
+                              start_date=str(r['Başlangıç']),end_date=str(r['Bitiş']),
+                              generated_from="bayram",generated_ref=ref) and success
+    return success and bool(rows)
 
 
-def _create_exam_requests(year_key: str, edited: pd.DataFrame):
-    ref_prefix = f"{_username()}::{year_key}"
-    _cleanup_generated_requests("exam", ref_prefix)
-
-    for i, row in edited.fillna("").iterrows():
-        tarih = str(row.get("Tarih") or "").strip()
-        saat = str(row.get("Saat") or "").strip()
-        ders = str(row.get("Ders") or "").strip()
-        sinav_turu = str(row.get("Sınav Türü") or "").strip()
-        not_text = str(row.get("Not") or "").strip()
-
-        if not tarih and not ders and not not_text:
-            continue
-
-        _push_request(
-            req_type="Sınav Takvimi",
-            note=f"{ders} | {sinav_turu} | {not_text}",
-            start_date=tarih or None,
-            end_date=tarih or None,
-            generated_from="exam",
-            generated_ref=ref_prefix,
-            overtime_start=saat or None,
-            overtime_end=None,
-        )
+def _create_exam_requests(year_key, edited):
+    rows=[r for r in edited.fillna("").to_dict("records") if any(str(v).strip() for v in r.values())]
+    for r in rows:
+        if pd.isna(pd.to_datetime(r.get("Tarih"),errors="coerce")):
+            st.error("Her sınav için geçerli tarih girin.")
+            return False
+    ref=f"{_username()}::{year_key}"
+    _cleanup_generated_requests("exam",ref)
+    success=True
+    for r in rows:
+        success=_push_request(req_type="Sınav Takvimi",note=f"{r.get('Ders','')} · {r.get('Sınav Türü','')} · {r.get('Not','')}",
+                              start_date=str(r['Tarih']),end_date=str(r['Tarih']),generated_from="exam",generated_ref=ref,
+                              overtime_start=str(r.get('Saat','')).strip() or None) and success
+    return success and bool(rows)
 
 
-# -------------------------------------------------
-# MAIN
-# -------------------------------------------------
 def render():
     _ensure_state()
 
@@ -257,9 +204,8 @@ def render():
                 st.session_state["acad_schedules"].setdefault(user, {})
                 st.session_state["acad_schedules"][user][term_key] = edited.to_dict(orient="list")
 
-                _create_schedule_request(term_key, edited)
-
-                st.success("Bahar dönemi kaydedildi ve TL onay kuyruğuna gönderildi.")
+                if _create_schedule_request(term_key, edited):
+                    st.success("Bahar dönemi kaydedildi ve TL onay kuyruğuna gönderildi.")
         with c2:
             if st.button("🧹 Bahar Temizle", use_container_width=True, key=f"clear_bahar_{term_key}"):
                 st.session_state["acad_schedules"].setdefault(user, {})
@@ -306,9 +252,8 @@ def render():
                 st.session_state["acad_schedules"].setdefault(user, {})
                 st.session_state["acad_schedules"][user][term_key] = edited.to_dict(orient="list")
 
-                _create_schedule_request(term_key, edited)
-
-                st.success("Güz dönemi kaydedildi ve TL onay kuyruğuna gönderildi.")
+                if _create_schedule_request(term_key, edited):
+                    st.success("Güz dönemi kaydedildi ve TL onay kuyruğuna gönderildi.")
         with c2:
             if st.button("🧹 Güz Temizle", use_container_width=True, key=f"clear_guz_{term_key}"):
                 st.session_state["acad_schedules"].setdefault(user, {})
@@ -355,9 +300,8 @@ def render():
                 st.session_state["acad_bayram_requests"].setdefault(user, {})
                 st.session_state["acad_bayram_requests"][user][bayram_key] = edited.to_dict(orient="list")
 
-                _create_bayram_requests(bayram_key, edited)
-
-                st.success("Bayram talebi kaydedildi ve TL onay kuyruğuna gönderildi.")
+                if _create_bayram_requests(bayram_key, edited):
+                    st.success("Bayram talebi kaydedildi ve TL onay kuyruğuna gönderildi.")
         with c2:
             if st.button("🧹 Bayram Talebi Temizle", use_container_width=True, key=f"clear_bayram_{bayram_key}"):
                 st.session_state["acad_bayram_requests"].setdefault(user, {})
@@ -404,9 +348,8 @@ def render():
                 st.session_state["acad_exam_calendar"].setdefault(user, {})
                 st.session_state["acad_exam_calendar"][user][exam_key] = edited.to_dict(orient="list")
 
-                _create_exam_requests(exam_key, edited)
-
-                st.success("Sınav takvimi kaydedildi ve TL onay kuyruğuna gönderildi.")
+                if _create_exam_requests(exam_key, edited):
+                    st.success("Sınav takvimi kaydedildi ve TL onay kuyruğuna gönderildi.")
         with c2:
             if st.button("🧹 Sınav Takvimi Temizle", use_container_width=True, key=f"clear_exam_{exam_key}"):
                 st.session_state["acad_exam_calendar"].setdefault(user, {})

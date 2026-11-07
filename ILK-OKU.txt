@@ -1,0 +1,33 @@
+WFM — GÜNCEL SÜRÜM / HIZLI BAŞLANGIÇ
+
+1. GitHub ZIP dosyasını yeni bir klasöre çıkart ve içindeki proje klasörünü VS Code ile aç.
+2. VS Code'daki eski Streamlit ve backend işlemlerini Ctrl+C ile durdur.
+3. Bu klasörün terminalinde (Python 3.12 önerilir):
+
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+
+   Windows için ortamı etkinleştirme: .venv\Scripts\activate
+
+4. Birinci terminalde:
+   python -m uvicorn backend:app --host 127.0.0.1 --port 8001
+
+5. Aynı klasörde ikinci terminal aç, ortamı etkinleştir ve çalıştır:
+   python -m streamlit run ui.py --server.port 8501
+
+6. http://localhost:8501 adresini aç.
+   Demo hesap: moderator / 1234
+
+Güncel sürümün menüsünde Demo Veritabanı ve Geçmiş Hafta Analizi vardır.
+Mesai Planı > Tahmin Kaynağı altında dört model ve elle giriş bulunur.
+Demo Veritabanı menüsünden hesap değiştirerek personel → TL → WFM akışını dene.
+
+İÇERİK
+- Güncellenmiş kaynak kodları ve testler
+- data/auth_demo.db: mevcut demo personeller ve kullanıcılar
+- data/wfm_demo.db: İlk girişte otomatik oluşturulur. 730 günlük ve 35.040 adet 30 dakikalık sentetik çağrı/AHT,
+  talepler, ders-sınav kayıtları, vardiyalar ve planlama verileri
+- README.md: ayrıntılı kullanım ve mevcut sınırlar
+
+Örnek veriler sentetiktir. Bu sürümü ayrı klasörde çalıştırarak önce inceleyebilirsin.

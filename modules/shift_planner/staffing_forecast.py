@@ -13,12 +13,12 @@ def erlang_c_probability(a: float, m: int) -> float:
     if m <= a:
         return 1.0
 
-    sum_terms = 0.0
-    for k in range(m):
-        sum_terms += (a ** k) / math.factorial(k)
-
-    last_term = (a ** m) / (math.factorial(m) * (1 - (a / m)))
-    return float(last_term / (sum_terms + last_term))
+    # Stable Erlang-B recurrence, then B -> C; avoids factorial overflow.
+    b = 1.0
+    for k in range(1, m+1):
+        b = a*b/(k+a*b)
+    rho = a/m
+    return float(b/(1-rho+rho*b))
 
 
 def erlang_c_metrics_for_m(
@@ -83,21 +83,52 @@ def erlang_c_required_agents(
 # UI
 # ==========================================================
 
+def calculate_staffing(forecast_df, ratio_df, aht=300, target_sl=.8,
+                       target_time=20, shrinkage=.3, occ_target=.85):
+    from core.forecast_service import validate_forecast, DAY_NAMES
+    forecast=validate_forecast(forecast_df)
+    if not (0 < aht <= 3600 and 0 < target_sl < 1 and 0 <= shrinkage < 1 and 0 < occ_target < 1 and target_time>0):
+        raise ValueError("Geçersiz personel hesaplama parametreleri.")
+    if not {'Gün','Slot','Oran(%)'} <= set(ratio_df):
+        raise ValueError("Oran profilinde Gün, Slot ve Oran(%) gerekli.")
+    if ratio_df.duplicated(['Gün','Slot']).any():
+        raise ValueError("Oran profilinde aynı gün/slot birden fazla kez var.")
+    rows=[]
+    for row in forecast.itertuples(index=False):
+        day=DAY_NAMES[row.tarih.weekday()]
+        profile=ratio_df[ratio_df['Gün']==day]
+        if len(profile)!=48 or set(profile.Slot)!=set(range(1,49)):
+            raise ValueError(f"{day} için 48 slotun tamamı gerekli.")
+        ratios=pd.to_numeric(profile['Oran(%)'],errors='raise')
+        if not math.isfinite(float(ratios.sum())) or ratios.isna().any() or (ratios<0).any() or abs(float(ratios.sum())-100)>.05:
+            raise ValueError(f"{day} oranlarının toplamı %100 olmalı.")
+        for (_,r),percent in zip(profile.iterrows(),ratios):
+            calls=float(row.y_pred)*float(percent)/100
+            met=erlang_c_required_agents(calls,aht,1800,target_sl,target_time,occ_target)
+            slot=int(r['Slot'])
+            label=r.get('Aralık',f'{(slot-1)//2:02d}:{((slot-1)%2)*30:02d}')
+            rows.append({'Tarih':row.tarih.date(),'Gün':day,'Slot':slot,'Aralık':label,
+                         'Tahmin Çağrı':round(calls,2),'Trafik (Erlang)':round(met['traffic_a'],3),
+                         'Doluluk (%)':round(met['occupancy']*100,1),'SL (model) (%)':round(met['sl']*100,1),
+                         'Net Agent':met['m'],'Planlanan Agent':math.ceil(met['m']/(1-shrinkage))})
+    return pd.DataFrame(rows)
+
 def render():
     st.subheader("👥 Personel Tahmin (Erlang C)")
     st.caption("Günlük tahmini, 30 dk slot oranlarına dağıtıp Erlang C ile agent ihtiyacını hesaplar.")
     st.markdown("---")
 
     # Gerekli veriler
-    if "cf_forecast_df" not in st.session_state:
-        st.warning("Önce Çağrı Tahmini üretmelisin.")
+    if st.session_state.get("sp_forecast_df") is None:
+        st.warning("Önce Tahmin Kaynağı ekranında bir model seçin veya elle tahmin girin.")
         return
 
     if "sp_active_ratio_profile_df" not in st.session_state or st.session_state["sp_active_ratio_profile_df"] is None:
         st.warning("Önce aktif bir 30 dk oran profili seçmelisin (Kayıt Seçim ekranından).")
         return
 
-    forecast_df = st.session_state["cf_forecast_df"].copy()
+    forecast_df = st.session_state["sp_forecast_df"].copy()
+    st.caption("Kullanılan kaynak: " + st.session_state.get("sp_forecast_meta", {}).get("model_name", "Seçili tahmin"))
     ratio_df = st.session_state["sp_active_ratio_profile_df"].copy()
 
     if forecast_df.empty or ratio_df.empty:
@@ -147,54 +178,16 @@ def render():
     forecast_df["Gün"] = forecast_df["tarih"].dt.day_name().map(day_map)
 
     if st.button("🚀 Personel İhtiyacını Hesapla ve Kaydet", use_container_width=True):
-        result_rows = []
-
-        with st.spinner("Hesaplanıyor..."):
-            for _, row in forecast_df.iterrows():
-                daily_calls = float(row["y_pred"])
-                gun = row["Gün"]
-                tarih = row["tarih"]
-
-                day_ratio = ratio_df[ratio_df["Gün"] == gun].copy()
-                if day_ratio.empty:
-                    continue
-
-                for _, r in day_ratio.iterrows():
-                    slot = int(r["Slot"])
-                    oran = float(r["Oran(%)"]) / 100.0
-                    aralik = str(r["Aralık"])
-
-                    slot_calls = daily_calls * oran
-
-                    met = erlang_c_required_agents(
-                        calls=slot_calls,
-                        aht_sec=float(aht),
-                        interval_sec=float(interval_sec),
-                        target_sl=float(target_sl),
-                        target_time_sec=float(target_time),
-                        occ_target=float(occ_target),
-                    )
-
-                    net_agents = int(met["m"])
-                    planned_agents = math.ceil(net_agents / (1 - shrinkage)) if shrinkage < 1 else net_agents
-
-                    result_rows.append(
-                        {
-                            "Tarih": pd.to_datetime(tarih).date(),
-                            "Gün": gun,
-                            "Slot": slot,
-                            "Aralık": aralik,
-                            "Tahmin Çağrı": round(slot_calls, 2),
-                            "Trafik (Erlang)": round(float(met["traffic_a"]), 3),
-                            "Doluluk (%)": round(float(met["occupancy"]) * 100, 1),
-                            "SL (model) (%)": round(float(met["sl"]) * 100, 1),
-                            "Net Agent": net_agents,
-                            "Planlanan Agent": planned_agents,
-                        }
-                    )
-
-        result_df = pd.DataFrame(result_rows)
-        st.session_state["sp_staffing_result_df"] = result_df
+        try:
+            with st.spinner("Personel ihtiyacı hesaplanıyor..."):
+                result_df=calculate_staffing(forecast_df,ratio_df,aht=float(aht),target_sl=target_sl,
+                                            target_time=float(target_time),shrinkage=shrinkage,occ_target=occ_target)
+            st.session_state["sp_staffing_result_df"] = result_df
+            from core.workspace_store import save_keys
+            save_keys(st.session_state)
+        except ValueError as exc:
+            st.error(str(exc))
+            return
         st.success("✅ Personel tahmini hesaplandı ve kaydedildi.")
 
     # ======================================================

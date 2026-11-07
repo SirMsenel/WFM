@@ -49,6 +49,8 @@ from modules.all_shifts.foreign_language import render as render_all_foreign_lan
 
 # ---------------- Personel Takip ----------------
 from modules.PersonelTakip.Personel_talep import render as render_personel_talep
+from modules.shift_planner.history_comparison import render as render_history_comparison
+from modules.demo_workspace import render as render_demo_workspace
 
 
 # ---------------- Backend ----------------
@@ -102,6 +104,9 @@ def _api_get(path: str, token: str | None = None, params: dict | None = None):
 
 # ---------------- Login Check ----------------
 require_login(_api_get=_api_get, _api_post=_api_post)
+
+from core.demo_data import bootstrap
+bootstrap(st.session_state)
 
 
 # ---------------- Global Sidebar Style ----------------
@@ -242,11 +247,13 @@ st.markdown("""
 PAGES = [
     "📞 Çağrı Tahmini",
     "📅 Mesai Planı",
+    "📈 Geçmiş Hafta Analizi",
     "🗓️ Vardiya Planı",
     "📊 İzleme",
     "👥 Personel Takip",
     "📌 Takip",
     "🗓️ Tüm Vardiyalar",
+    "🧪 Demo Veritabanı",
     "⚙️ Ayarlar",
 ]
 
@@ -257,7 +264,7 @@ def get_role(profile: dict) -> str:
 
 def get_allowed_pages(profile: dict) -> set[str]:
     role = get_role(profile)
-    base = {"📌 Takip", "🗓️ Tüm Vardiyalar", "⚙️ Ayarlar"}
+    base = {"📌 Takip", "🗓️ Tüm Vardiyalar", "⚙️ Ayarlar", "🧪 Demo Veritabanı"}
 
     if role == "agent":
         return base
@@ -300,6 +307,8 @@ with st.sidebar:
     )
 
     if st.button("Çıkış Yap", use_container_width=True):
+        from core.workspace_store import save_keys
+        save_keys(st.session_state)
         st.session_state["auth_token"] = None
         st.session_state["profile"] = None
         st.rerun()
@@ -356,11 +365,17 @@ if main == "📞 Çağrı Tahmini":
     with tab8:
         render_predict_ui()
 
+elif main == "📈 Geçmiş Hafta Analizi":
+    render_history_comparison()
+
+elif main == "🧪 Demo Veritabanı":
+    render_demo_workspace()
+
 elif main == "📅 Mesai Planı":
     st.title("📅 Mesai Planı")
     tab1, tab2, tab3, tab4 = st.tabs(
         [
-            "1) Tahmin",
+            "1) Tahmin Kaynağı",
             "2) İnterval",
             "3) Kayıt Seçim",
             "4) Personel Hesap",
@@ -466,3 +481,6 @@ elif main == "🗓️ Tüm Vardiyalar":
 elif main == "⚙️ Ayarlar":
     st.title("⚙️ Ayarlar")
     st.info("Ayarlar ekranı (yakında).")
+
+from core.workspace_store import save_keys
+save_keys(st.session_state)

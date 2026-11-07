@@ -4,6 +4,7 @@ import requests
 import hashlib
 import calendar
 from datetime import datetime, date, time
+from modules.shift_planing.engine import bounds
 
 import pandas as pd
 import streamlit as st
@@ -540,7 +541,19 @@ def render():
     with tab1:
         year, month, start, end = _period_selector()
 
-        df_month = _gen_month_schedule(_username(target), year, month, academy=academy)
+        published = [r for r in st.session_state.get("published_shift_plan", [])
+                     if str(r.get("employee_id")) == str(target.get("employee_id"))
+                     and str(r.get("date", "")).startswith(f"{year}-{month:02d}")]
+        if not published:
+            st.info("Bu personel ve ay için yayınlanmış vardiya planı yok.")
+            return
+        rows = []
+        for record in published:
+            interval = bounds(record)
+            hours = (interval[1]-interval[0]).total_seconds()/3600 if interval else 0.0
+            rows.append({"date": date.fromisoformat(record["date"]), "status": "WORK" if interval else record["shift_code"],
+                         "start": record.get("start"), "end": record.get("end"), "hours": hours})
+        df_month = pd.DataFrame(rows)
         df = df_month[(df_month["date"] >= start) & (df_month["date"] <= end)].copy()
 
         st.divider()

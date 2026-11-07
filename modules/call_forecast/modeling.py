@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
+from core.forecast_service import date_column, signature, register_model
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
@@ -38,11 +39,7 @@ def _get_active_df() -> pd.DataFrame | None:
 
 
 def _detect_date_col(df: pd.DataFrame) -> str | None:
-    for col in df.columns:
-        parsed = pd.to_datetime(df[col], errors="coerce")
-        if parsed.notna().mean() > 0.8:
-            return col
-    return None
+    return date_column(df)
 
 
 def _candidate_numeric_cols(df: pd.DataFrame) -> list[str]:
@@ -116,7 +113,7 @@ def render():
     st.markdown("##### 2️⃣ Bağımsız Değişkenler (Features)")
     feature_candidates = [c for c in df.columns if c != target]
 
-    default_feats = _default_feature_selection(feature_candidates)
+    default_feats = [c for c in _default_feature_selection(feature_candidates) if c != date_column(df)]
 
     features = st.multiselect(
         "Modele dahil edilecek kolonlar",
@@ -330,6 +327,8 @@ Lütfen:
 
     # Kolon hizalama (çok önemli)
     X_train, X_test = X_train.align(X_test, join="left", axis=1, fill_value=0)
+    comparison_context = signature(X_train, X_test, y_train, y_test,
+                                   extra={"features": features, "target": target, "normalize": normalize_data})
 
     # ------------------ Model seçimi ------------------
     st.markdown("---")
@@ -610,6 +609,8 @@ Lütfen:
         r2 = float(r2_score(y_test, preds))
         mae = float(mean_absolute_error(y_test, preds))
         rmse = _safe_rmse(y_test, preds)
+        register_model(st.session_state, model_name, model, {"R²": r2, "MAE": mae, "RMSE": rmse},
+                       df, features, list(X_train.columns), auto_date, scaler, comparison_context)
 
         # --- MODEL STATE ---
         st.session_state["cf_model"] = model
@@ -680,21 +681,23 @@ Lütfen:
 
     X_train_use, X_test_use, scaler = _scale_if_needed(X_train, X_test, normalize_data)
 
-    results = []
-    trained_models = {}
-
-    for name, mdl in base_models.items():
-        mdl.fit(X_train_use, y_train)
-        p = mdl.predict(X_test_use)
-        trained_models[name] = mdl
-        results.append([
-            name,
-            float(r2_score(y_test, p)),
-            float(mean_absolute_error(y_test, p)),
-            _safe_rmse(y_test, p),
-        ])
-
-    compare_df = pd.DataFrame(results, columns=["Model", "R²", "MAE", "RMSE"]).sort_values("R²", ascending=False)
+    st.caption("Aynı test verisinde en düşük RMSE'ye sahip dört model tahmin ekranına aktarılır. MAE eşitlik bozucu ölçüttür.")
+    if st.button("Modelleri Eğit ve En İyi 4 Modeli Belirle", key="cf_compare_models"):
+        with st.spinner("Modeller aynı eğitim/test ayrımıyla karşılaştırılıyor..."):
+            for name, mdl in base_models.items():
+                mdl.fit(X_train_use, y_train)
+                p = mdl.predict(X_test_use)
+                register_model(st.session_state, name, mdl,
+                               {"R²": float(r2_score(y_test, p)), "MAE": float(mean_absolute_error(y_test, p)), "RMSE": _safe_rmse(y_test, p)},
+                               df, features, list(X_train.columns), auto_date, scaler, comparison_context)
+    if st.session_state.get("cf_candidate_context") != comparison_context:
+        st.info("Model karşılaştırmasını başlatın. Değişen eğitim ayarları için önceki modeller kullanılmaz.")
+        return
+    bundles = st.session_state.get("cf_model_candidates", {})
+    if not bundles:
+        return
+    trained_models = {name: b["model"] for name, b in bundles.items()}
+    compare_df = pd.DataFrame([{"Model": name, **b["metrics"]} for name,b in bundles.items()]).sort_values(["RMSE", "MAE", "Model"])
     st.dataframe(compare_df, use_container_width=True)
 
     st.markdown("### 📌 Kaydedilecek model:")
@@ -838,6 +841,9 @@ Lütfen:
         r2 = float(r2_score(y_test, preds_tuned))
         mae = float(mean_absolute_error(y_test, preds_tuned))
         rmse = _safe_rmse(y_test, preds_tuned)
+        register_model(st.session_state, tune_choice + " (Optimize)", tuned,
+                       {"R²": r2, "MAE": mae, "RMSE": rmse}, df, features,
+                       list(X_train.columns), auto_date, scaler, comparison_context)
 
         st.success(f"✅ Optimize Edilmiş → R²={r2:.3f} | MAE={mae:.3f} | RMSE={rmse:.3f}")
         st.info(f"🔧 En iyi parametreler: {grid.best_params_}")

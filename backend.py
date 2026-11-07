@@ -234,7 +234,7 @@ def employees_query(
         params.append(language.strip().lower())
 
     # moderator hariç (her durumda)
-    base_condition = "lower(position) != 'moderator'"
+    base_condition = "lower(position) != 'moderator' AND EXISTS (SELECT 1 FROM users u WHERE u.employee_id = employees.employee_id AND u.is_active=1)"
 
     if where:
         where_sql = " WHERE " + base_condition + " AND " + " AND ".join(where)
@@ -250,7 +250,8 @@ def employees_query(
 
         cur.execute(
             f"""
-            SELECT employee_id, full_name, team_lead, manager, location, work_type, position, language
+            SELECT employee_id, full_name, team_lead, manager, location, work_type, position, language,
+                   (SELECT username FROM users u WHERE u.employee_id = employees.employee_id AND u.is_active=1 LIMIT 1) AS username
             FROM employees
             {where_sql}
             ORDER BY employee_id ASC
