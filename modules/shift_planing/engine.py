@@ -44,7 +44,7 @@ def _limit(value):
 
 
 def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
-                  history=(), unavailable=None, auto_fill=True, strict_capacity=True):
+                  history=(), unavailable=None, auto_fill=True, strict_capacity=True, hour_targets=(), languages=None):
     """Return plan/coverage/issues. Never mutates caller-owned rows or tables.
 
     Fixed rows are ordered by source precedence. Conflicting rows are reported
@@ -127,6 +127,9 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         problems = []
         duration = (interval[1] - interval[0]).total_seconds() / 3600
         max_hours = float(rule.get("shift_total_hours_max", rule.get("shift_total_hours", 24)))
+        if row.get('shift_code')=='GECE':
+            ns=minutes(general.get('night_window_start','00:00'));ne=minutes(general.get('night_window_end','08:00'))
+            max_hours=((ne-ns)%1440 or 1440)/60
         if duration > max_hours:
             problems.append("Günlük süre sınırı aşılıyor")
         if row.get("shift_code") not in {"MESAI", "GECE"} and "shift_total_hours" in rule and duration != float(rule["shift_total_hours"]):
@@ -171,7 +174,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             max_days = min(5, max_days)
         if len({d for d in working_days | {day} if d.isocalendar()[:2] == week}) > max_days:
             problems.append("Haftalık çalışma günü sınırı aşılıyor")
-        rest = float(rule.get("min_rest_hours", 0))
+        rest = max(11., float(rule.get("min_rest_hours", 11)))
         for other in prior:
             oi = bounds(other)
             if oi is None:
@@ -183,6 +186,12 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             if gap < rest:
                 problems.append("Minimum dinlenme süresi sağlanmıyor")
                 break
+        from core.work_hours import overlap_hours
+        for target in hour_targets:
+            if target['group']!=group or not overlap_hours(row,target['start'],target['end']):continue
+            total=sum(overlap_hours(r,target['start'],target['end']) for r in prior)+overlap_hours(row,target['start'],target['end'])
+            if total>float(target['hours'])+1e-9:
+                problems.append(f"Dönem çalışma süresi aşılıyor: {total:g} saat / {float(target['hours']):g} saat")
         return problems
 
     for raw in history:
@@ -322,6 +331,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         for day in days:
             assigned=[r for r in plan if r['date']==day.isoformat() and r.get('shift_code')=='GECE']
             for language,needed in targets.items():
+                if languages is not None and not languages.get(language,True):continue
                 count=sum(staff[r['employee_id']].get('language')==language for r in assigned)
                 if count!=int(needed):
                     issue({'date':day.isoformat()},f'Gece {language.upper()}: {needed} gerekli, {count} kesin kayıt var')

@@ -10,7 +10,7 @@ from .engine import minutes
 from core.planning import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
@@ -72,6 +72,10 @@ def validate_employees(items):
 def collect_inputs(state):
     """Resolve identities exactly. Unsupported/malformed records become blockers."""
     employees = validate_employees(state.get("employees_cache", []))
+    included=state.get('planning_languages',{'en':True,'ar':True})
+    excluded={str(e['employee_id']) for e in employees if not included.get(e.get('language'),True)}
+    excluded.update(e.get('username') for e in employees if str(e['employee_id']) in excluded)
+    employees=[e for e in employees if str(e['employee_id']) not in excluded]
     lookup = {str(e["employee_id"]): str(e["employee_id"]) for e in employees}
     for emp in employees:
         if emp.get("username"):
@@ -81,6 +85,8 @@ def collect_inputs(state):
     ctx = state["plan_ctx"]
     start, end = pd.Timestamp(ctx["start"]).date(), pd.Timestamp(ctx["end"]).date()
     fixed, issues, unavailable = [], [], {}
+    history_start=min([start-timedelta(days=7)]+[pd.Timestamp(t['start']).date() for t in state.get('group_hour_targets',[])])
+    history_end=max([end+timedelta(days=7)]+[pd.Timestamp(t['end']).date() for t in state.get('group_hour_targets',[])])
 
     def problem(raw, reason):
         issues.append({"employee_id": str(raw.get("employee_id", raw.get("created_by", raw.get("employee", "")))),
@@ -92,13 +98,14 @@ def collect_inputs(state):
         if pd.isna(sd) or pd.isna(ed) or sd > ed:
             problem(raw, "Kayıt için geçerli başlangıç/bitiş tarihi gerekli")
             return
-        if sd.date() > end + timedelta(days=7) or ed.date() < start - timedelta(days=7):
+        if sd.date() > history_end or ed.date() < history_start:
             return
         who = str(identity if identity is not None else raw.get("employee_id", raw.get("created_by", raw.get("employee", ""))))
+        if who in excluded:return
         if who not in lookup:
             problem(raw, "Kayıt personelle eşleştirilemedi; kullanıcı adı/employee_id gerekli")
             return
-        for d in pd.date_range(max(sd.date(), start-timedelta(days=7)), min(ed.date(), end+timedelta(days=7))):
+        for d in pd.date_range(max(sd.date(), history_start), min(ed.date(), history_end)):
             fixed.append({"employee_id": lookup[who], "date": d.date().isoformat(),
                           "shift_code": code, "source": source, "note": raw.get("note", ""),
                           "start": raw.get("start") or raw.get("start_time") or raw.get("overtime_start"),
@@ -157,6 +164,7 @@ def collect_inputs(state):
     day_names=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar']
     exam_days={}
     for user,terms in (state.get('acad_exam_calendar') or {}).items():
+        if user in excluded:continue
         for data in terms.values():
             for row in pd.DataFrame(data).fillna('').to_dict('records'):
                 if not any(str(v).strip() for v in row.values()):
@@ -174,6 +182,7 @@ def collect_inputs(state):
                 exam_days.setdefault(eid,set()).add(exam.date())
                 unavailable.setdefault(eid,[]).append((base,base+timedelta(days=1)))
     for user,terms in (state.get('acad_schedules') or {}).items():
+        if user in excluded:continue
         if user not in lookup:
             problem({'employee':user},'Ders programı personelle eşleştirilemedi')
             continue

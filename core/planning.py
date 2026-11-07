@@ -30,12 +30,13 @@ def preview_plan(state,include_auto=False):
     actual_auto=[]
     if include_auto:
         fixed_keys={(str(r['employee_id']),str(r['date'])) for r in fixed}
-        actual_auto=[r for r in state.get('draft_shift_plan',[]) if r.get('source')=='auto'
+        included_ids={str(e['employee_id']) for e in staff}
+        actual_auto=[r for r in state.get('draft_shift_plan',[]) if r.get('source')=='auto' and str(r['employee_id']) in included_ids
                      and str(context['start'])<=str(r.get('date'))<=str(context['end'])
                      and (str(r['employee_id']),str(r['date'])) not in fixed_keys]
         fixed=fixed+actual_auto
-    result=generate_plan(staff,demand,state['shift_rules'],state.get('plan_group_priority') or list(state['shift_rules']['work_type']),
-                         context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,auto_fill=False)
+    result=generate_plan(staff,demand,state['shift_rules'],list(state['shift_rules']['work_type']),
+                         context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),languages=state.get('planning_languages'))
     result['issues']=issues+result['issues']
     start,end=str(context['start']),str(context['end'])
     source_rows=[];names={str(e['employee_id']):e.get('full_name',str(e['employee_id'])) for e in staff}
@@ -73,7 +74,8 @@ def calendar_grid(result,context):
                     label=f"{'Gece ' if code=='GECE' else ''}{record['start']}–{record['end']}"
             else:
                 label='—'
-            row[d.strftime('%d.%m')]=label
+            from core.forecast_service import DAY_NAMES
+            row[d.strftime('%d.%m')+' '+DAY_NAMES[d.weekday()]]=label
         output.append(row)
     return pd.DataFrame(output)
 

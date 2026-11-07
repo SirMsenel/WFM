@@ -54,3 +54,17 @@ BU GÜNCELLEMEDE
 - Otomatik plan: tek kutuda grup sırası; sınav günü önceliği, tarihe göre Bahar/Güz.
   Otomatik atama ihtiyacın üstüne çıkmaz. Kesin/elle kayıtlar fazla oluşturuyorsa gösterilir.
 - Talep durumları: olumlu yeşil, ret kırmızı, bekleyen/iletilen sarı.
+
+SON VARDİYA GÜNCELLEMESİ
+- İhtiyaç göstergeleri: sayıları ortada yazan dört küçük halka grafiği.
+- Kalan ihtiyaç: gün isimli 7×48 haftalık tablo; kayıtlar/izinler ve gece kayıtları vardiya takviminde.
+- Mesai Kuralları > Kaydet ve Uygula: kuralları kalıcı uygular. İsteğe göre seçili dönemin
+  kesin/elle gece kayıtlarını yeni gece saatlerine uyarlar. Gece süresi gece aralığından gelir;
+  Akademi gündüz üst sınırı ayrıdır. Onaylı taleplerin açık saatleri kendi kaynaklarından düzeltilir.
+- Bütün gruplarda vardiyalar arasında en az 11 saat dinlenme zorunludur.
+- İngilizce/Arapça personeller ayrı anahtarlarla dahil edilir. Hariç tutulanların eski yayını korunur.
+- Grup sırası: Sırayı Yeniden Seç düğmesinden sonra gruplara istenen sırayla tıkla.
+- Yayınlama düğmesinin yanında kalan adımlar gösterilir. Gece sayısı uyarıları ve ihtiyaç eksikleri
+  açık onayla kabul edilebilir; dinlenme/kayıt ihlalleri düzeltilmeden yayınlanmaz.
+- Mevcut Plan > Çalışma Süreleri: grup için kişi başına aylık veya özel dönem saat üst sınırı.
+  İhtiyaç fazlası vardiya yazdırmaz. Personel Özeti altında dönem saatleri ve ortalamalar bulunur.

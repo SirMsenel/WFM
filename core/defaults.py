@@ -46,5 +46,8 @@ def enforce_current_rules(state):
         rules.setdefault('work_type',{}).setdefault('dis_kaynak',{})['shift_total_hours']=10
         state['shift_rules']=rules
         state['plan_ctx_confirmed']=False
+    if rules:
+        for group in rules.get('work_type',{}).values():group['min_rest_hours']=max(11,group.get('min_rest_hours',11))
     # A previous disabled widget may have cached the old display value.
-    state['rule_dk_shift_hours_fixed']=10
+    if state.get('rule_dk_shift_hours_fixed')!=10:
+        state['rule_dk_shift_hours_fixed']=10

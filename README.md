@@ -215,3 +215,24 @@ gizlenmez. Kesin ve elle atanan kayıtlar korunur, bunların fazlası ayrıca ra
 Sınav günleri tamamen kapatılır; diğer günlerde tarihine uygun ders dönemi kullanılır
 (Ocak önceki Güz, Şubat–Ağustos Bahar, Eylül–Aralık Güz). Dış kaynak süresi 10 saattir;
 eski kayıtlı 11 saat değeri açılışta diğer kurallar korunarak güncellenir.
+
+### Çalışma süreleri ve yayın kontrolü
+Mesai Kuralları değişiklikleri **Kaydet ve Uygula** ile yürürlüğe girer. Seçili dönemin
+kesin/elle gece kayıtları isteğe göre yeni gece aralığına uyarlanır; dönem dışındaki
+kayıtlar ve onaylı taleplerin açık saatleri korunur. Gece vardiyasının süre üst sınırı
+tanımlanan gece aralığıdır; Akademi'nin gündüz süre sınırı ayrıca uygulanır.
+Bütün personeller için en az 11 saat dinlenme kontrol edilir.
+
+İngilizce ve Arapça personeller bağımsız anahtarlarla planlamaya dahil edilir;
+hariç tutulanların atamaları ihtiyaç karşılama hesabına eklenmez ve önceki yayınları
+silinmez. İhtiyaç toplam havuzdur; dil bazında ayrı çağrı talebi bu ekranda üretilmez.
+Grup önceliği düğmelere tıklama sırasıyla kurulur. Gece sayısı uyarıları açık onayla
+kabul edilebilir; kayıt çakışmaları, dinlenme ve süre ihlalleri yayınlamayı engeller.
+Düğmenin yanında engelin nedeni ve yapılacak işlem gösterilir.
+
+**Mevcut Plan → Çalışma Süreleri** her grubun her kişisi için aylık/özel dönem saat
+üst sınırı tanımlar. Motor bu sınırı kalan ihtiyaçla birlikte gözetir, hedefi doldurmak
+için ihtiyaç fazlası üretmez. Aynı grup için çakışan hedef aralıklarına izin verilmez.
+Dönem çalışma saatleri takvim sınırlarına göre hesaplanır; gece vardiyasının ilgili
+güne düşen saatleri sayılır. Dönem ortalaması kişi başı toplam saat, günlük ortalama
+ise seçili dönemin bütün takvim günleri üzerinden hesaplanır.

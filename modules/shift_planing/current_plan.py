@@ -25,12 +25,18 @@ def render(profile=None):
     token = st.session_state.get("auth_token")
 
     st.subheader('Mevcut Plan')
-    part=st.segmented_control('Mevcut plan bölümü',['Personel Özeti','Mesai Kuralları'],default='Personel Özeti',key='nav_current_plan_v2')
+    part=st.segmented_control('Mevcut plan bölümü',['Personel Özeti','Mesai Kuralları','Çalışma Süreleri'],default='Personel Özeti',key='nav_current_plan_v2')
     if part=='Personel Özeti':
         from core.personnel import get_people,personnel_summary
         from core.personnel_charts import render_summary
         render_summary(personnel_summary(get_people(st.session_state)))
+        from core.work_hours_ui import render_hours_summary
+        render_hours_summary(st.session_state,get_people(st.session_state))
         st.caption('Personel listesi Personel Takip → Personel Listesi ekranındadır.')
+
+    if part=='Çalışma Süreleri':
+        from core.work_hours_ui import render_targets
+        render_targets(st.session_state)
 
     if part=='Mesai Kuralları':
         # --- helpers ---
@@ -49,7 +55,8 @@ def render(profile=None):
         rules = st.session_state["shift_rules"]
         from core.defaults import enforce_current_rules
         enforce_current_rules(st.session_state)
-        rules=st.session_state['shift_rules']
+        from copy import deepcopy
+        rules=deepcopy(st.session_state.get('shift_rules_draft') or st.session_state['shift_rules'])
 
         st.markdown("### 🧩 Mesai Kuralları")
         st.info("Bu ekrandaki kurallar çalışma alanı veritabanına kaydedilir." if st.session_state.get('workspace_db_path') else "Kurallar bu oturum için kaydedilir.")
@@ -318,9 +325,9 @@ def render(profile=None):
             with c3:
                 ak["min_rest_hours"] = st.number_input(
                     "Min dinlenme (saat)",
-                    min_value=0,
+                    min_value=11,
                     max_value=24,
-                    value=int(ak["min_rest_hours"]),
+                    value=max(11,int(ak["min_rest_hours"])),
                     key="rule_ak_min_rest_hours",
                 )
 
@@ -346,5 +353,11 @@ def render(profile=None):
                     key="rule_dk_max_days_week",
                 )
 
-        # session’a kaydet
-        st.session_state["shift_rules"] = rules
+        st.info('Tüm personeller için vardiyalar arasında en az 11 saat dinlenme zorunludur. Değişiklikler aşağıdaki düğmeyle uygulanır.')
+        st.session_state['shift_rules_draft']=rules
+        sync=st.checkbox('Seçili dönemdeki gece kayıtlarını seçtiğim başlangıç/bitiş saatlerine uyarla',value=True,key='rules_sync_nights')
+        st.caption('Onaylı taleplerin saatleri talep kaydından değiştirilir. Bu işlem kesin gece kayıtları ve elle girilmiş gece vardiyalarını günceller; yayınlanan geçmişi değiştirmez.')
+        if st.button('Kaydet ve Uygula',type='primary',key='rules_apply'):
+            from core.rule_service import apply_rules
+            changed=apply_rules(st.session_state,rules,sync)
+            st.success(f'Mesai kuralları kaydedildi ve uygulandı. {changed} gece kaydının saati güncellendi. Otomatik taslağı yeniden oluşturun.')

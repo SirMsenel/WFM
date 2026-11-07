@@ -41,8 +41,8 @@ def render_fixed_records(code, year, month):
         start, end = None, None
         if code == "GECE":
             a, b = st.columns(2)
-            start = a.text_input("Başlangıç", value="00:00")
-            end = b.text_input("Bitiş", value="07:00")
+            start = a.text_input("Başlangıç", value=st.session_state.get("shift_rules",{}).get("general",{}).get("night_window_start","00:00"))
+            end = b.text_input("Bitiş", value=st.session_state.get("shift_rules",{}).get("general",{}).get("night_window_end","08:00"))
         note = st.text_input("Not")
         save = st.form_submit_button("Planlama İçin Kaydet")
     if save:

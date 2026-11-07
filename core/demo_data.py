@@ -67,7 +67,7 @@ def ensure_demo(path=DEFAULT_DB, today=None):
                 d=str(next_week+timedelta(days=day_i))
                 fixed.append({'id':f'DEMO-N-{day_i}-{lang}-{offset}','employee_id':str(e['employee_id']),
                               'full_name':e['full_name'],'start_date':d,'end_date':d,'shift_code':'GECE',
-                              'start':'00:00','end':'07:00','note':'Hazır demo gece kaydı'})
+                              'start':default_shift_rules()['general']['night_window_start'],'end':default_shift_rules()['general']['night_window_end'],'note':'Hazır demo gece kaydı'})
     for i,e in enumerate([e for e in agents if e['work_type']=='fulltime'][:3]):
         fixed.append({'id':f'DEMO-L-{i}','employee_id':str(e['employee_id']),'full_name':e['full_name'],
                       'start_date':str(next_week),'end_date':str(next_week+timedelta(days=2)),
@@ -103,7 +103,7 @@ def ensure_demo(path=DEFAULT_DB, today=None):
         request_rows.append({'id':rid,'created_by':e['username'],'created_by_name':e['full_name'],'employee_id':e['employee_id'],
                              'type':typ,'note':'Örnek: belirtilen tarihte vardiya planımın değerlendirilmesini istiyorum.',
                              'start_date':d,'end_date':d,'overtime_start':'00:00' if typ=='Gece Vardiyası Talebi' else ('18:00' if typ=='Mesai Talebi' else None),
-                             'overtime_end':'07:00' if typ=='Gece Vardiyası Talebi' else ('20:00' if typ=='Mesai Talebi' else None),
+                             'overtime_end':default_shift_rules()['general']['night_window_end'] if typ=='Gece Vardiyası Talebi' else ('20:00' if typ=='Mesai Talebi' else None),
                              'assigned_tls':[e['team_lead']],'targets':[],'queue':queue,'status':status,'version':1,
                              'events':events,'created_at':created,'source':'personel','attachment':None})
     # A real structured school notification for inbox/detail testing.

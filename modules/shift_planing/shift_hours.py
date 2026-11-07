@@ -39,11 +39,11 @@ def _manual_form(state,result,context):
             begin,finish=None,None
             if working:
                 a,b=st.columns(2)
-                begin=a.time_input('Başlangıç saati',value=time(0) if kind=='GECE' else time(8),key=f'manual_begin_{kind}')
+                begin=a.time_input('Başlangıç saati',value=time.fromisoformat(state['shift_rules']['general']['night_window_start']) if kind=='GECE' else time(8),key=f'manual_begin_{kind}')
                 if custom:
                     finish=b.time_input('Bitiş saati',value=time(18),key=f'manual_finish_{kind}')
                 else:
-                    b.caption('Bitiş saati her personelin grup süresinden hesaplanır. Dış kaynak 10 saat, Full Time 9 saat; Akademi kendi üst sınırına göre.')
+                    b.caption('Gece bitişi mesai kurallarından alınır.' if kind=='GECE' else 'Bitiş saati her personelin grup süresinden hesaplanır. Dış kaynak 10 saat, Full Time 9 saat; Akademi kendi üst sınırına göre.')
             note=st.text_input('Not',key='manual_note_v2')
             save=st.form_submit_button('Seçili Günlere Yerleştir',disabled=not picked,type='primary')
         if save:
@@ -62,6 +62,8 @@ def _manual_form(state,result,context):
                         a=begin.strftime('%H:%M')
                         if custom:
                             b=finish.strftime('%H:%M')
+                        elif kind=='GECE':
+                            b=state['shift_rules']['general']['night_window_end']
                         else:
                             hours=rule.get('shift_total_hours',rule.get('shift_total_hours_max',7))
                             minute=begin.hour*60+begin.minute+int(float(hours)*60)
@@ -130,7 +132,9 @@ def render():
     def show_sources():
         rows=[r for r in result['source_rows'] if r.get('source')!='auto']
         st.markdown('### Otomatik Gelen ve Elle Girilen Kayıtlar')
-        if rows:st.dataframe(_record_table(rows),hide_index=True,use_container_width=True)
+        if rows:
+            grid=calendar_grid({**result,'source_rows':rows},context)
+            st.dataframe(grid.style.map(_cell_style,subset=[c for c in grid if c!='Personel']),hide_index=True,use_container_width=True,height=500)
         else:st.info('Seçili dönemde kaynak kayıt yok.')
         if result['exam_keys']:
             names={str(e['employee_id']):e.get('full_name') for e in result['staff']}
@@ -140,7 +144,10 @@ def render():
     def show_night():
         rows=[r for r in result['source_rows'] if r.get('shift_code')=='GECE']
         st.markdown('### Gece Vardiyasına Yerleştirilmiş Personel')
-        if rows:st.dataframe(_record_table(rows),hide_index=True,use_container_width=True)
+        if rows:
+            ids={r['employee_id'] for r in rows}
+            grid=calendar_grid({**result,'staff':[e for e in result['staff'] if str(e['employee_id']) in ids],'source_rows':rows},context)
+            st.dataframe(grid.style.map(_cell_style,subset=[c for c in grid if c!='Personel']),hide_index=True,use_container_width=True,height=500)
         else:st.warning('Bu dönem için gece vardiyası kaydı yok.')
         night_issues=[r for r in result['issues'] if 'Gece' in r.get('Sorun','') or 'gece' in r.get('Sorun','')]
         if night_issues:st.error('Gece yerleştirmelerinde eksik veya uyuşmazlık var.');st.dataframe(night_issues,hide_index=True,use_container_width=True)
@@ -148,4 +155,4 @@ def render():
     sections('nav_shift_workbench',{'Takvim':show_calendar,'Kayıtlar ve İzinler':show_sources,'Gece Kontrolü':show_night,'Kalan İhtiyaç':lambda:render_shortages(result,'manual_gaps')})
     # Show actual errors immediately, even when another subview is selected.
     if result['issues']:
-        with st.expander(f"Dikkat gerektiren {len(result['issues'])} kontrol",expanded=True):render_issues(result)
+        with st.expander("Kayıtlardaki uyuşmazlıklar ve düzeltme adımları",expanded=True):render_issues(result)
