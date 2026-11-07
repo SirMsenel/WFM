@@ -14,7 +14,7 @@ def rules():
     return {'general': {'weekday_general_start': '08:00', 'weekend_general_start': '08:00', 'global_latest_end': '03:00'},
             'work_type': {'fulltime': {'shift_total_hours': 9, 'max_days_per_week_default': 5, 'allow_6th_day': False, 'night_allowed': False},
                           'akademi': {'shift_total_hours_max': 7, 'max_days_per_week': 6, 'min_rest_hours': 11, 'night_allowed': True, 'max_end_time': '03:00'},
-                          'dis_kaynak': {'shift_total_hours': 11, 'max_days_per_week': 6, 'night_allowed': False, 'max_end_time': '00:00'}},
+                          'dis_kaynak': {'shift_total_hours': 10, 'max_days_per_week': 6, 'night_allowed': False, 'max_end_time': '00:00'}},
             'night': {'enabled': True, 'allowed_work_types': ['akademi']}}
 
 
@@ -182,7 +182,7 @@ class AdapterTests(unittest.TestCase):
         employees, fixed, history, unavailable, issues = collect_inputs(state)
         self.assertFalse(issues)
         self.assertTrue(any((b-a).total_seconds() == 86400 for a,b in unavailable['1']))
-        self.assertTrue(any((b-a).total_seconds() == 7200 for a,b in unavailable['1']))
+        self.assertFalse(any((b-a).total_seconds() == 7200 for a,b in unavailable['1']))
 
     def test_stale_fingerprint(self):
         state = self.state()

@@ -18,6 +18,10 @@ def is_terminal(request):
     return request.get('queue') == 'Closed' or request.get('status') in TERMINAL
 
 
+TYPE_LABELS.update({'Evlilik İzni Talebi':'Evlilik izni','Mazeret İzni Talebi':'Mazeret izni',
+                    'Rapor Bildirimi':'Rapor','Ücretsiz İzin Talebi':'Ücretsiz izin','Doğum İzni Talebi':'Doğum izni'})
+
+
 def now():
     return datetime.now(ZoneInfo("Europe/Istanbul")).isoformat(timespec="seconds")
 

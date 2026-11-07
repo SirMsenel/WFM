@@ -398,7 +398,8 @@ def _schedule_table(df: pd.DataFrame):
     view["day"] = view["day"].map(tr_days).fillna(view["day"])
 
     view["date"] = view["date"].astype(str)
-    view["status"] = view["status"].replace({"WORK": "Çalışma", "OFF": "OFF"})
+    from core.planning import SHIFT_LABELS
+    view["status"]=view["status"].replace(SHIFT_LABELS)
 
     view["hours"] = pd.to_numeric(view["hours"], errors="coerce").fillna(0)
 

@@ -77,7 +77,7 @@ def ensure_demo(path=DEFAULT_DB, today=None):
         for i in range(7):
             d=next_week-timedelta(days=7-i)
             work=i<5
-            hours={'fulltime':9,'akademi':7,'dis_kaynak':11}[e['work_type']]
+            hours={'fulltime':9,'akademi':7,'dis_kaynak':10}[e['work_type']]
             published.append({'employee_id':str(e['employee_id']),'full_name':e['full_name'],'date':str(d),
                               'group':e['work_type'],'shift_code':'WORK' if work else 'OFF',
                               'start':'08:00' if work else None,'end':f'{8+hours:02d}:00' if work else None,'source':'demo','note':'Örnek yayınlanmış geçmiş plan'})
@@ -157,6 +157,8 @@ def bootstrap(state, path=DEFAULT_DB):
         state['workspace_db_path']=str(path)
         save_keys(state)
     hydrate(state,path)
+    from core.defaults import enforce_current_rules
+    enforce_current_rules(state)
     if not state.get('employees_cache'):
         state['employees_cache']=[e for e in employees() if e['position']=='agent']
     if state.get('cf_all_df') is None:

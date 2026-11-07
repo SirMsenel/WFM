@@ -13,7 +13,7 @@ def render():
         return
     st.caption('Talebin önce takım liderine, onaydan sonra planlamaya iletilir. Kayıt numarasıyla tüm adımları takip edebilirsin.')
     st.write(f"**Talep eden:** {profile.get('full_name')} · **Takım lideri:** {profile.get('team_lead') or 'Tanımlanmamış'}")
-    types=['Yıllık İzin Talebi','Gece Vardiyası Talebi','Mesai Talebi','Vardiya Değişim Talebi','Genel Talep']
+    types=['Yıllık İzin Talebi','Evlilik İzni Talebi','Mazeret İzni Talebi','Rapor Bildirimi','Ücretsiz İzin Talebi','Doğum İzni Talebi','Gece Vardiyası Talebi','Mesai Talebi','Vardiya Değişim Talebi','Genel Talep']
     typ=st.selectbox('Ne için talep oluşturuyorsun?',types,format_func=lambda x:TYPE_LABELS[x],key='new_request_type')
     employees=state.get('employees_cache',[])
     if typ=='Vardiya Değişim Talebi' and not employees:

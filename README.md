@@ -197,3 +197,21 @@ Sınavlar kişinin kullanıcı adı/employee_id eşleşmesi ve Sınav Takvimi'nd
 alanıyla bulunur. Bitiş saati bulunmadığından sınav günü tamamen kapatılır.
 Gece ve yıllık izinler kesin kayıt, onaylı talep ve mevcut yayınlanmış kayıtlardan
 otomatik alınır; oluşturma ekranındaki kontrol alanında sayıları görülebilir.
+
+### Vardiya çalışma alanı güncellemesi
+İnterval ekranında önerilen grafik ve 48 saat aralığı × 7 gün ağırlık tablosu birlikte
+sunulur. Profil yönetimi işaretli satırlardan yapılır; alt profil görselleri korunur.
+Personel listesi **Personel Takip → Personel Listesi** altındadır. Mevcut Plan özetinde
+şehir merkezlerine göre şematik harita, dil ve çalışma biçimi halka grafikleri bulunur.
+
+**Vardiya Saatleri** seçili plan dönemini kullanır. Onaylı talepler, gece kayıtları,
+yıllık/evlilik/mazeret/doğum/ücretsiz izin ve raporlar takvimde görülür; elle girişler
+silinebilir veya geri alınabilir. İhtiyaç karşılama özeti ve tarih/dilim bazlı eksikler
+hem bu ekranda hem oluşturma sonucunda gösterilir.
+
+Otomatik planlama dolu yarım saate ilave personel yerleştirmez. Bu nedenle sabit
+vardiya süreleri ve uygunluklar bazı açıkların kapanmasını engelleyebilir; açıklar
+gizlenmez. Kesin ve elle atanan kayıtlar korunur, bunların fazlası ayrıca raporlanır.
+Sınav günleri tamamen kapatılır; diğer günlerde tarihine uygun ders dönemi kullanılır
+(Ocak önceki Güz, Şubat–Ağustos Bahar, Eylül–Aralık Güz). Dış kaynak süresi 10 saattir;
+eski kayıtlı 11 saat değeri açılışta diğer kurallar korunarak güncellenir.

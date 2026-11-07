@@ -7,11 +7,12 @@ import pandas as pd
 
 from core.api_client import api_get
 from .engine import minutes
+from core.planning import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
 SOURCE_KEYS = ("plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
-               "shift_overrides", "acad_schedules", "acad_exam_calendar", "planning_class_term",
+               "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
 
 
@@ -112,15 +113,15 @@ def collect_inputs(state):
     for row in state.get('published_shift_plan',[]):
         # Registry/request snapshots are refreshed from their original source;
         # legacy/manual published night and leave records are also imported.
-        if (row.get('shift_code') in {'GECE','YILLIK_IZIN'} and row.get('source') not in {'fixed_external','approved_request'}
+        if (row.get('shift_code') in ({'GECE'}|set(LEAVE_LABELS)) and row.get('source') not in {'fixed_external','approved_request'}
                 and (str(row.get('employee_id')),str(row.get('date'))) not in suppressed|draft_manual_keys):
             expand(row,row['shift_code'],'published_fixed')
     for row in state.get("shift_overrides", []):
-        if row.get("override_type") in {"GECE", "YILLIK_IZIN"}:
+        if row.get("override_type") in ({'GECE'}|set(LEAVE_LABELS)):
             expand(row, row["override_type"], "fixed_external")
     manual_sources = {"manual_template", "manual_single", "manual"}
     for row in state.get("draft_shift_plan", []):
-        if row.get("source", "manual") in manual_sources and row.get("shift_code") in {"GECE", "YILLIK_IZIN"}:
+        if row.get("source", "manual") in manual_sources and row.get("shift_code") in ({'GECE'}|set(LEAVE_LABELS)):
             expand(row, row["shift_code"], row.get("source", "manual"))
 
     # Request archive preserves the full approved snapshot; latest decision wins.
@@ -130,8 +131,7 @@ def collect_inputs(state):
         raw = dict(requests.get(key) or archived.get("request") or archived)
         raw.update(status=archived.get("result"), queue="Closed")
         requests[key] = raw
-    codes = {"Yıllık İzin Talebi": "YILLIK_IZIN", "Gece Vardiyası Talebi": "GECE",
-             "Mesai Talebi": "MESAI", "Bayram Talebi": "BAYRAM"}
+    codes=REQUEST_CODES
     for req in requests.values():
         if req.get("status") not in {"Uygulandı", "Onaylandı"} or req.get("queue") in {"TL", "TL_SWAP", "WFM"}:
             continue
@@ -145,61 +145,56 @@ def collect_inputs(state):
 
     for row in state.get("shift_overrides", []):
         code = row.get("override_type")
-        if code not in {"GECE", "YILLIK_IZIN"}:
-            if code not in {"OFF", "SINAV", "DERS", "BAYRAM", "MESAI", "WORK"}:
+        if code not in ({'GECE'}|set(LEAVE_LABELS)):
+            if code not in ({'OFF','SINAV','DERS','MESAI','WORK'}|set(LEAVE_LABELS)):
                 problem(row, "Bilinmeyen vardiya override tipi")
             else:
                 expand(row, code, "approved_request")
     for row in state.get("draft_shift_plan", []):
-        if row.get("source", "manual") in manual_sources and row.get("shift_code") not in {"GECE", "YILLIK_IZIN"}:
+        if row.get("source", "manual") in manual_sources and row.get("shift_code") not in ({'GECE'}|set(LEAVE_LABELS)):
             expand(row, row.get("shift_code"), row.get("source", "manual"))
 
-    day_names = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
-    selected_term = state.get("planning_class_term")
-    for user, terms in (state.get("acad_schedules") or {}).items():
-        if user not in lookup:
-            problem({"employee": user}, "Ders programı personelle eşleştirilemedi")
-            continue
-        relevant = {k: v for k, v in terms.items() if str(start.year) in k or str(end.year) in k}
-        if relevant and selected_term not in relevant:
-            problem({"employee": user}, "Personelin ders dönemi seçili değil; dönem seçimini kontrol edin")
-            continue
-        data = relevant.get(selected_term)
-        if data is None:
-            continue
-        table = pd.DataFrame(data).fillna("")
-        for day in pd.date_range(start, end+timedelta(days=1)):
-            for _, row in table.iterrows():
-                if not str(row.get(day_names[day.weekday()], "")).strip():
-                    continue
-                try:
-                    a, b = str(row["Saat"]).split("-")
-                    begin, finish = minutes(a), minutes(b)
-                    if finish <= begin:
-                        raise ValueError("Ders bitişi başlangıçtan sonra olmalı")
-                    base = datetime.combine(day.date(), time())
-                    unavailable.setdefault(lookup[user], []).append((base+timedelta(minutes=begin), base+timedelta(minutes=finish)))
-                except (ValueError, KeyError) as exc:
-                    problem({"employee": user}, f"Ders saati okunamadı: {exc}")
-
-    # Source has no exam duration/end time. Conservatively reserve the whole day,
-    # explicitly shown in the UI rather than guessing a duration.
-    for user, terms in (state.get("acad_exam_calendar") or {}).items():
+    day_names=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar']
+    exam_days={}
+    for user,terms in (state.get('acad_exam_calendar') or {}).items():
         for data in terms.values():
-            for row in pd.DataFrame(data).fillna("").to_dict("records"):
+            for row in pd.DataFrame(data).fillna('').to_dict('records'):
                 if not any(str(v).strip() for v in row.values()):
                     continue
-                exam = pd.to_datetime(row.get("Tarih"), errors="coerce")
+                exam=pd.to_datetime(row.get('Tarih'),errors='coerce')
                 if pd.isna(exam):
-                    problem({"employee": user}, "Sınav tarihi okunamadı")
+                    problem({'employee':user},'Sınav tarihi okunamadı')
                     continue
-                if not start <= exam.date() <= end+timedelta(days=1):
+                if not start<=exam.date()<=end+timedelta(days=1):
                     continue
                 if user not in lookup:
-                    problem({"employee": user}, "Sınav kaydı personelle eşleştirilemedi")
+                    problem({'employee':user},'Sınav kaydı personelle eşleştirilemedi')
                     continue
-                base = datetime.combine(exam.date(), time())
-                unavailable.setdefault(lookup[user], []).append((base, base+timedelta(days=1)))
+                eid=lookup[user];base=datetime.combine(exam.date(),time())
+                exam_days.setdefault(eid,set()).add(exam.date())
+                unavailable.setdefault(eid,[]).append((base,base+timedelta(days=1)))
+    for user,terms in (state.get('acad_schedules') or {}).items():
+        if user not in lookup:
+            problem({'employee':user},'Ders programı personelle eşleştirilemedi')
+            continue
+        eid=lookup[user]
+        for day in pd.date_range(start,end+timedelta(days=1)):
+            if day.date() in exam_days.get(eid,set()):
+                continue
+            data=terms.get(school_term(day))
+            if data is None:
+                continue
+            for _,row in pd.DataFrame(data).fillna('').iterrows():
+                if not str(row.get(day_names[day.weekday()], '')).strip():
+                    continue
+                try:
+                    a,b=str(row['Saat']).split('-');begin,finish=minutes(a),minutes(b)
+                    if finish<=begin:
+                        raise ValueError('Ders bitişi başlangıçtan sonra olmalı')
+                    base=datetime.combine(day.date(),time())
+                    unavailable.setdefault(eid,[]).append((base+timedelta(minutes=begin),base+timedelta(minutes=finish)))
+                except (ValueError,KeyError) as exc:
+                    problem({'employee':user},f'Ders saati okunamadı: {exc}')
 
     # Prefer manual draft over published history for the same employee/day.
     hist = {(str(r.get("employee_id")), str(r.get("date"))): dict(r)

@@ -125,89 +125,39 @@ def render():
     if not profiles:
         st.info("Henüz kayıt yok. Önce 'Oran Profili' ekranında profil üretip kaydet.")
         return
-    # --- Kayıt listesi (her zaman açık, ilk 5) ---
-    st.markdown("### 📚 Kayıtlı Profiller")
-
-    items = []
-    for p in profiles:
-        meta = p.get("meta", {}) or {}
-        items.append({
-            "Profil": p.get("name", "-"),
-            "Oluşturma": p.get("created_at", "-"),
-            "IQR": "Açık" if meta.get("iqr_used") else "Kapalı",
-            "Yöntem": (meta.get("iqr_mode") or "-").upper(),
-            "Kayıt (sonra)": meta.get("rows_used_after_iqr", "-"),
-        })
-
-    df_items = pd.DataFrame(items)
-
-    # ilk 5 göster (daha fazlası varsa kullanıcı aşağı kaydırıp bakabilir)
-    st.dataframe(df_items.head(10), use_container_width=True, hide_index=True, height=220)
-
-    st.markdown("---")
-    # --- Profil seç + aksiyonlar (hizalı, zıplamasız) ---
-    st.markdown("### ✅ Profil Seç ve Yönet")
-
-    names = [p.get("name") for p in profiles]
-    active = st.session_state.get("sp_active_ratio_profile_name")
-
-    default_index = names.index(active) if active in names else 0
-
-    # ✅ Mesajları layout bozmayacak placeholder'larda göstereceğiz
-    msg_slot = st.empty()
-
-    c_pick, c_act, c_del = st.columns([2.4, 1.0, 1.0], vertical_alignment="bottom")
-
-    with c_pick:
-        pick = st.selectbox(
-            " ",  # boş label (başlık üstte)
-            names,
-            index=default_index,
-            key="sp_pick_profile",
-        )
-
-    sel = next((p for p in profiles if p.get("name") == pick), None)
-    if sel is None:
-        st.error("Profil bulunamadı.")
-        return
-
-    meta = sel.get("meta", {}) or {}
-    df = sel.get("profile_df")
-    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-        st.error("Profil verisi bozuk/eksik.")
-        return
-
-    with c_act:
-        if st.button("⭐ Aktif Yap", use_container_width=True, key="sp_btn_activate"):
-            st.session_state["sp_active_ratio_profile_name"] = pick
-            st.session_state["sp_active_ratio_profile_df"] = df.copy()
-            st.session_state['sp_active_ratio_profile_meta']=meta
-            st.session_state['sp_staffing_result_df']=None
-            st.session_state['plan_ctx_confirmed']=False
-            msg_slot.success("✅ Aktif profil güncellendi.")
-
-    with c_del:
-        # ✅ Checkbox yok: Sil'e basınca popover içinde onay al
-        pop = st.popover("🗑️ Sil", use_container_width=True)
-        with pop:
-            st.warning("Bu profil silinecek. Geri alınamaz.")
-            if st.button("Evet, sil", use_container_width=True, key="sp_btn_delete_yes"):
-                new_profiles = [p for p in profiles if p.get("name") != pick]
-                st.session_state["sp_ratio_profiles"] = new_profiles
-
-                if st.session_state.get("sp_active_ratio_profile_name") == pick:
-                    st.session_state["sp_active_ratio_profile_name"] = None
-                    st.session_state["sp_active_ratio_profile_df"] = None
-                    st.session_state['sp_active_ratio_profile_meta']=None
-                    st.session_state['sp_staffing_result_df']=None
-                    st.session_state['plan_ctx_confirmed']=False
-
-                msg_slot.success("🗑️ Profil silindi.")
-                from core.workspace_store import save_keys
-                save_keys(st.session_state)
-                st.rerun()
-    
-    st.markdown("---")
+    from core.profiles import manage_profiles
+    import hashlib
+    active=st.session_state.get('sp_active_ratio_profile_name')
+    st.markdown('### Kayıtlı Profiller')
+    st.caption('Bir profili işaretleyip aktif yapabilirsin. Silmek için birden fazla profil seçebilirsin.')
+    rows=pd.DataFrame([{'Seç':False,'Profil':p['name'],'Aktif':p['name']==active,
+                        'Hafta':p.get('meta',{}).get('week_start','Genel dağılım'),
+                        'Oluşturma':str(p.get('created_at',''))[:10]} for p in profiles])
+    table_key='profile_checks_'+hashlib.sha1(('|'.join(rows.Profil)+'|'+str(active)).encode()).hexdigest()[:10]
+    edited=st.data_editor(rows,hide_index=True,use_container_width=True,key=table_key,
+                         disabled=['Profil','Aktif','Hafta','Oluşturma'],
+                         column_config={'Seç':st.column_config.CheckboxColumn('Seç'),'Aktif':st.column_config.CheckboxColumn('Aktif',disabled=True)})
+    selected=edited.loc[edited['Seç'],'Profil'].tolist()
+    a,b,_=st.columns([1,1,3])
+    action=None
+    if a.button('Aktif Yap',key='sp_btn_activate',disabled=len(selected)!=1):action='activate'
+    if b.button('Seçilenleri Sil',key='sp_btn_delete',disabled=not selected):action='delete'
+    if action:
+        try:
+            manage_profiles(st.session_state,selected,action)
+            st.session_state['profile_notice']='Aktif profil güncellendi.' if action=='activate' else 'Seçilen profiller silindi.'
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
+    if st.session_state.get('profile_notice'):
+        st.success(st.session_state.pop('profile_notice'))
+    names=[p['name'] for p in profiles]
+    pick=selected[0] if len(selected)==1 else active if active in names else names[0]
+    sel=next(p for p in profiles if p['name']==pick)
+    meta=sel.get('meta',{}) or {};df=sel.get('profile_df')
+    if df is None or not isinstance(df,pd.DataFrame) or df.empty:
+        st.error('Profil verisi bozuk veya eksik.');return
+    st.divider()
 
     # ----------------------------
     # KPI

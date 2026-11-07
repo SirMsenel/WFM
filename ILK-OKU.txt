@@ -42,3 +42,15 @@ GÜNCELLEME / macOS
   python -m pip install -r requirements.txt
 - Sonra yukarıdaki backend ve Streamlit komutlarını ayrı terminallerde çalıştır.
   Yalnızca tarayıcıyı yenilemek eski klasörden çalışan uygulamayı güncellemez.
+
+BU GÜNCELLEMEDE
+- Dış kaynak vardiyası 10 saat: eski kayıtlı 11 saat kuralı otomatik düzeltilir.
+- İnterval: önerilen grafik ve her gün için 48 yarım saat ağırlığını gösteren haftalık tablo.
+- Kayıt Seçim: profilleri işaretle, Aktif Yap veya Seçilenleri Sil.
+- Vardiya Planı: yeni dönem kartı, şehir haritası, dil ve çalışma biçimi grafikleri.
+- Personel listesi: Personel Takip > Personel Listesi.
+- Vardiya Saatleri: seçili dönem, elle giriş/geri alma, otomatik izin ve gece kayıtları,
+  sınav günleri, ihtiyaç karşılama özeti ve eksik dilimlerin ayrıntısı.
+- Otomatik plan: tek kutuda grup sırası; sınav günü önceliği, tarihe göre Bahar/Güz.
+  Otomatik atama ihtiyacın üstüne çıkmaz. Kesin/elle kayıtlar fazla oluşturuyorsa gösterilir.
+- Talep durumları: olumlu yeşil, ret kırmızı, bekleyen/iletilen sarı.

@@ -252,90 +252,85 @@ def _weekly_model(raw,week,dt_col,calls_col,previous,used):
     return build_weekly_distribution(raw,week,dt_col,calls_col,previous,used)
 
 
+
+def matrix_table(profile):
+    from core.forecast_service import DAY_NAMES
+    table=profile.pivot(index='Slot',columns='Gün',values='Oran(%)').reindex(index=range(1,49),columns=DAY_NAMES)
+    table.index=[f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}–{s//2:02d}:{(s%2)*30:02d}' for s in table.index]
+    table.index.name='Saat aralığı'
+    return table
+
+
 def render():
     from core.data_cache import cached_calls
     from core.workspace_store import DEFAULT_DB,save_keys
     from core.interval_service import prepare_intervals,calendar_flags
     from core.charts import slot_heatmap
-    from core.forecast_service import signature
+    from core.forecast_service import DAY_NAMES
     state=st.session_state
-    st.subheader('Haftalık İnterval Dağılımı')
-    st.caption('Altı geçmiş pencere, son tamamlanmış haftada karşılaştırılır. Başarı ağırlıkları ve yakın tarihe daha fazla ağırlık veren logaritmik hesapla 7 × 48 dağılım oluşturulur.')
-    source=st.radio('30 dakikalık veri kaynağı',['Hazır Veritabanı','Dosya (CSV/Excel)'],horizontal=True,key='interval_source')
-    if source=='Hazır Veritabanı':
-        raw=cached_calls(str(state.get('workspace_db_path',DEFAULT_DB)),True)
-        st.caption(f'Veritabanından otomatik alındı: {len(raw):,} kayıt.')
-        if st.button('Veritabanını Yenile',key='interval_refresh'):
-            cached_calls.clear()
-            _weekly_model.clear()
-            st.rerun()
-    else:
-        upload=st.file_uploader('30 dk çağrı verisi yükle',type=['csv','xlsx'],key='interval_upload')
-        if upload is None:
-            st.info('Dosya seçin veya hazır veritabanını kullanın.')
-            return
-        try:
-            raw=pd.read_csv(upload) if upload.name.lower().endswith('.csv') else pd.read_excel(upload)
-        except Exception as exc:
-            st.error(f'Dosya okunamadı: {exc}')
-            return
-    a,b=st.columns(2)
-    guess_dt=_guess_datetime_col(raw);guess_calls=_guess_calls_col(raw)
-    date_col=a.selectbox('Tarih / saat sütunu',list(raw),index=list(raw).index(guess_dt) if guess_dt in raw else 0,key='interval_date_column')
-    count_col=b.selectbox('Çağrı sütunu',list(raw),index=list(raw).index(guess_calls) if guess_calls in raw else 0,key='interval_calls_column')
+    st.subheader('Haftalık Çağrı Dağılımı')
+    st.caption('Günlük çağrı tahmininin gün içindeki 48 yarım saate nasıl bölüneceğini belirler. Önce haftayı seç, dağılımı incele ve kullanmak istediğin profili kaydet.')
+    with st.expander('Veri kaynağı',expanded=False):
+        source=st.radio('30 dakikalık veri',['Hazır Veritabanı','Dosya (CSV/Excel)'],horizontal=True,key='interval_source')
+        raw=None
+        if source=='Hazır Veritabanı':
+            raw=cached_calls(str(state.get('workspace_db_path',DEFAULT_DB)),True)
+            date_col,count_col='tarih','cagri_sayisi'
+            st.caption(f'{len(raw):,} yarım saatlik kayıt otomatik yüklendi.')
+            if st.button('Veritabanını Yenile',key='interval_refresh'):
+                cached_calls.clear();_weekly_model.clear();st.rerun()
+        else:
+            upload=st.file_uploader('CSV / Excel dosyası',type=['csv','xlsx'],key='interval_upload')
+            if upload:
+                try:
+                    raw=pd.read_csv(upload) if upload.name.lower().endswith('.csv') else pd.read_excel(upload)
+                except Exception as exc:
+                    st.error(f'Dosya okunamadı: {exc}');return
+                a,b=st.columns(2);dt_guess=_guess_datetime_col(raw);call_guess=_guess_calls_col(raw)
+                date_col=a.selectbox('Tarih / saat sütunu',list(raw),index=list(raw).index(dt_guess) if dt_guess in raw else 0,key='interval_date_column')
+                count_col=b.selectbox('Çağrı sayısı sütunu',list(raw),index=list(raw).index(call_guess) if call_guess in raw else 0,key='interval_calls_column')
+    if raw is None:
+        st.info('Bir dosya seçin veya hazır veritabanını kullanın.');return
     try:
         dates,_,_,quality=prepare_intervals(raw,date_col,count_col)
         next_monday=dates.max().date()+pd.Timedelta(days=7-dates.max().weekday())
-        chosen=st.date_input('Dağılımın kullanılacağı hafta',value=next_monday,key='interval_target_week')
+        chosen=st.date_input('Hangi hafta için dağılım oluşturulsun?',value=next_monday,key='interval_target_week')
         week=pd.Timestamp(chosen)-pd.Timedelta(days=chosen.weekday())
-        st.caption(f'Hafta: {week:%d.%m.%Y} → {week+pd.Timedelta(days=6):%d.%m.%Y}. Yakınlık ağırlığı: 1 / (1 + log(1 + yaş / 7)).')
-        previous=state.get('interval_last_used_profile')
-        result=_weekly_model(raw,str(week.date()),date_col,count_col,previous,state.get('interval_used_profiles',{}))
+        result=_weekly_model(raw,str(week.date()),date_col,count_col,state.get('interval_last_used_profile'),state.get('interval_used_profiles',{}))
     except (ValueError,TypeError,KeyError) as exc:
-        st.error(str(exc))
-        return
-    meta=result['meta']; profile=result['profile']
-    c1,c2,c3=st.columns(3)
-    c1.metric('Tam geçmiş gün',quality['Tam gün'])
-    c2.metric('Dışlanan eksik/sıfır gün',quality['Eksik veya sıfır gün'])
-    c3.metric('Matris','7 × 48')
+        st.error(str(exc));return
+    meta=result['meta'];profile=result['profile']
+    st.info(f'{week:%d.%m.%Y} – {week+pd.Timedelta(days=6):%d.%m.%Y} · Her günün çağrıları kendi sütununda %100’e tamamlanır.')
     st.markdown('### Önerilen Haftalık Dağılım')
     slot_heatmap(profile)
-    from core.navigation import sections
-    def show_day():
-        selected=st.selectbox('Gün',profile['Gün'].unique(),key='interval_plot_day')
-        chart=profile[profile.Gün==selected].copy()
-        chart['Saat']=chart.Slot.map(lambda n:f'{(n-1)//2:02d}:{((n-1)%2)*30:02d}')
-        st.line_chart(chart.set_index('Saat')[['Oran(%)']])
-        st.dataframe(chart[['Aralık','Oran(%)']],hide_index=True,use_container_width=True)
-    def show_success():
-        st.caption(f"Doğrulama: {meta['validation_start']} → {meta['validation_end']}. Bu haftanın verileri adayların eğitimine alınmaz; ağırlıklar bu haftadaki hata ile kalibre edilir.")
-        st.dataframe(result['scores'],hide_index=True,use_container_width=True)
-        st.bar_chart(result['scores'].set_index('Pencere')[['Başarı ağırlığı (%)']])
-        st.caption(meta['baseline_name']+(' · MAE '+f"{meta['baseline_mae']:.4f} yüzde puan" if meta['baseline_mae'] is not None else ' · Yeterli kayıt yok'))
-        day=st.selectbox('Doğrulama günü',profile.Gün.unique(),key='interval_validation_day')
-        actual=result['actual_validation']; pred=result['predicted_validation']
-        comparison=actual[actual.Gün==day][['Slot','Oran(%)']].merge(pred[pred.Gün==day][['Slot','Oran(%)']],on='Slot',suffixes=(' gerçek',' birleşim'))
-        comparison['Saat']=comparison.Slot.map(lambda n:f'{(n-1)//2:02d}:{((n-1)%2)*30:02d}')
-        st.line_chart(comparison.set_index('Saat')[['Oran(%) gerçek','Oran(%) birleşim']])
-        st.caption('Birleşim aynı doğrulama haftasıyla kalibre edilmiştir; bu eğri bağımsız bir gelecek başarı garantisi değildir.')
-    def show_effects():
-        st.dataframe(calendar_flags(pd.date_range(week,periods=7)).reset_index(),hide_index=True,use_container_width=True)
-        st.caption('Tarih etkileri çağrı tahminiyle aynı takvimden alınır. En az iki benzer gün varsa dağılıma katılır; örnek azsa temel dağılım korunur.')
-        for note in meta['calendar_notes']:
-            st.write('• '+note)
-    sections('nav_interval_detail',{'Gün Dağılımı':show_day,'Başarı ve Ağırlıklar':show_success,'Takvim Etkileri':show_effects})
-    st.download_button('7 × 48 Dağılım CSV İndir',profile.to_csv(index=False).encode('utf-8-sig'),'haftalik_interval.csv','text/csv')
-    name=st.text_input('Profil adı',value=f'Hafta {week:%d.%m.%Y} · Ağırlıklı',key='interval_profile_label')
-    if st.button('Dağılımı Kaydet ve Aktif Et',key='interval_save'):
+    with st.container(border=True):
+        st.markdown('#### Haftanın Slot Ağırlıkları · 7 gün × 48 dilim')
+        st.caption('Örnek: Pazartesi 09:00–09:30 hücresinde %4 yazıyorsa, Pazartesi çağrı tahmininin %4’ü bu yarım saate ayrılır.')
+        table=matrix_table(profile)
+        st.dataframe(table.style.format('{:.2f}%').background_gradient(cmap='Blues',axis=None).set_properties(**{'text-align':'center'}),use_container_width=True,height=485)
+        st.download_button('Haftalık Tabloyu CSV İndir',table.to_csv().encode('utf-8-sig'),'haftalik_slot_agirliklari.csv','text/csv')
+    with st.expander('Bu dağılım neden önerildi?'):
+        st.write('Son 2 hafta, 1 ay, 3 ay, 6 ay, 12 ay ve tüm geçmiş ayrı ayrı karşılaştırılır. Geçen tam haftayı daha iyi açıklayan geçmişlere daha fazla pay verilir; yeni günler eski günlerden daha etkilidir.')
+        scores=result['scores'][['Pencere','Başarı ağırlığı (%)','MAE (yüzde puan)']].rename(columns={'Başarı ağırlığı (%)':'Önerideki payı (%)','MAE (yüzde puan)':'Geçmiş haftadaki hata'})
+        st.dataframe(scores,hide_index=True,use_container_width=True,column_config={'Önerideki payı (%)':st.column_config.NumberColumn(format='%.1f'),'Geçmiş haftadaki hata':st.column_config.NumberColumn(format='%.3f')})
+        st.caption(f"Kontrol edilen hafta: {meta['validation_start']} – {meta['validation_end']}. Hatanın düşük olması daha iyi uyum demektir; gelecek hafta için garanti değildir.")
+        flags=calendar_flags(pd.date_range(week,periods=7))
+        labels={'EKSTRE_KESIM':'Ekstre kesim','SON_ODEME':'Son ödeme','Bayram':'Bayram','Arife':'Arife','Bayram_Sonrasi':'Bayram sonrası','Resmi_Tatil':'Resmi tatil','Ramazan':'Ramazan'}
+        st.markdown('**Bu haftanın özel günleri**')
+        special=[{'Gün':DAY_NAMES[d.weekday()],'Tarih':d.strftime('%d.%m.%Y'),'Etkiler':', '.join(labels[k] for k in flags if flags.loc[d,k]) or 'Standart gün'} for d in flags.index]
+        st.dataframe(special,hide_index=True,use_container_width=True)
+        st.caption(f"{quality['Tam gün']} tam gün kullanıldı. {quality['Eksik veya sıfır gün']} eksik/sıfır gün değerlendirmeye alınmadı.")
+    st.markdown('### Planlamada Kullan')
+    st.caption('Kaydettiğin dağılım aktif olur. Sonraki adım: Personel Hesap ekranında bu haftanın ihtiyacını hesapla.')
+    with st.form('interval_save_form'):
+        name=st.text_input('Profil adı',value=f'Hafta {week:%d.%m.%Y}',key=f'interval_profile_label_{week.date()}')
+        save=st.form_submit_button('Dağılımı Kaydet ve Aktif Et',key='interval_save')
+    if save:
         if not name.strip():
-            st.error('Profil adı boş olamaz.')
-            return
-        snapshot={'name':name.strip(),'profile_df':profile.copy(),'created_at':pd.Timestamp.now().isoformat(),'meta':meta,
-                  'scores':result['scores']}
-        profiles=[p for p in state.get('sp_ratio_profiles',[]) if p.get('name')!=name.strip()]+[snapshot]
-        state.update(sp_ratio_profiles=profiles,sp_active_ratio_profile_df=profile.copy(),
-                     sp_active_ratio_profile_name=name.strip(),sp_active_ratio_profile_meta=meta,
+            st.error('Profil adı boş olamaz.');return
+        snapshot={'name':name.strip(),'profile_df':profile.copy(),'created_at':pd.Timestamp.now().isoformat(),'meta':meta,'scores':result['scores']}
+        state.update(sp_ratio_profiles=[p for p in state.get('sp_ratio_profiles',[]) if p.get('name')!=name.strip()]+[snapshot],
+                     sp_active_ratio_profile_df=profile.copy(),sp_active_ratio_profile_name=name.strip(),sp_active_ratio_profile_meta=meta,
                      sp_staffing_result_df=None,plan_ctx_confirmed=False)
         save_keys(state)
-        st.success('Haftalık dağılım kaydedildi. Personel ihtiyacını bu hafta için yeniden hesaplayın.')
+        st.success('Dağılım aktif. Personel Hesap ekranından devam edebilirsin.')

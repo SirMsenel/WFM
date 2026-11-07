@@ -27,7 +27,7 @@ SHIFT_RULES = {'general': {'weekday_general_start': '08:00',
                            'max_end_time': '03:00',
                            'max_end_is_hard': True,
                            'override_required_if_violate': True},
-               'dis_kaynak': {'shift_total_hours': 11,
+               'dis_kaynak': {'shift_total_hours': 10,
                               'max_days_per_week': 6,
                               'night_allowed': False,
                               'max_end_time': '00:00',
@@ -37,3 +37,14 @@ SHIFT_RULES = {'general': {'weekday_general_start': '08:00',
 
 def default_shift_rules():
     return deepcopy(SHIFT_RULES)
+
+
+def enforce_current_rules(state):
+    """Update old saved outsource durations without resetting user rules."""
+    rules=state.get('shift_rules')
+    if rules and rules.get('work_type',{}).get('dis_kaynak',{}).get('shift_total_hours')!=10:
+        rules.setdefault('work_type',{}).setdefault('dis_kaynak',{})['shift_total_hours']=10
+        state['shift_rules']=rules
+        state['plan_ctx_confirmed']=False
+    # A previous disabled widget may have cached the old display value.
+    state['rule_dk_shift_hours_fixed']=10

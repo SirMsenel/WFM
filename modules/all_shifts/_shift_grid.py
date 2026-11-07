@@ -110,7 +110,9 @@ def build_shift_grid(employees: list[dict], year: int, month: int) -> pd.DataFra
         values = {}
         for record in published:
             code = record.get("shift_code")
-            label = {"OFF": "OFF", "YILLIK_IZIN": "Yıllık İzin", "SINAV": "Sınav", "DERS": "Ders", "BAYRAM": "Bayram"}.get(code)
+            from core.planning import SHIFT_LABELS
+            from modules.shift_planing.engine import NON_WORK
+            label=SHIFT_LABELS.get(code,code) if code in NON_WORK else None
             values[date.fromisoformat(record["date"])] = label or f"{record.get('start', '')}-{record.get('end', '')}"
 
         row = {

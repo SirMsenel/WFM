@@ -24,148 +24,14 @@ def render(profile=None):
     profile = profile or st.session_state.get("profile") or {}
     token = st.session_state.get("auth_token")
 
-    st.subheader("Mevcut Plan Ayarları")
-    st.caption("Personel listesini görüntüle ve mesai yazma kurallarını belirle.")
+    st.subheader('Mevcut Plan')
+    part=st.segmented_control('Mevcut plan bölümü',['Personel Özeti','Mesai Kuralları'],default='Personel Özeti',key='nav_current_plan_v2')
+    if part=='Personel Özeti':
+        from core.personnel import get_people,personnel_summary
+        from core.personnel_charts import render_summary
+        render_summary(personnel_summary(get_people(st.session_state)))
+        st.caption('Personel listesi Personel Takip → Personel Listesi ekranındadır.')
 
-    part=st.segmented_control('Mevcut plan bölümü',['Personel Listesi','Mesai Kuralları'],default='Personel Listesi',key='nav_current_plan')
-
-    # ==========================================================
-    # TAB 1: Personel Listesi
-    # ==========================================================
-    if part=='Personel Listesi':
-        # ====== ÖZET ======
-        try:
-            s = _api_get("/employees/summary", token=token)
-            total_active = int(s.get("total_active", 0))
-
-            def _to_map(rows):
-                d = {}
-                for r in rows or []:
-                    d[str(r.get("key"))] = int(r.get("count", 0))
-                return d
-
-            loc_map = _to_map(s.get("by_location"))
-            lang_map = _to_map(s.get("by_language"))
-            wt_map = _to_map(s.get("by_work_type"))
-
-            with st.container(border=True):
-                st.markdown("### 📌 Aktif Personel Özeti")
-
-                k1, k2, k3, k4 = st.columns(4)
-                k1.metric("Toplam Aktif", f"{total_active}")
-                k2.metric("En yüksek lokasyon", max(loc_map.values()) if loc_map else 0)
-                k3.metric("En yüksek dil", max(lang_map.values()) if lang_map else 0)
-                k4.metric("En yüksek çalışma tipi", max(wt_map.values()) if wt_map else 0)
-
-                st.markdown("---")
-
-                c1, c2, c3 = st.columns(3, vertical_alignment="top")
-
-                with c1:
-                    st.markdown("**📍 Lokasyon**")
-                    st.dataframe(
-                        [{"Lokasyon": k, "Aktif": v} for k, v in sorted(loc_map.items(), key=lambda x: x[1], reverse=True)],
-                        use_container_width=True,
-                        hide_index=True,
-                        height=220,
-                    )
-
-                with c2:
-                    st.markdown("**🗣️ Dil**")
-                    st.dataframe(
-                        [{"Dil": k, "Aktif": v} for k, v in sorted(lang_map.items(), key=lambda x: x[1], reverse=True)],
-                        use_container_width=True,
-                        hide_index=True,
-                        height=220,
-                    )
-
-                with c3:
-                    st.markdown("**🧩 Çalışma Biçimi**")
-                    st.dataframe(
-                        [{"Çalışma": k, "Aktif": v} for k, v in sorted(wt_map.items(), key=lambda x: x[1], reverse=True)],
-                        use_container_width=True,
-                        hide_index=True,
-                        height=220,
-                    )
-
-        except Exception as e:
-            st.warning(f"Özet alınamadı: {e}")
-
-        st.markdown("---")
-
-        # ====== FİLTRELER ======
-        with st.container(border=True):
-            st.markdown("### 🔎 Filtreler")
-
-            f1, f2, f3, f4 = st.columns([2.2, 1.2, 1.2, 1.2], vertical_alignment="bottom")
-
-            with f1:
-                search = st.text_input("Ara (ad, TL, yönetici)", value="", key="emp_search")
-
-            with f2:
-                position = st.selectbox(
-                    "Pozisyon",
-                    options=["(Hepsi)", "agent", "tl", "wfm", "manager"],
-                    index=0,
-                    key="emp_position",
-                )
-
-            with f3:
-                location = st.selectbox(
-                    "Lokasyon",
-                    options=["(Hepsi)", "Ankara", "Istanbul", "Izmir", "Konya", "Diyarbakir", "Adana"],
-                    index=0,
-                    key="emp_location",
-                )
-
-            with f4:
-                work_type = st.selectbox(
-                    "Çalışma Biçimi",
-                    options=["(Hepsi)", "fulltime", "akademi", "dis_kaynak"],
-                    index=0,
-                    key="emp_worktype",
-                )
-
-        # ====== 15'ER YÜKLEME ======
-        st.session_state.setdefault("emp_limit", 15)
-
-        b1, b2 = st.columns([1, 5], vertical_alignment="center")
-        with b1:
-            if st.button("🔄 Sıfırla", use_container_width=True, key="emp_reset_btn"):
-                st.session_state["emp_limit"] = 15
-                st.rerun()
-        with b2:
-            st.caption("İlk 15 kayıt gösterilir. “Daha fazla yükle” ile listeyi büyütebilirsin.")
-
-        params = {"limit": int(st.session_state["emp_limit"]), "offset": 0}
-        if search.strip():
-            params["search"] = search.strip()
-        if position != "(Hepsi)":
-            params["position"] = position
-        if location != "(Hepsi)":
-            params["location"] = location
-        if work_type != "(Hepsi)":
-            params["work_type"] = work_type
-
-        try:
-            res = _api_get("/employees/query", token=token, params=params)
-            items = res.get("items", [])
-            total = int(res.get("total", 0))
-
-            st.markdown(f"### 👥 Liste ({len(items)} / {total})")
-            st.dataframe(items, use_container_width=True, hide_index=True, height=520)
-
-            if len(items) < total:
-                if st.button("⬇️ Daha fazla yükle (+15)", use_container_width=True, key="emp_more_btn"):
-                    st.session_state["emp_limit"] = int(st.session_state["emp_limit"]) + 15
-                    st.rerun()
-
-        except Exception as e:
-            st.error(f"Personel listesi alınamadı: {e}")
-
-    # ==========================================================
-    # TAB 2: Mesai Kuralları
-    # ==========================================================
     if part=='Mesai Kuralları':
         # --- helpers ---
         def _init_rules():
@@ -181,6 +47,9 @@ def render(profile=None):
 
         _init_rules()
         rules = st.session_state["shift_rules"]
+        from core.defaults import enforce_current_rules
+        enforce_current_rules(st.session_state)
+        rules=st.session_state['shift_rules']
 
         st.markdown("### 🧩 Mesai Kuralları")
         st.info("Bu ekrandaki kurallar çalışma alanı veritabanına kaydedilir." if st.session_state.get('workspace_db_path') else "Kurallar bu oturum için kaydedilir.")

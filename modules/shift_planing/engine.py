@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 
-NON_WORK = {"OFF", "YILLIK_IZIN", "SINAV", "DERS", "BAYRAM"}
+NON_WORK = {"OFF", "YILLIK_IZIN", "EVLILIK_IZNI", "MAZERET_IZNI", "RAPOR", "UCRETSIZ_IZIN", "DOGUM_IZNI", "SINAV", "DERS", "BAYRAM"}
 
 
 def minutes(value):
@@ -44,7 +44,7 @@ def _limit(value):
 
 
 def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
-                  history=(), unavailable=None):
+                  history=(), unavailable=None, auto_fill=True, strict_capacity=True):
     """Return plan/coverage/issues. Never mutates caller-owned rows or tables.
 
     Fixed rows are ordered by source precedence. Conflicting rows are reported
@@ -257,7 +257,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             issue(row, f"Geçersiz sabit kayıt: {exc}")
 
     days = [start + timedelta(days=i) for i in range((end-start).days+1)]
-    for group in group_order:
+    for group in (group_order if auto_fill else []):
         rule = groups[group]
         max_hours = float(rule.get("shift_total_hours_max", rule.get("shift_total_hours", 0)))
         if not 0 < max_hours <= 24:
@@ -292,6 +292,8 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                         ix = indices(interval)
                         gain = int(np.count_nonzero(covered[ix] < required[ix]))
                         if not gain:
+                            continue
+                        if strict_capacity and (len(ix)!=duration//30 or (covered[ix]>=required[ix]).any()):
                             continue
                         # Count all shift slots, including those outside the demand table.
                         excess = duration//30 - gain

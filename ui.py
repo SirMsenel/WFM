@@ -51,6 +51,7 @@ from modules.all_shifts.foreign_language import render as render_all_foreign_lan
 from modules.PersonelTakip.Personel_talep import render as render_personel_talep
 from modules.shift_planner.history_comparison import render as render_history_comparison
 from modules.demo_workspace import render as render_demo_workspace
+from modules.PersonelTakip.personnel_list import render as render_personnel_list
 
 
 # ---------------- Backend ----------------
@@ -358,7 +359,7 @@ elif main == "🧪 Demo Veritabanı":
     render_demo_workspace()
 elif main == "👥 Personel Takip":
     st.title(main)
-    render_personel_talep()
+    sections('nav_personnel',{'Personel Talepleri':render_personel_talep,'Personel Listesi':render_personnel_list})
 elif main == "📌 Takip":
     st.title(main)
     sections('nav_tracking',{'Benim Vardiyam':render_my_shift,'Ders Programı':render_class_schedule,

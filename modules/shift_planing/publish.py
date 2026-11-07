@@ -1,194 +1,98 @@
-import streamlit as st
+from itertools import permutations
 import pandas as pd
+import streamlit as st
 
 from .engine import generate_plan
-from .planning_data import collect_inputs, fetch_employees, fingerprint, validate_employees
+from .planning_data import collect_inputs,fingerprint
+from core.personnel import planner_people,WORK_LABELS
+from core.planning import preview_plan,school_term
+from core.planning_ui import period_banner,coverage_summary,render_shortages,render_issues
+from core.workspace_store import save_keys
 
-
-GROUP_LABELS = {
-    "fulltime": "Full Time",
-    "akademi": "Akademi",
-    "dis_kaynak": "Dış Kaynak",
-}
+GROUP_LABELS=WORK_LABELS
 
 
 def render_group_priority():
-    st.markdown("### Otomatik Planlama Grup Sırası")
-    st.caption(
-        "Gece vardiyaları, yıllık izinler, onaylanmış talepler ve elle atamalar "
-        "yerleştirildikten sonra kalan ihtiyaç için kullanılacak sırayı seç. "
-        "Grup sırası, Mesai Kuralları ekranındaki çalışma koşullarını değiştirmez."
-    )
-    work_types = (st.session_state.get("shift_rules") or {}).get("work_type", {})
-    if not work_types:
-        st.info("Önce Mevcut Plan → Mesai Kuralları ekranını açarak kuralları tanımla.")
-        return
-
-    groups = list(work_types)
-    saved = st.session_state.get("plan_group_priority", [])
-    order = [group for group in saved if group in groups]
-    order += [group for group in groups if group not in order]
-
-    with st.form("plan_group_priority_form"):
-        selected = [
-            st.selectbox(
-                f"{rank + 1}. sırada planlanacak grup",
-                options=groups,
-                index=groups.index(group),
-                format_func=lambda value: GROUP_LABELS.get(value, value),
-            )
-            for rank, group in enumerate(order)
-        ]
-        submitted = st.form_submit_button("Grup Sırasını Kaydet")
-
-    if submitted:
-        if len(set(selected)) != len(groups):
-            st.error("Her grubu yalnızca bir kez seçmelisin. Önceki kayıt korundu.")
-        else:
-            st.session_state["plan_group_priority"] = selected
-            saved = selected
-            st.success("Grup sırası kaydedildi.")
-
-    if len(saved) == len(groups) and set(saved) == set(groups):
-        st.write("**Kayıtlı sıra:** " + " → ".join(GROUP_LABELS.get(g, g) for g in saved))
-    else:
-        st.info("Grup sırası henüz kaydedilmedi. Seçimlerini yapıp kaydet.")
-
-    rows = []
-    for group in order:
-        rule = work_types[group]
-        hours = rule.get("shift_total_hours")
-        duration = f"{hours} saat" if hours is not None else f"En fazla {rule.get('shift_total_hours_max', '—')} saat"
-        rows.append({
-            "Grup": GROUP_LABELS.get(group, group),
-            "Vardiya süresi": duration,
-            "Haftalık gün sınırı": str(rule.get("max_days_per_week", rule.get("max_days_per_week_default", "—"))),
-            "Min. dinlenme (saat)": str(rule.get("min_rest_hours", "Tanımlanmamış")),
-            "Gece çalışabilir": "Evet" if rule.get("night_allowed") else "Hayır",
-            "Grup bitiş sınırı": rule.get("max_end_time", "Genel kurala göre"),
-        })
-    st.markdown("#### Mevcut Grup Kuralları")
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-    st.caption("Grup sırası çalışma alanına kaydedilir. Motor ders, sınav ve diğer uygunluk kayıtlarını ayrıca kontrol eder." if st.session_state.get('workspace_db_path') else "Grup sırası bu oturumda saklanır.")
+    rules=(st.session_state.get('shift_rules') or {}).get('work_type',{})
+    if not rules:
+        st.info('Önce mesai kurallarını tanımlayın.');return
+    groups=list(rules);options=list(permutations(groups))
+    saved=tuple(st.session_state.get('plan_group_priority') or groups)
+    if saved not in options:saved=options[0]
+    selected=st.selectbox('Otomatik yerleştirme önceliği',options,index=options.index(saved),
+                          format_func=lambda order:' → '.join(GROUP_LABELS.get(g,g) for g in order),key='planning_priority_compact')
+    st.session_state['plan_group_priority']=list(selected)
+    st.caption('Kesin kayıtlar ve elle girişler korunur; kalan ihtiyaç bu sırayla tamamlanır.')
+    rows=[]
+    for group in selected:
+        rule=rules[group]
+        rows.append({'Grup':GROUP_LABELS.get(group,group),'Vardiya':f"{rule.get('shift_total_hours',rule.get('shift_total_hours_max'))} saat"+(" üst sınır" if 'shift_total_hours_max' in rule else ''),
+                     'Haftalık gün':str(rule.get('max_days_per_week',rule.get('max_days_per_week_default','—'))),
+                     'Dinlenme':f"{rule['min_rest_hours']} saat" if 'min_rest_hours' in rule else '—',
+                     'Gece':'Uygun' if rule.get('night_allowed') else 'Uygun değil'})
+    st.dataframe(rows,hide_index=True,use_container_width=True)
 
 
 def render():
-    st.subheader("Oluştur & Kontrol & Yayınla")
+    state=st.session_state
+    st.subheader('Oluştur, Kontrol Et ve Yayınla')
+    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator'}:
+        st.info('Plan oluşturma ve yayınlama yönetim rolleri içindir.');return
+    context=period_banner(state)
+    if not context:return
+    people=planner_people(state)
     render_group_priority()
-    render_engine()
-
-
-def render_engine():
-    state = st.session_state
-    if (state.get("profile") or {}).get("position") not in {"wfm", "manager", "moderator"}:
-        st.info("Plan oluşturma ve yayınlama WFM, yönetici ve moderatör rolleri içindir.")
-        return
-    st.markdown("### Personel Kaynağı")
-    if st.button("Personelleri API'den Al / Yenile", key="planning_fetch_employees"):
+    st.caption(f"{len(people)} personel otomatik alındı · Ders dönemi tarihe göre seçilir. Sınav günleri önceliklidir; diğer günlerde ilgili Bahar/Güz programı kullanılır.")
+    with st.expander('Okul takvimi ve planlama koşulları'):
+        st.write('Ocak: önceki yılın Güz dönemi. Şubat–Ağustos: Bahar. Eylül–Aralık: Güz. Sınav bitiş saati olmadığı için sınav günü tamamen kapatılır.')
+        st.write('İhtiyaç dolmuş bir yarım saate otomatik ek personel atanmaz. Sabit vardiya süresi veya uygunluk nedeniyle kalan açıklar aşağıda gösterilir. Mola yerleşimi bu sürümde ayrıca modellenmez.')
+    ready=bool(state.get('plan_ctx_confirmed') and people and state.get('plan_group_priority')
+               and isinstance(state.get('sp_staffing_result_df'),pd.DataFrame) and not state['sp_staffing_result_df'].empty)
+    if not ready:st.info('Dönemi onaylayın ve personel ihtiyacını hesaplayın.')
+    if st.button('Otomatik Vardiya Taslağı Oluştur',disabled=not ready,key='planning_generate',type='primary'):
         try:
-            fetch_employees(state)
-            st.success("Personeller alındı.")
-        except Exception as exc:
-            st.error(f"Personeller alınamadı: {exc}")
-    upload = st.file_uploader("Alternatif: personel CSV / Excel yükle", type=["csv", "xlsx"], key="planning_employees_file")
-    st.caption("Sütunlar: employee_id, full_name, work_type; talepler ve ders kayıtları için username. work_type: fulltime / akademi / dis_kaynak.")
-    if upload is not None and st.button("Personel Dosyasını Kullan", key="planning_use_upload"):
-        try:
-            upload.seek(0)
-            table = pd.read_csv(upload, dtype=str) if upload.name.lower().endswith(".csv") else pd.read_excel(upload, dtype=str)
-            state["employees_cache"] = validate_employees(table.fillna("").to_dict("records"))
-            st.success("Personel dosyası alındı.")
-        except Exception as exc:
-            st.error(f"Dosya alınamadı: {exc}")
-    st.caption(f"Planlamaya hazır personel: {len(state.get('employees_cache', []))}")
-
-    terms = sorted({term for data in (state.get("acad_schedules") or {}).values() for term in data})
-    if terms:
-        st.selectbox("Planlamada kullanılacak ders dönemi", options=terms, key="planning_class_term")
-    st.info("Sınav kayıtlarında bitiş saati bulunmadığı için sınav günü tamamen uygun değil kabul edilir. Derslerin dolu saatleri kapatılır. Mola takvimi henüz tanımlı değil; karşılaştırma shrinkage eklenmiş Planlanan Agent ihtiyacı üzerinden yapılır.")
-    st.caption("Otomatik plan, 30 dakikalık açığı azaltan bir dağıtım yapar. Sabit atamalar korunur; soft bitiş sınırları otomatik esnetilmez. Sonuç en iyi olası plan garantisi taşımaz.")
-    ctx = state.get("plan_ctx") or {}
-    ready = (state.get("plan_ctx_confirmed") and ctx.get("start") and ctx.get("end")
-             and state.get("employees_cache") and state.get("plan_group_priority")
-             and state.get("shift_rules") and isinstance(state.get("sp_staffing_result_df"), pd.DataFrame))
-    if not ready:
-        st.info("Plan oluşturmak için dönemi onayla, personel kaynağını ve grup sırasını kaydet, personel ihtiyacını hesapla.")
-    else:
-        st.write(f"**Plan dönemi:** {ctx['start']} → {ctx['end']}")
-        with st.expander('Otomatik alınan kayıtlar ve uygunluk kontrolü'):
-            try:
-                staff,fixed,_,unavailable,input_issues=collect_inputs(state)
-                inside=[r for r in fixed if str(ctx['start'])<=r['date']<=str(ctx['end'])]
-                unique={(r['employee_id'],r['date'],r['shift_code']):r for r in inside}
-                a,b,c=st.columns(3)
-                a.metric('Gece kayıtları',sum(r['shift_code']=='GECE' for r in unique.values()))
-                b.metric('Yıllık izin günleri',sum(r['shift_code']=='YILLIK_IZIN' for r in unique.values()))
-                c.metric('Uygunluk kaydı olan personel',len(unavailable))
-                st.caption('Gece ve yıllık izinler kayıtlı kaynaklardan otomatik alınır. Sınav, kişinin kullanıcı adı/employee_id eşleşmesiyle Sınav Takvimi içindeki Tarih alanından bulunur. Sınav bitişi belirtilmediği için o gün tamamen kapatılır; kayıt yoksa sınav var diye varsayılmaz.')
-                if unique:
-                    names={str(e['employee_id']):e.get('full_name') for e in staff}
-                    st.dataframe([{'Personel':names.get(r['employee_id'],r['employee_id']),**r} for r in unique.values()],hide_index=True,use_container_width=True)
-                if input_issues:
-                    st.dataframe(input_issues,hide_index=True,use_container_width=True)
-            except ValueError as exc:
-                st.error(str(exc))
-    if st.button("Otomatik Vardiya Taslağı Oluştur", disabled=not bool(ready), key="planning_generate"):
-        try:
-            with st.spinner("Kurallar kontrol ediliyor, vardiyalar yerleştiriliyor..."):
-                employees, fixed, history, unavailable, source_issues = collect_inputs(state)
-                result = generate_plan(employees, state["sp_staffing_result_df"], state["shift_rules"],
-                                       state["plan_group_priority"], ctx["start"], ctx["end"],
-                                       fixed=fixed, history=history, unavailable=unavailable)
-                result["issues"] = source_issues + result["issues"]
-                start, end = str(ctx["start"]), str(ctx["end"])
-                outside = [r for r in state.get("draft_shift_plan", []) if not start <= str(r.get("date")) <= end]
-                state["draft_shift_plan"] = outside + result["plan"]
-                result["period"] = {"start": start, "end": end}
-                state["planning_result"] = result
-                state["planning_allow_gaps"] = False
-                state["planning_result_fingerprint"] = fingerprint(state)
-                from core.workspace_store import save_keys
+            with st.spinner('İhtiyaç ve uygunluklara göre yerleştiriliyor…'):
+                staff,fixed,history,unavailable,source_issues=collect_inputs(state)
+                result=generate_plan(staff,state['sp_staffing_result_df'],state['shift_rules'],state['plan_group_priority'],
+                                     context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
+                                     strict_capacity=True)
+                result['issues']=source_issues+result['issues'];result['staff']=staff
+                start,end=str(context['start']),str(context['end'])
+                outside=[r for r in state.get('draft_shift_plan',[]) if not start<=str(r.get('date'))<=end]
+                state['draft_shift_plan']=outside+result['plan']
+                result['period']={'start':start,'end':end}
+                state['planning_result']=result;state['planning_allow_gaps']=False
+                state['planning_result_fingerprint']=fingerprint(state)
                 save_keys(state)
-                st.success("Taslak oluşturuldu; Vardiya Saatleri ekranına da aktarıldı.")
-        except Exception as exc:
-            st.error(f"Plan oluşturulamadı: {exc}")
-
-    result = state.get("planning_result")
+            st.success('Taslak hazır. Takvimi Vardiya Saatleri ekranından da inceleyebilirsin.')
+        except (ValueError,TypeError,KeyError) as exc:
+            st.error(f'Plan oluşturulamadı: {exc}')
+    result=state.get('planning_result')
     if result is None:
+        if ready:
+            try:
+                current=preview_plan(state)
+                coverage_summary(current,'Başlamadan Önce · Yerleştirilmiş Kayıtların Etkisi')
+                with st.expander('Gece, izin ve mevcut kayıt kontrolleri'):render_issues(current)
+            except ValueError as exc:st.info(str(exc))
         return
-    stale = state.get("planning_result_fingerprint") != fingerprint(state)
-    if stale:
-        st.warning("Plan girdileri veya elle atamalar değişti. Güncel sonuç ve yayınlama için taslağı yeniden oluştur.")
-    coverage = result["coverage"]
-    st.markdown("### Plan Kontrolü")
-    c1, c2, c3 = st.columns(3)
-    total = int(coverage["İhtiyaç"].sum())
-    met = total - int(coverage["Eksik"].sum())
-    c1.metric("İhtiyaç karşılama", f"%{100*met/total:.1f}" if total else "%100")
-    c2.metric("Eksik personel × 30 dk", int(coverage["Eksik"].sum()))
-    c3.metric("Fazla personel × 30 dk", int(coverage["Fazla"].sum()))
-    st.dataframe(coverage, use_container_width=True, hide_index=True)
-    chart = coverage[["Tarih", "Slot", "İhtiyaç", "Atanan"]].copy()
-    chart["Zaman"] = pd.to_datetime(chart["Tarih"]) + pd.to_timedelta((chart["Slot"]-1)*30, unit="m")
-    st.line_chart(chart.set_index("Zaman")[["İhtiyaç", "Atanan"]])
-    roster = pd.DataFrame(result["plan"])
-    st.markdown("### Vardiya Taslağı")
-    st.dataframe(roster, use_container_width=True, hide_index=True)
-    st.download_button("Vardiya CSV İndir", roster.to_csv(index=False).encode("utf-8-sig"), "vardiya_taslagi.csv", "text/csv")
-    st.download_button("30 dk İhtiyaç / Atama CSV İndir", coverage.to_csv(index=False).encode("utf-8-sig"), "vardiya_ihtiyac_kontrol.csv", "text/csv")
-    if result["issues"]:
-        st.error("Çözülmesi gereken kayıt veya kural çakışmaları var. Sabit kayıtlar korundu; sorunlar giderilmeden yayınlanamaz.")
-        st.dataframe(result["issues"], use_container_width=True, hide_index=True)
-    allow_gaps = False
-    if coverage["Eksik"].sum():
-        allow_gaps = st.checkbox("Personel açığını gördüm; planı bu açıklarla yayınla", key="planning_allow_gaps")
-    blocked = stale or bool(result["issues"]) or (bool(coverage["Eksik"].sum()) and not allow_gaps)
-    st.caption("Yayınlanan plan hazır çalışma alanı veritabanına kaydedilir ve diğer hesaplardan görüntülenebilir." if state.get('workspace_db_path') else "Yayınlama bu oturumdaki planı günceller.")
-    if st.button("Kontrol Edilen Planı Yayınla", disabled=blocked, key="planning_publish"):
-        start, end = result["period"]["start"], result["period"]["end"]
-        outside = [r for r in state.get("published_shift_plan", []) if not start <= str(r.get("date")) <= end]
-        state["published_shift_plan"] = outside + [dict(row) for row in result["plan"]]
-        state["planning_result_fingerprint"] = fingerprint(state)
-        from core.workspace_store import save_keys
+    stale=state.get('planning_result_fingerprint')!=fingerprint(state)
+    if stale:st.warning('Kayıtlar veya kurallar değişti. Güncel sonucu yayınlamak için yeniden oluşturun.')
+    coverage_summary(result,'Planın İhtiyacı Karşılama Durumu')
+    render_shortages(result,'auto_gaps')
+    with st.expander('Tüm atamalar ve 30 dakikalık karşılaştırma'):
+        st.dataframe(pd.DataFrame(result['plan']),hide_index=True,use_container_width=True)
+        st.dataframe(result['coverage'],hide_index=True,use_container_width=True)
+    render_issues(result)
+    roster=pd.DataFrame(result['plan'])
+    st.download_button('Vardiya CSV İndir',roster.to_csv(index=False).encode('utf-8-sig'),'vardiya_taslagi.csv','text/csv')
+    allow=False
+    if result['coverage'].Eksik.sum():
+        allow=st.checkbox('Gösterilen eksikleri inceleyerek bu haliyle yayınla',key='planning_allow_gaps')
+    blocked=stale or bool(result['issues']) or (bool(result['coverage'].Eksik.sum()) and not allow)
+    if st.button('Kontrol Edilen Planı Yayınla',disabled=blocked,key='planning_publish',type='primary'):
+        start,end=result['period']['start'],result['period']['end']
+        state['published_shift_plan']=[r for r in state.get('published_shift_plan',[]) if not start<=str(r.get('date'))<=end]+[dict(r) for r in result['plan']]
+        state['planning_result_fingerprint']=fingerprint(state)
         save_keys(state)
-        st.success("Plan yayınlandı. Tüm Vardiyalar ekranında görüntülenebilir.")
+        st.success('Plan yayınlandı ve veritabanına kaydedildi.')

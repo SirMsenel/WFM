@@ -32,207 +32,63 @@ def _load_staffing_df():
     return df
 
 
+
 def render():
-    st.subheader('Plan Dönem Seçimi')
-
-    df = _load_staffing_df()
+    from core.workspace_store import save_keys
+    from core.forecast_service import DAY_NAMES
+    from core.charts import daily_chart
+    st.subheader('Plan Dönemi')
+    df=_load_staffing_df()
     if df is None:
-        st.warning('Önce **📅 Mesai Planı → Personel Hesap** adımında hesaplama yapmalısın.')
-        return
-
-    all_dates = sorted(df["Tarih"].unique().tolist())
-    min_date, max_date = all_dates[0], all_dates[-1]
-
-    _init_ctx(min_date)
-    ctx = st.session_state["plan_ctx"]
-    previous_range = (ctx["start"], ctx["end"])
-
-    tab1, tab2 = st.tabs(["📅 Dönem Seçimi", "📌 Dönem İhtiyaç Özeti"])
-
-    # ---------------- TAB 1: Dönem Seçimi ----------------
-    with tab1:
-        left, right = st.columns([1.2, 1.0], vertical_alignment="top")
-
-        with left:
-            with st.container(border=True):
-                st.caption("Bu seçim, vardiya planı sürecinde kullanılacak dönemi belirler.")
-
-                mode = st.radio(
-                    "Seçim tipi",
-                    ["Haftalık", "Özel Aralık"],
-                    horizontal=True,
-                    key="vp_period_mode",
-                )
-
-                if mode == "Haftalık":
-                    anchor = st.selectbox(
-                        "Hafta seç (hesaplanan tarihlerden bir gün)",
-                        options=all_dates,
-                        index=0,
-                        format_func=lambda d: str(d),
-                        key="vp_week_anchor",
-                    )
-                    start, end = _week_range(anchor)
-                    start, end = _clamp_range(start, end, min_date, max_date)
-                    ctx["start"], ctx["end"] = start, end
-                    st.success(f"Seçilen hafta: **{start} → {end}**")
-
-                else:
-                    start0, end0 = _clamp_range(ctx["start"], ctx["end"], min_date, max_date)
-                    d = st.date_input(
-                        "Özel tarih aralığı",
-                        value=(start0, end0),
-                        min_value=min_date,
-                        max_value=max_date,
-                        key="vp_custom_range",
-                    )
-                    if isinstance(d, tuple) and len(d) == 2:
-                        start, end = _clamp_range(d[0], d[1], min_date, max_date)
-                        ctx["start"], ctx["end"] = start, end
-                    st.success(f"Seçilen aralık: **{ctx['start']} → {ctx['end']}**")
-
-                if (ctx["start"], ctx["end"]) != previous_range:
-                    st.session_state["plan_ctx_confirmed"] = False
-                st.divider()
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("✅ Dönemi Onayla", use_container_width=True):
-                        st.session_state["plan_ctx_confirmed"] = True
-                        st.toast("Dönem onaylandı")
-                with c2:
-                    if st.button("↩️ Onayı Kaldır", use_container_width=True):
-                        st.session_state["plan_ctx_confirmed"] = False
-                        st.toast("Onay kaldırıldı")
-
-                st.session_state["plan_ctx"] = ctx
-
-        with right:
-            with st.container(border=True):
-                st.markdown("### ✅ Seçili Context")
-                st.write(f"**Hesaplanan aralık:** {min_date} → {max_date}")
-                st.write(f"**Seçili dönem:** {ctx['start']} → {ctx['end']}")
-                st.write(f"**Durum:** {'Onaylandı' if st.session_state.get('plan_ctx_confirmed') else 'Onay bekliyor'}")
-
-    # ---------------- TAB 2: Dönem İhtiyaç Özeti (Demand) ----------------
-    with tab2:
-        if not st.session_state.get("plan_ctx_confirmed"):
-            st.warning("Önce **📅 Dönem Seçimi** tabında dönemi seçip **✅ Dönemi Onayla** demelisin.")
-            return
-
-        start = ctx["start"]
-        end = ctx["end"]
-
-        base = df[df["Tarih"].between(start, end)].copy()
-        if base.empty:
-            st.info("Seçilen dönemde ihtiyaç verisi yok.")
-            return
-
-        # ---- Gün seçimi kontrol alanı ----
-        period_days = sorted(base["Tarih"].unique().tolist())
-
-        with st.container(border=True):
-            st.markdown("### 🗓️ Görüntüleme Gün Seçimi")
-
-            mode = st.radio(
-                "Görüntüleme modu",
-                ["Tümü (dönem)", "Tek Gün", "Çoklu Gün"],
-                horizontal=True,
-                key="vp_view_mode",
-            )
-
-            if mode == "Tümü (dönem)":
-                picked_days = period_days
-
-            elif mode == "Tek Gün":
-                d1 = st.selectbox(
-                    "Gün seç",
-                    options=period_days,
-                    index=0,
-                    format_func=lambda d: str(d),
-                    key="vp_single_day",
-                )
-                picked_days = [d1]
-
-            else:
-                d2 = st.multiselect(
-                    "Günleri seç",
-                    options=period_days,
-                    default=period_days[: min(3, len(period_days))],
-                    format_func=lambda d: str(d),
-                    key="vp_multi_days",
-                )
-                picked_days = list(d2) if d2 else []
-
-            if not picked_days:
-                st.info("Devam etmek için en az 1 gün seçmelisin.")
-                return
-
-            st.caption(f"Seçili gün sayısı: **{len(picked_days)}**")
-
-        # ---- Seçilen günlere göre filtre ----
-        dff = base[base["Tarih"].isin(picked_days)].copy()
-        dff = dff.sort_values(["Tarih", "Slot"]).copy()
-
-        # KPI
-        total_calls = float(dff["Tahmin Çağrı"].sum()) if "Tahmin Çağrı" in dff.columns else 0.0
-        peak_agents = int(dff["Planlanan Agent"].max()) if "Planlanan Agent" in dff.columns else 0
-        avg_agents = float(dff["Planlanan Agent"].mean()) if "Planlanan Agent" in dff.columns else 0.0
-
-        top = st.columns(3)
-        top[0].metric("Toplam Çağrı", f"{total_calls:,.0f}")
-        top[1].metric("Peak Agent", f"{peak_agents}")
-        top[2].metric("Ort. Agent", f"{avg_agents:.1f}")
-
-        st.markdown("---")
-
-        left, right = st.columns([1.4, 1.0], vertical_alignment="top")
-
-        with right:
-            with st.container(border=True):
-                st.markdown("### 🔥 Peak Slotlar")
-                top_n = st.slider("Top N", 3, 30, 10, 1, key="vp_peak_topn")
-                peak_view = dff.sort_values("Planlanan Agent", ascending=False).head(int(top_n))
-
-                peak_cols = ["Tarih", "Aralık", "Planlanan Agent", "Net Agent", "Tahmin Çağrı"]
-                peak_cols = [c for c in peak_cols if c in peak_view.columns]
-                st.dataframe(peak_view[peak_cols], use_container_width=True, hide_index=True, height=340)
-
-            with st.container(border=True):
-                st.markdown("### 📈 Mini Grafik")
-                try:
-                    import plotly.express as px
-
-                    x = dff["Tarih"].astype(str) + " • " + dff["Aralık"].astype(str)
-                    chart_df = pd.DataFrame({"Slot": x, "Planlanan Agent": dff["Planlanan Agent"].values})
-                    fig = px.line(chart_df, x="Slot", y="Planlanan Agent", markers=True)
-                    fig.update_layout(height=260, margin=dict(l=10, r=10, t=20, b=10))
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception:
-                    tmp = dff.copy()
-                    tmp["SlotLabel"] = tmp["Tarih"].astype(str) + " • " + tmp["Slot"].astype(str)
-                    st.line_chart(tmp.set_index("SlotLabel")[["Planlanan Agent"]], height=260)
-
-        with left:
-            with st.container(border=True):
-                st.markdown("### 📌 İhtiyaç Tablosu (30dk)")
-
-                q = st.text_input(
-                    "Ara",
-                    value="",
-                    placeholder="örn: 2026-03-02 veya 13:00",
-                    key="vp_need_search",
-                )
-                view = dff.copy()
-                if q.strip():
-                    qq = q.strip().lower()
-                    mask = view.astype(str).apply(lambda s: s.str.lower().str.contains(qq, na=False)).any(axis=1)
-                    view = view[mask].copy()
-
-                show_cols = [
-                    "Tarih", "Gün", "Slot", "Aralık",
-                    "Tahmin Çağrı",
-                    "Net Agent", "Planlanan Agent",
-                    "Doluluk (%)", "SL (model) (%)",
-                ]
-                show_cols = [c for c in show_cols if c in view.columns]
-                st.dataframe(view[show_cols], use_container_width=True, hide_index=True, height=640)
+        st.info('Önce Mesai Planı → Personel Hesap ekranında ihtiyacı hesaplayın.');return
+    dates=sorted(df.Tarih.unique());minimum,maximum=dates[0],dates[-1]
+    _init_ctx(minimum)
+    ctx=st.session_state['plan_ctx']
+    current_start,current_end=_clamp_range(ctx['start'],ctx['end'],minimum,maximum)
+    with st.container(border=True):
+        a,b=st.columns([1,2])
+        mode=a.radio('Planlama aralığı',['Haftalık','Özel Aralık'],horizontal=True,key='vp_period_mode_v2')
+        if mode=='Haftalık':
+            anchor=b.date_input('Planlamak istediğin haftadan bir gün seç',value=current_start,min_value=minimum,max_value=maximum,key='vp_week_anchor_v2')
+            start,end=_clamp_range(*_week_range(anchor),minimum,maximum)
+        else:
+            picked=b.date_input('Başlangıç – bitiş',value=(current_start,current_end),min_value=minimum,max_value=maximum,key='vp_custom_range_v2')
+            if len(picked)!=2:
+                st.info('Başlangıç ve bitiş tarihini seçin.');return
+            start,end=picked
+        if (ctx['start'],ctx['end'])!=(start,end):
+            st.session_state['plan_ctx_confirmed']=False
+        st.session_state['plan_ctx']={'start':start,'end':end}
+        confirmed=st.session_state.get('plan_ctx_confirmed',False)
+        st.markdown(f"### {start:%d.%m.%Y} → {end:%d.%m.%Y}")
+        st.caption(f'{(end-start).days+1} gün · İhtiyaç verisi {minimum:%d.%m.%Y} – {maximum:%d.%m.%Y} aralığında hazır.')
+        if confirmed:
+            st.success('Dönem onaylı · Vardiya Saatleri ve Oluştur ekranları bu aralığı kullanır.')
+        else:
+            st.info('Bu dönemi onaylayarak planlamaya devam et.')
+        c1,c2,_=st.columns([1,1,2])
+        if c1.button('Dönemi Onayla',type='primary',key='vp_confirm'):
+            st.session_state['plan_ctx_confirmed']=True
+            save_keys(st.session_state);st.rerun()
+        if c2.button('Onayı Kaldır',disabled=not confirmed,key='vp_unconfirm'):
+            st.session_state['plan_ctx_confirmed']=False
+            save_keys(st.session_state);st.rerun()
+    base=df[df.Tarih.between(start,end)].copy()
+    if base.empty:
+        st.warning('Seçilen dönemde ihtiyaç yok.');return
+    a,b,c=st.columns(3)
+    a.metric('Planlanacak gün',(end-start).days+1)
+    b.metric('En yoğun dilimde ihtiyaç',int(base['Planlanan Agent'].max()))
+    c.metric('Tahmini çağrı',f"{base.get('Tahmin Çağrı',pd.Series(dtype=float)).sum():,.0f}")
+    daily=base.groupby('Tarih',as_index=False).agg(**{'Zirve ihtiyaç':('Planlanan Agent','max'),'Ortalama ihtiyaç':('Planlanan Agent','mean')})
+    st.markdown('### Haftanın İhtiyaç Görünümü')
+    daily_chart(daily,'Tarih',['Zirve ihtiyaç','Ortalama ihtiyaç'],height=220,y_title='Personel ihtiyacı')
+    if len(daily)<=7:
+        columns=st.columns(len(daily))
+        for col,record in zip(columns,daily.to_dict('records')):
+            day=record['Tarih']
+            with col.container(border=True):
+                st.caption(DAY_NAMES[day.weekday()]);st.write(f'**{day:%d.%m}**')
+                st.metric('Zirve',int(record['Zirve ihtiyaç']))
+    with st.expander('30 dakikalık ihtiyaç tablosu'):
+        st.dataframe(base[[c for c in ['Tarih','Gün','Aralık','Planlanan Agent','Net Agent','Tahmin Çağrı'] if c in base]],hide_index=True,use_container_width=True)

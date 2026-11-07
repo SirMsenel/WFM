@@ -1,6 +1,7 @@
 """Shared Turkish labels, receipt, content and timeline for every request screen."""
 import pandas as pd
 import streamlit as st
+from core.status_style import badge,cell_style
 
 from core.request_service import TYPE_LABELS, is_terminal, act, refresh, visible
 
@@ -33,7 +34,7 @@ def render_detail(req, key):
         st.markdown("#### "+TYPE_LABELS.get(req.get('type'),req.get('type','Talep')))
         a,b,c = st.columns(3)
         a.caption("Durum")
-        a.write(req.get('status','—'))
+        a.markdown(badge(req.get('status','—')),unsafe_allow_html=True)
         b.caption("Aşama")
         b.write(stage(req))
         c.caption("Kayıt no")
@@ -61,8 +62,9 @@ def render_detail(req, key):
     events = req.get('events',[])
     st.markdown("##### İşlem Geçmişi")
     if events:
-        st.dataframe(pd.DataFrame([{'Tarih':formatted(e.get('at'),True),'İşlemi yapan':e.get('actor_name') or e.get('actor'),
-                                  'İşlem':e.get('action'),'Önceki durum':e.get('from'),'Yeni durum':e.get('to'),'Not':e.get('note')} for e in events]),hide_index=True,use_container_width=True)
+        history=pd.DataFrame([{'Tarih':formatted(e.get('at'),True),'İşlemi yapan':e.get('actor_name') or e.get('actor'),
+                              'İşlem':e.get('action'),'Önceki durum':e.get('from'),'Yeni durum':e.get('to'),'Not':e.get('note')} for e in events])
+        st.dataframe(history.style.map(cell_style,subset=['Önceki durum','Yeni durum']),hide_index=True,use_container_width=True)
     else:
         st.caption("Eski kayıt: ayrıntılı işlem geçmişi bulunmuyor.")
 
@@ -78,9 +80,12 @@ def render_center(audience='all', key='requests'):
         items = [r for r in items if profile.get('full_name') in r.get('assigned_tls',[])]
     pending = [r for r in items if not is_terminal(r)]
     a,b,c = st.columns(3)
-    a.metric('Değerlendirmede',len(pending))
-    b.metric('Onaylanan',sum(r.get('status') in {'Uygulandı','Onaylandı'} and is_terminal(r) for r in items))
-    c.metric('Reddedilen',sum(r.get('status')=='Reddedildi' for r in items))
+    for col,title,count,status in [(a,'Değerlendirmede',len(pending),'Beklemede'),
+                                    (b,'Onaylanan',sum(r.get('status') in {'Uygulandı','Onaylandı'} and is_terminal(r) for r in items),'Onaylandı'),
+                                    (c,'Reddedilen',sum(r.get('status')=='Reddedildi' for r in items),'Reddedildi')]:
+        with col.container(border=True):
+            st.markdown(badge(status),unsafe_allow_html=True)
+            st.metric(title,count)
     category = st.radio('Göster',['Bekleyen kayıtlar','Sonuçlanan kayıtlar','Tüm kayıtlar'],horizontal=True,key=key+'_category')
     search = st.text_input('Kayıt ara',placeholder='Personel, talep türü veya kayıt numarası',key=key+'_search')
     filtered = [r for r in items if (category=='Tüm kayıtlar' or (is_terminal(r)==(category=='Sonuçlanan kayıtlar')))
@@ -90,7 +95,7 @@ def render_center(audience='all', key='requests'):
         st.info('Bu görünümde kayıt yok.')
         return
     st.caption('Detayını görmek istediğin kaydın satırına tıkla. Başlangıçta ilk kayıt gösterilir.')
-    event=st.dataframe(rows_for_table(filtered),hide_index=True,use_container_width=True,
+    event=st.dataframe(pd.DataFrame(rows_for_table(filtered)).style.map(cell_style,subset=['Durum']),hide_index=True,use_container_width=True,
                        on_select='rerun',selection_mode='single-row',key=key+'_table')
     picked=event.selection.rows
     index=picked[0] if picked and picked[0]<len(filtered) else 0
