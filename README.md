@@ -54,7 +54,8 @@ WFM, yönetici ve moderatör rolleri içindir.
   sonraki kayıtlar da gün/dinlenme hesabına katılır. Akademi süresi maksimum
   olduğundan 30 dakika ile tanımlı maksimum arasında aday vardiyalar denenir.
 - Gece vardiyaları motor tarafından sıfırdan üretilmez, kesin kayıtlardan alınır.
-  Kurallardaki dil bazlı gece sayıları henüz ayrı bir kota kontrolüne bağlı değil.
+  Dil bazlı gece sayıları ve gece saat aralığı kontrol edilir; eksik/fazla kesin
+  kayıt varsa plan kontrolünde gösterilir.
   İhtiyaç tablosu toplam sayı içerdiği için dil/lokasyon bazlı ayrı ihtiyaç
   optimizasyonu yapılmaz.
 - Sınavın bitiş saati veride olmadığı için sınav günü tamamen kapatılır.
@@ -137,3 +138,62 @@ haftanın aynı günü, son iki haftanın aynı gün ortalaması ve son 30 gün 
 aynı hafta günü ortalaması gösterilir. Veri kesiminden sonraki gerçekleşmeler
 hesaba katılmaz. Eksik geçmiş sıfıra çevrilmez; örnek sayıları ayrıca gösterilir.
 Bu sayfa geçmişe dayalı bir referanstır, eğitilmiş model tahmini değildir.
+
+
+## Haftalık interval: geçmiş pencereler ve takvim etkileri
+
+Mesai Planı → İnterval, 30 dakikalık SQLite çağrı geçmişini otomatik açar.
+CSV/XLSX kaynağı da seçilebilir. Hedef hafta Pazartesi–Pazar olarak seçilir.
+Eksik slotlu veya toplamı sıfır günler dağılım hesabından çıkarılır; sıfır çağrı
+olarak doldurulmaz. Bir slotta birden fazla kuyruk satırı varsa çağrılar toplanır.
+
+- Aday pencereler: son 14 gün, 1/3/6/12 takvim ayı ve tüm geçmiş.
+- Her gün önce kendi toplamına bölünür; yüksek hacimli günler otomatik olarak
+  düşük hacimli günleri bastırmaz. Yakınlık ağırlığı:
+  `1 / (1 + log(1 + yaş_gün / 7))`.
+- Adaylar son tamamlanmış ve yedi günü tam haftada doğrulanır. Bu haftanın
+  gerçekleşmeleri kendi tahmininin eğitiminde kullanılmaz.
+- Hata, 7 × 48 hücrede ortalama mutlak dağılım farkıdır (yüzde puan).
+  Başarı ağırlığı `1 / max(MAE, 0.01)` ile hesaplanıp toplamı %100 yapılır.
+  Aynı doğrulama haftası ağırlık kalibrasyonunda da kullanıldığından birleşim
+  eğrisi bağımsız bir gelecek başarı garantisi değildir.
+- Ekstre kesim, son ödeme, bayram/arife/bayram sonrası, resmi tatil ve Ramazan
+  çağrı tahminiyle aynı takvimden alınır. En az iki benzer geçmiş gün varsa
+  yakınlık ağırlıklı benzer-gün dağılımı temel hafta günü dağılımına katılır.
+  Etki payı `min(0.7, n/(n+4))` olur. Yetersiz benzer gün sayısı ekranda yazılır;
+  olmayan etki uydurulmaz. Takvim tanımları mevcut 2020–2030 dönemidir.
+- Personel hesabında gerçekten kullanılan haftalık profil tarihleriyle saklanır.
+  Sonraki doğrulamada bu profil varsa onun hatasına göre iyileşme gösterilir;
+  kayıt yoksa önceki haftanın gerçekleşen dağılımı açıkça referans gösterilir.
+- Profil her gün için toplamı %100 olan 48 dilim içerir. Tarihli profil başka
+  haftalara sessizce tekrarlanmaz. Personel hesabı seçili profil haftasıyla sınırlıdır.
+
+Başarı tablosu, takvim benzer-gün açıklamaları, ısı haritası ve günlük eğriler
+ayrı alt görünümlerdir. Profili kaydedip aktif ettikten sonra personel ihtiyacını
+yeniden hesaplayın. Aktif profil değiştiğinde eski ihtiyaç ve dönem onayı geçersiz olur.
+
+## Kullanım ve hız güncellemeleri
+
+Alt ekranlar yalnızca seçildiklerinde çalışır; tüm sekmeler arka planda birlikte
+hesaplanmaz. SQLite çağrı okumaları kısa süreli önbelleğe alınır; demo modelleri
+veriye göre önbelleğe alınır ve her oturuma bağımsız kopyalanır. İnterval sonuçları
+veri/hafta/referans girdisine göre önbelleğe alınır. Veritabanını Yenile düğmesi
+önbelleği temizler. İlk açılışın model yükleme/eğitim maliyeti vardır.
+
+Feature Engineering'in tarih, 30 dk etiketleri, banka, günlük lag/rolling ve
+intraday lag/rolling gruplarında ayrı Tümünü Seç / Seçimi Temizle düğmeleri vardır.
+Seçim, ilgili grubun kutularını anında günceller; diğer grupları bozmaz.
+
+Geçmiş Hafta Analizi → Günlük ve 30 Dakikalık ayrı görünümlerdir. Günlük grafikler
+yalnız tarih gösterir; 30 dakikalık grafikler saat ve 7 × 48 ısı haritası kullanır.
+Talep detayları açılır seçim kutusu yerine listedeki satıra tıklanarak açılır.
+
+Vardiya Saatleri'nde seçilen personel ve tarihler için taslak silinebilir;
+son 20 elle işlem geri alınabilir. Geri alma sadece değişen kayıtları saklar,
+başka birinin sonradan değiştirdiği kaydı ezmez. Kesin gece/izin ve onaylı talep
+kaynakları bu ekran üzerinden silinmez; kaynak ekranından düzeltilir.
+
+Sınavlar kişinin kullanıcı adı/employee_id eşleşmesi ve Sınav Takvimi'ndeki Tarih
+alanıyla bulunur. Bitiş saati bulunmadığından sınav günü tamamen kapatılır.
+Gece ve yıllık izinler kesin kayıt, onaylı talep ve mevcut yayınlanmış kayıtlardan
+otomatik alınır; oluşturma ekranındaki kontrol alanında sayıları görülebilir.

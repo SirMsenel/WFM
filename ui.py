@@ -334,153 +334,47 @@ main = st.session_state["main_page"]
 
 
 # ---------------- Routing ----------------
-if main == "📞 Çağrı Tahmini":
-    st.title("📞 Çağrı Tahmini")
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
-        [
-            "1) Veri Kaynağı",
-            "2) Feature Engineering",
-            "3) Veri Kalitesi",
-            "4) Aykırı Değer (IQR)",
-            "5) Grafik İzleme",
-            "6) Model Kur",
-            "7) Model Raporu",
-            "8) Tahmin",
-        ]
-    )
-    with tab1:
-        render_call_forecast_data()
-    with tab2:
-        render_feature_engineering()
-    with tab3:
-        render_data_quality()
-    with tab4:
-        render_outlier_iqr()
-    with tab5:
-        render_monitoring()
-    with tab6:
-        render_modeling()
-    with tab7:
-        render_model_report()
-    with tab8:
-        render_predict_ui()
+from core.navigation import sections
 
+if main == "📞 Çağrı Tahmini":
+    st.title(main)
+    sections('nav_forecast',{
+        'Veri Kaynağı':render_call_forecast_data,'Feature Engineering':render_feature_engineering,
+        'Veri Kalitesi':render_data_quality,'Aykırı Değer (IQR)':render_outlier_iqr,
+        'Grafik İzleme':render_monitoring,'Model Kur':render_modeling,
+        'Model Raporu':render_model_report,'Tahmin':render_predict_ui})
+elif main == "📅 Mesai Planı":
+    st.title(main)
+    sections('nav_staffing',{'Tahmin Kaynağı':render_forecast_view,'İnterval':render_intraday_ratio,
+                            'Kayıt Seçim':render_profile_select,'Personel Hesap':render_staffing_forecast})
+elif main == "🗓️ Vardiya Planı":
+    st.title(main)
+    sections('nav_roster',{'Plan Dönem Seçimi':render_plan_period,'Mevcut Plan':render_current_plan,
+                          'Talepler':render_requests_tab,'Vardiya Saatleri':render_shift_hours,
+                          'Oluştur & Kontrol & Yayınla':render_publish})
 elif main == "📈 Geçmiş Hafta Analizi":
     render_history_comparison()
-
 elif main == "🧪 Demo Veritabanı":
     render_demo_workspace()
-
-elif main == "📅 Mesai Planı":
-    st.title("📅 Mesai Planı")
-    tab1, tab2, tab3, tab4 = st.tabs(
-        [
-            "1) Tahmin Kaynağı",
-            "2) İnterval",
-            "3) Kayıt Seçim",
-            "4) Personel Hesap",
-        ]
-    )
-    with tab1:
-        render_forecast_view()
-    with tab2:
-        render_intraday_ratio()
-    with tab3:
-        render_profile_select()
-    with tab4:
-        render_staffing_forecast()
-
-elif main == "🗓️ Vardiya Planı":
-    st.title("🗓️ Vardiya Planı")
-
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        [
-            "1) Plan Dönem Seçimi",
-            "2) Mevcut Plan",
-            "3) Talepler",
-            "4) Vardiya Saatleri",
-            "5) Oluştur & Kontrol & Yayınla",
-        ]
-    )
-
-    with tab1:
-        render_plan_period()
-    with tab2:
-        render_current_plan()
-    with tab3:
-        render_requests_tab()
-    with tab4:
-        render_shift_hours()
-    with tab5:
-        render_publish()
-
-elif main == "📊 İzleme":
-    st.title("📊 İzleme")
-    st.info("İzleme ekranı (yakında).")
-
 elif main == "👥 Personel Takip":
-    st.title("👥 Personel Takip")
-    a1,a2 = st.tabs([
-        "👤 Personel Talepleri",
-        "Personel İzleme",
-    ])
-
-    with a1:
-        render_personel_talep()
-
+    st.title(main)
+    render_personel_talep()
 elif main == "📌 Takip":
-    st.title("📌 Takip")
-    st.caption("Vardiyalar ve talepler.")
-
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🧍 Benim Vardiyam",
-        "📚 Ders Programı",
-        "📝 Talep İlet",
-        "📬 Talep Sonuç",
-    ])
-
-    with tab1:
-        render_my_shift()
-    with tab2:
-        render_class_schedule()
-    with tab3:
-        render_requests_submit()
-    with tab4:
-        render_requests_inbox()
-
+    st.title(main)
+    sections('nav_tracking',{'Benim Vardiyam':render_my_shift,'Ders Programı':render_class_schedule,
+                            'Talep İlet':render_requests_submit,'Talep Sonuç':render_requests_inbox})
 elif main == "🗓️ Tüm Vardiyalar":
-    st.title("🗓️ Tüm Vardiyalar")
-    st.caption("Agent izler. TL ve üzeri roller düzenleme yapabilir.")
-
-    t1, t2, t3, t4, t5, t6, t7 = st.tabs([
-        "✅ Full Time",
-        "🏢 Dış Kaynak",
-        "🌍 Yabancı Dil",
-        "🏫 Akademi",
-        "🌙 Gece",
-        "🏖️ Yıllık İzin",
-        "📌 Hafta Sonu Sorumlu",
-    ])
-
-    with t1:
-        render_all_fulltime()
-    with t2:
-        render_all_outsource()
-    with t3:
-        render_all_foreign_language()
-    with t4:
-        render_all_academy()
-    with t5:
-        render_all_night()
-    with t6:
-        render_all_annual_leave()
-    with t7:
-        render_all_weekend_owner()
-
-
+    st.title(main)
+    sections('nav_all_shifts',{'Full Time':render_all_fulltime,'Dış Kaynak':render_all_outsource,
+                              'Yabancı Dil':render_all_foreign_language,'Akademi':render_all_academy,
+                              'Gece':render_all_night,'Yıllık İzin':render_all_annual_leave,
+                              'Hafta Sonu Sorumlu':render_all_weekend_owner})
+elif main == "📊 İzleme":
+    st.title(main)
+    st.info('İzleme ekranı hazırlanıyor.')
 elif main == "⚙️ Ayarlar":
-    st.title("⚙️ Ayarlar")
-    st.info("Ayarlar ekranı (yakında).")
+    st.title(main)
+    st.info('Ayarlar ekranı hazırlanıyor.')
 
 from core.workspace_store import save_keys
 save_keys(st.session_state)

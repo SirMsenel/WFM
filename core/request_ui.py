@@ -89,10 +89,13 @@ def render_center(audience='all', key='requests'):
     if not filtered:
         st.info('Bu görünümde kayıt yok.')
         return
-    st.dataframe(rows_for_table(filtered),hide_index=True,use_container_width=True)
-    lookup = {r['id']:r for r in filtered}
-    selected = st.selectbox('İncelenecek kayıt',list(lookup),format_func=lambda rid:title(lookup[rid]),key=key+'_pick')
-    req = lookup[selected]
+    st.caption('Detayını görmek istediğin kaydın satırına tıkla. Başlangıçta ilk kayıt gösterilir.')
+    event=st.dataframe(rows_for_table(filtered),hide_index=True,use_container_width=True,
+                       on_select='rerun',selection_mode='single-row',key=key+'_table')
+    picked=event.selection.rows
+    index=picked[0] if picked and picked[0]<len(filtered) else 0
+    req=filtered[index]
+    st.divider()
     render_detail(req,key)
     if is_terminal(req):
         return

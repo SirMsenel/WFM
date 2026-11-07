@@ -12,7 +12,7 @@ from .engine import minutes
 SOURCE_KEYS = ("plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", "planning_class_term",
-               "published_shift_plan", "draft_shift_plan")
+               "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
 
 
 def fingerprint(state):
@@ -106,6 +106,15 @@ def collect_inputs(state):
     # First priority: externally entered night shifts and annual leave.
     for row in state.get("fixed_shift_records", []):
         expand(row, row.get("shift_code"), "fixed_external")
+    suppressed={tuple(map(str,k)) for k in state.get('plan_removed_assignments',[])}
+    draft_manual_keys={(str(r.get('employee_id')),str(r.get('date'))) for r in state.get('draft_shift_plan',[])
+                       if r.get('source','manual') in {'manual','manual_single','manual_template'}}
+    for row in state.get('published_shift_plan',[]):
+        # Registry/request snapshots are refreshed from their original source;
+        # legacy/manual published night and leave records are also imported.
+        if (row.get('shift_code') in {'GECE','YILLIK_IZIN'} and row.get('source') not in {'fixed_external','approved_request'}
+                and (str(row.get('employee_id')),str(row.get('date'))) not in suppressed|draft_manual_keys):
+            expand(row,row['shift_code'],'published_fixed')
     for row in state.get("shift_overrides", []):
         if row.get("override_type") in {"GECE", "YILLIK_IZIN"}:
             expand(row, row["override_type"], "fixed_external")

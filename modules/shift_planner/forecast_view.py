@@ -290,7 +290,8 @@ def _render_analysis():
     # Grafik
     # ----------------------------
     st.markdown("### 📈 Tahmin Grafiği")
-    st.line_chart(plot_df, height=340)
+    from core.charts import daily_chart
+    daily_chart(plot_df.reset_index(),'tarih',list(plot_df.columns),height=340)
 
     # ----------------------------
     # (ÜSTTEKİ İNDİRME BUTONU KALDIRILDI)
@@ -390,7 +391,8 @@ def render():
         else:
             st.dataframe(pd.DataFrame([{"Sıra":o['rank'],"Model":o['name'],**o['metrics'],"Başlangıç":o['meta']['start'],"Bitiş":o['meta']['end']} for o in options]),hide_index=True,use_container_width=True)
             combined = pd.concat([o['frame'].set_index('tarih').y_pred.rename(o['name']) for o in options],axis=1)
-            st.line_chart(combined)
+            from core.charts import daily_chart
+            daily_chart(combined.reset_index(),'tarih',list(combined.columns))
             names = {o['id']:o for o in options}
             selected = st.selectbox("Kullanılacak model tahmini",list(names),key="sp_selected_model")
             if st.button("Bu Tahmini Planlamada Kullan",key="sp_activate_model"):

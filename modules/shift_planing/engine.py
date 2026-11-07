@@ -136,6 +136,13 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             nr = rules.get("night", {})
             if not nr.get("enabled", True) or group not in nr.get("allowed_work_types", ["akademi"]) or not rule.get("night_allowed", False):
                 problems.append("Bu grup için gece vardiyasına izin yok")
+            if 'night_window_start' in general and 'night_window_end' in general:
+                begin=minutes(row['start']);finish=begin+duration*60
+                ns,ne=minutes(general['night_window_start']),minutes(general['night_window_end'])
+                if ne<=ns:
+                    ne+=1440
+                if begin<ns or finish>ne:
+                    problems.append('Gece vardiyası tanımlı gece saatleri dışında')
         else:
             earliest = minutes(general.get("weekend_general_start" if day.weekday() >= 5 else "weekday_general_start", "08:00"))
             begin = minutes(row["start"])
@@ -150,6 +157,11 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 problems.append("Genel bitiş sınırı aşılıyor")
             if rule.get("max_end_time") and finish > _limit(rule["max_end_time"]):
                 problems.append("Grup bitiş sınırı aşılıyor; otomatik esnetme yapılmaz")
+            if not rule.get('night_allowed',False):
+                ns=minutes(general.get('night_window_start','00:00'))
+                night_boundary=ns if ns>=12*60 else ns+1440
+                if finish>night_boundary:
+                    problems.append('Gece çalışması yasak olan grup gece dilimine taşıyor')
         if any(_overlap(interval, block) for block in unavailable.get(eid, [])):
             problems.append("Ders/sınav veya uygun olmama kaydıyla çakışıyor")
         week = day.isocalendar()[:2]
@@ -302,6 +314,15 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             if (eid, day) not in occupied:
                 plan.append({"employee_id": eid, "date": day.isoformat(), "group": staff[eid]["work_type"],
                              "shift_code": "OFF", "start": None, "end": None, "source": "auto", "note": ""})
+    night_rules=rules.get('night',{})
+    targets=night_rules.get(night_rules.get('mode','normal'),{}) if night_rules.get('enabled') else {}
+    if targets:
+        for day in days:
+            assigned=[r for r in plan if r['date']==day.isoformat() and r.get('shift_code')=='GECE']
+            for language,needed in targets.items():
+                count=sum(staff[r['employee_id']].get('language')==language for r in assigned)
+                if count!=int(needed):
+                    issue({'date':day.isoformat()},f'Gece {language.upper()}: {needed} gerekli, {count} kesin kayıt var')
     for row in plan:
         row["full_name"] = staff[row["employee_id"]].get("full_name", row["employee_id"])
     df["İhtiyaç"] = required

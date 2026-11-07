@@ -183,7 +183,11 @@ def render():
     series = series.sort_values("Zaman")
 
     st.subheader("📈 Zaman Serisi")
-    st.line_chart(series.set_index("Zaman")[target_col], height=320)
+    if (pd.to_datetime(series['Zaman']).dt.normalize()==pd.to_datetime(series['Zaman'])).all():
+        from core.charts import daily_chart
+        daily_chart(series,'Zaman',[target_col],height=320)
+    else:
+        st.line_chart(series.set_index('Zaman')[target_col],height=320)
 
     # --- ek kırılımlar
     st.markdown("---")

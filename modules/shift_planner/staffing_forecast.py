@@ -97,6 +97,8 @@ def calculate_staffing(forecast_df, ratio_df, aht=300, target_sl=.8,
     for row in forecast.itertuples(index=False):
         day=DAY_NAMES[row.tarih.weekday()]
         profile=ratio_df[ratio_df['Gün']==day]
+        if 'Tarih' in ratio_df:
+            profile=profile[pd.to_datetime(profile.Tarih).dt.normalize()==row.tarih.normalize()]
         if len(profile)!=48 or set(profile.Slot)!=set(range(1,49)):
             raise ValueError(f"{day} için 48 slotun tamamı gerekli.")
         ratios=pd.to_numeric(profile['Oran(%)'],errors='raise')
@@ -128,6 +130,12 @@ def render():
         return
 
     forecast_df = st.session_state["sp_forecast_df"].copy()
+    if 'Tarih' in st.session_state["sp_active_ratio_profile_df"]:
+        profile_dates=pd.to_datetime(st.session_state['sp_active_ratio_profile_df'].Tarih).dt.normalize().unique()
+        in_week=pd.to_datetime(forecast_df.tarih).dt.normalize().isin(profile_dates)
+        if not in_week.all():
+            st.info('Seçili interval profili haftalıktır. Personel hesabı yalnızca bu profildeki tarihler için yapılır.')
+        forecast_df=forecast_df[in_week]
     st.caption("Kullanılan kaynak: " + st.session_state.get("sp_forecast_meta", {}).get("model_name", "Seçili tahmin"))
     ratio_df = st.session_state["sp_active_ratio_profile_df"].copy()
 
@@ -183,6 +191,8 @@ def render():
                 result_df=calculate_staffing(forecast_df,ratio_df,aht=float(aht),target_sl=target_sl,
                                             target_time=float(target_time),shrinkage=shrinkage,occ_target=occ_target)
             st.session_state["sp_staffing_result_df"] = result_df
+            from core.interval_service import record_used_profile
+            record_used_profile(st.session_state,forecast_df,ratio_df)
             from core.workspace_store import save_keys
             save_keys(st.session_state)
         except ValueError as exc:

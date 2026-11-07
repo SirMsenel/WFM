@@ -201,20 +201,9 @@ def _draft_rows_for_period(year: int, month: int) -> list[dict]:
     return out
 
 
-def _upsert_draft_shift(row: dict):
-    items = st.session_state.get("draft_shift_plan") or []
-
-    replaced = False
-    for i, r in enumerate(items):
-        if str(r.get("employee_id")) == str(row.get("employee_id")) and str(r.get("date")) == str(row.get("date")):
-            items[i] = row
-            replaced = True
-            break
-
-    if not replaced:
-        items.append(row)
-
-    st.session_state["draft_shift_plan"] = items
+def _upsert_draft_shift(row):
+    from core.shift_edits import edit_shifts
+    edit_shifts(st.session_state,[row])
 
 
 def _get_display_for_cell(employee_id, day_iso: str) -> str:
@@ -434,6 +423,7 @@ def _apply_template_to_selection(year: int, month: int, person_ids: list[str], g
         return
 
     days = _month_days(year, month)
+    additions=[]
     for emp_id in person_ids:
         for d in days:
             row = {
@@ -446,9 +436,19 @@ def _apply_template_to_selection(year: int, month: int, person_ids: list[str], g
                 "source": "manual_template",
                 "note": "",
             }
-            _upsert_draft_shift(row)
+            additions.append(row)
 
-    st.success("Seçili personele toplu vardiya atandı.")
+    from core.shift_edits import edit_shifts
+    locked={(str(r['employee_id']),str(r['date'])) for r in st.session_state.get('draft_shift_plan',[])
+            if r.get('source') in {'fixed_external','approved_request'}}
+    skipped=sum((str(r['employee_id']),str(r['date'])) in locked for r in additions)
+    additions=[r for r in additions if (str(r['employee_id']),str(r['date'])) not in locked]
+    try:
+        edit_shifts(st.session_state,additions)
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    st.success(f'{len(additions)} taslak vardiya atandı. {skipped} kesin kayıt korundu.')
 
 
 def _apply_manual_single_day(employee_id: str, target_date: date, group: str, start: str, end: str, code: str, note: str):
@@ -462,7 +462,11 @@ def _apply_manual_single_day(employee_id: str, target_date: date, group: str, st
         "source": "manual_single",
         "note": note,
     }
-    _upsert_draft_shift(row)
+    try:
+        _upsert_draft_shift(row)
+    except (ValueError,TypeError) as exc:
+        st.error(str(exc))
+        return
     st.success("Tekil vardiya kaydedildi.")
 
 
@@ -582,6 +586,33 @@ def _render_manual_entry(group: str, filtered_agents: list[dict], selected_emp_i
             )
 
 
+def _render_edit_controls(year,month,selected_ids):
+    from core.shift_edits import edit_shifts,undo_edit,LOCKED
+    st.markdown('#### Taslak İşlemleri')
+    st.caption('Silme ve geri alma taslak üzerinde çalışır. Onaylı talep ve kesin gece/izin kayıtlarını kaynak ekranından değiştirin. Son 20 elle işlem geri alınabilir.')
+    a,b=st.columns(2)
+    with a:
+        if st.button('Son Elle İşlemi Geri Al',disabled=not bool(st.session_state.get('shift_edit_history')),key='shift_undo'):
+            try:
+                undo_edit(st.session_state)
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+    with b:
+        dates=st.date_input('Silinecek tarih aralığı',value=(date(year,month,1),_month_days(year,month)[-1]),key=f'shift_delete_dates_{year}_{month}')
+        candidates=[]
+        if len(dates)==2 and selected_ids:
+            candidates=[r for r in st.session_state.get('draft_shift_plan',[]) if str(r['employee_id']) in selected_ids
+                        and str(dates[0])<=str(r['date'])<=str(dates[1]) and r.get('source') not in LOCKED]
+        st.caption(f'Seçili personeller için silinebilecek taslak kayıt: {len(candidates)}')
+        if st.button('Seçili Aralıktaki Taslakları Sil',disabled=not candidates,key='shift_delete'):
+            try:
+                edit_shifts(st.session_state,deletions=[(r['employee_id'],r['date']) for r in candidates])
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+
+
 # -------------------------------------------------
 # MAIN
 # -------------------------------------------------
@@ -609,12 +640,12 @@ def render():
         if st.button("📌 Şablonu Seçili Personele Uygula", use_container_width=True, key="sp_apply_template"):
             if selected_template:
                 _apply_template_to_selection(year, month, selected_emp_ids, group, selected_template)
-                st.rerun()
 
         st.divider()
         _render_manual_entry(group, filtered_agents, selected_emp_ids)
 
     st.divider()
+    _render_edit_controls(year,month,selected_emp_ids)
 
     grid = _build_draft_grid(filtered_agents, year, month, selected_emp_ids)
     _render_draft_grid(grid)

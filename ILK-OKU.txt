@@ -31,3 +31,14 @@ Demo Veritabanı menüsünden hesap değiştirerek personel → TL → WFM akı�
 - README.md: ayrıntılı kullanım ve mevcut sınırlar
 
 Örnek veriler sentetiktir. Bu sürümü ayrı klasörde çalıştırarak önce inceleyebilirsin.
+
+GÜNCELLEME / macOS
+- Eski uygulamayı iki terminalde Ctrl+C ile durdur.
+- Yeni ZIP'i ayrı klasöre çıkar. Mevcut kayıtları korumak istersen eski projenin
+  data/wfm_demo.db ve data/auth_demo.db dosyalarının kopyalarını yeni data klasörüne aktar.
+- Yeni proje klasöründe:
+  python3 -m venv .venv
+  source .venv/bin/activate
+  python -m pip install -r requirements.txt
+- Sonra yukarıdaki backend ve Streamlit komutlarını ayrı terminallerde çalıştır.
+  Yalnızca tarayıcıyı yenilemek eski klasörden çalışan uygulamayı güncellemez.

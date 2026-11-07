@@ -1,48 +1,95 @@
 from datetime import timedelta
+import numpy as np
 import pandas as pd
 import streamlit as st
 
-from core.forecast_service import date_column, daily_history, weekday_comparison
+from core.forecast_service import date_column,daily_history,weekday_comparison,DAY_NAMES
+from core.charts import daily_chart,slot_heatmap
+from core.navigation import sections
+
+
+def render_daily():
+    raw=st.session_state.get('cf_all_df')
+    if raw is None or raw.empty:
+        st.info('Çağrı geçmişini yükleyin.')
+        return
+    date_col=date_column(raw);numeric=list(raw.select_dtypes(include='number').columns)
+    preferred=st.session_state.get('cf_target_name','cagri_sayisi')
+    target=st.selectbox('Çağrı sayısı sütunu',numeric,index=numeric.index(preferred) if preferred in numeric else 0,key='history_target')
+    try:
+        history=daily_history(raw,target,date_col)
+        cutoff=st.date_input('Geçmiş veri kesimi',value=history.tarih.max().date(),min_value=history.tarih.min().date(),max_value=history.tarih.max().date(),key='history_cutoff')
+        start=st.date_input('Karşılaştırılacak haftanın başlangıcı',value=cutoff+timedelta(days=7-cutoff.weekday()),min_value=cutoff+timedelta(days=1),key='history_week_start')
+        table=weekday_comparison(history,start,7,cutoff)
+    except ValueError as exc:
+        st.error(str(exc));return
+    columns=['Geçen hafta aynı gün','Son 2 hafta aynı gün ort.','Son 30 gün aynı gün ort.']
+    st.caption('Eksik geçmiş sıfır sayılmaz. Yalnızca veri kesiminden önceki gerçekleşmeler kullanılır.')
+    daily_chart(table,'Tarih',columns)
+    a,b,c=st.columns(3)
+    for metric,col in zip((a,b,c),columns):
+        metric.metric(col,f'{table[col].sum(min_count=1):,.0f}' if table[col].notna().all() else 'Eksik gün var')
+    with st.expander('Günlük karşılaştırma tablosu'):
+        st.dataframe(table,hide_index=True,use_container_width=True)
+    st.download_button('Günlük Analiz CSV İndir',table.to_csv(index=False).encode('utf-8-sig'),'gunluk_gecmis.csv','text/csv')
+    options=st.session_state.get('cf_forecast_options',[])
+    if options:
+        joined=table[['Tarih','Gün']].copy()
+        for option in options:
+            joined=joined.merge(option['frame'][['tarih','y_pred']].rename(columns={'tarih':'Tarih','y_pred':option['name']}),how='left',on='Tarih')
+        st.markdown('### Aynı Haftanın Model Tahminleri')
+        daily_chart(joined,'Tarih',[o['name'] for o in options])
+    tail=history[history.tarih<=pd.Timestamp(cutoff)].set_index('tarih').asfreq('D').reset_index()
+    tail['7 günlük hareketli ortalama']=tail.cagri_sayisi.rolling(7,min_periods=7).mean()
+    tail['30 günlük hareketli ortalama']=tail.cagri_sayisi.rolling(30,min_periods=30).mean()
+    st.markdown('### Gerçekleşen Çağrılar ve Hareketli Ortalamalar')
+    daily_chart(tail.tail(60),'tarih',['cagri_sayisi','7 günlük hareketli ortalama','30 günlük hareketli ortalama'])
+
+
+def interval_references(raw,start,cutoff):
+    from core.interval_service import prepare_intervals
+    dates,_,counts,_=prepare_intervals(raw)
+    counts=counts[counts.index<=pd.Timestamp(cutoff)]
+    rows=[]
+    for day in pd.date_range(start,periods=7):
+        last=counts.reindex([day-pd.Timedelta(days=7)]).iloc[0]
+        two=counts.reindex([day-pd.Timedelta(days=7),day-pd.Timedelta(days=14)]).mean()
+        month=counts[(counts.index>pd.Timestamp(cutoff)-pd.Timedelta(days=30))&(counts.index.weekday==day.weekday())].mean()
+        for slot in range(1,49):
+            rows.append({'Tarih':day,'Gün':DAY_NAMES[day.weekday()],'Slot':slot,'Geçen hafta aynı gün':last[slot],
+                         'Son 2 hafta aynı gün ort.':two[slot],'Son 30 gün aynı gün ort.':month.get(slot,np.nan)})
+    return pd.DataFrame(rows)
+
+
+def render_interval():
+    from core.data_cache import cached_calls
+    from core.workspace_store import DEFAULT_DB
+    from core.interval_service import prepare_intervals
+    source=st.radio('30 dk geçmiş kaynağı',['Hazır Veritabanı','Yüklenmiş Çağrı Verisi'],horizontal=True,key='history_interval_source')
+    raw=cached_calls(str(st.session_state.get('workspace_db_path',DEFAULT_DB)),True) if source=='Hazır Veritabanı' else st.session_state.get('cf_all_df')
+    if raw is None:
+        st.info('30 dakikalık çağrı verisi yükleyin.');return
+    try:
+        dates,_,counts,_=prepare_intervals(raw)
+        cutoff=st.date_input('30 dk veri kesimi',value=dates.max().date(),min_value=dates.min().date(),max_value=dates.max().date(),key='history_interval_cutoff')
+        start=st.date_input('30 dk karşılaştırma haftası',value=cutoff+timedelta(days=7-cutoff.weekday()),min_value=cutoff+timedelta(days=1),key='history_interval_start')
+        table=interval_references(raw,start,cutoff)
+    except (ValueError,KeyError) as exc:
+        st.error(str(exc));return
+    method=st.radio('Karşılaştırma referansı',['Geçen hafta aynı gün','Son 2 hafta aynı gün ort.','Son 30 gün aynı gün ort.'],horizontal=True,key='history_interval_reference')
+    st.markdown('### Haftanın Çağrı Yoğunluğu · 7 × 48')
+    slot_heatmap(table,value=method)
+    day=st.selectbox('Gün eğrisi',DAY_NAMES,key='history_interval_day')
+    selected=table[table.Gün==day].copy()
+    selected['Saat']=selected.Slot.map(lambda s:f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}')
+    st.line_chart(selected.set_index('Saat')[['Geçen hafta aynı gün','Son 2 hafta aynı gün ort.','Son 30 gün aynı gün ort.']])
+    st.caption('Bu görünüm çağrı adedidir; interval planlama ekranındaki dağılım yüzdesinden farklıdır. Eksik dilim boş gösterilir.')
+    with st.expander('30 dakikalık karşılaştırma tablosu'):
+        st.dataframe(table,hide_index=True,use_container_width=True)
+    st.download_button('30 dk Analiz CSV İndir',table.to_csv(index=False).encode('utf-8-sig'),'30dk_gecmis.csv','text/csv')
 
 
 def render():
-    st.title("Geçmişten Haftalık Çağrı Görünümü")
-    st.caption("Lag: önceki haftanın aynı günü. Rolling: son iki hafta ve son 30 gün içindeki aynı hafta günlerinin ortalaması. Bunlar geçmişe dayalı karşılaştırmalardır; model tahmini olarak etiketlenmez.")
-    raw = st.session_state.get("cf_all_df")
-    if raw is None or raw.empty:
-        st.info("Çağrı Tahmini → Veri Kaynağı ekranından çağrı geçmişini yükleyin veya Hazır Demo Veritabanı'nı kullanın.")
-        return
-    date_col = date_column(raw)
-    numeric = list(raw.select_dtypes(include="number").columns)
-    if not date_col or not numeric:
-        st.warning("Tarih ve sayısal çağrı sütunu gerekli.")
-        return
-    preferred = st.session_state.get("cf_target_name", "cagri_sayisi")
-    target = st.selectbox("Çağrı sayısı sütunu",numeric,index=numeric.index(preferred) if preferred in numeric else 0,key="history_target")
-    try:
-        history = daily_history(raw,target,date_col)
-        cutoff = st.date_input("Geçmiş veri kesimi",value=history.tarih.max().date(),
-                               min_value=history.tarih.min().date(),max_value=history.tarih.max().date(),key="history_cutoff")
-        next_monday = cutoff+timedelta(days=7-cutoff.weekday())
-        start = st.date_input("Karşılaştırılacak haftanın başlangıcı",value=next_monday,min_value=cutoff+timedelta(days=1),key="history_week_start")
-        table = weekday_comparison(history,start,7,cutoff)
-    except ValueError as exc:
-        st.error(str(exc))
-        return
-    st.caption(f"Yalnızca {cutoff} ve öncesindeki gerçekleşmeler kullanılır. Eksik geçmiş sıfır sayılmaz; örnek sayıları tabloda gösterilir.")
-    columns = ["Geçen hafta aynı gün","Son 2 hafta aynı gün ort.","Son 30 gün aynı gün ort."]
-    st.line_chart(table.set_index("Tarih")[columns])
-    st.dataframe(table,hide_index=True,use_container_width=True)
-    st.download_button("Hafta Karşılaştırması CSV İndir",table.to_csv(index=False).encode("utf-8-sig"),"hafta_gecmis_karsilastirma.csv","text/csv")
-    options = st.session_state.get("cf_forecast_options",[])
-    if options:
-        joined = table[["Tarih","Gün"]].copy()
-        for item in options:
-            joined = joined.merge(item["frame"][["tarih","y_pred"]].rename(columns={"tarih":"Tarih","y_pred":item["name"]}),how="left",on="Tarih")
-        st.markdown("### Aynı Günlerdeki Model Tahminleri")
-        st.dataframe(joined,hide_index=True,use_container_width=True)
-    st.markdown("### Son Dönemin Gerçekleşen Çağrıları")
-    tail = history[(history.tarih <= pd.Timestamp(cutoff)) & (history.tarih > pd.Timestamp(cutoff)-pd.Timedelta(days=60))].copy()
-    tail["7 günlük hareketli ortalama"] = tail.cagri_sayisi.rolling(7,min_periods=7).mean()
-    tail["30 günlük hareketli ortalama"] = tail.cagri_sayisi.rolling(30,min_periods=30).mean()
-    st.line_chart(tail.set_index("tarih"))
+    st.title('Geçmiş Hafta Analizi')
+    st.caption('Lag ve rolling referanslarını günlük toplamlar veya 30 dakikalık yoğunluk olarak karşılaştırın.')
+    sections('nav_history',{'Günlük':render_daily,'30 Dakikalık':render_interval})

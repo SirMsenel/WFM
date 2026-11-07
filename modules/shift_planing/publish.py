@@ -115,6 +115,23 @@ def render_engine():
         st.info("Plan oluşturmak için dönemi onayla, personel kaynağını ve grup sırasını kaydet, personel ihtiyacını hesapla.")
     else:
         st.write(f"**Plan dönemi:** {ctx['start']} → {ctx['end']}")
+        with st.expander('Otomatik alınan kayıtlar ve uygunluk kontrolü'):
+            try:
+                staff,fixed,_,unavailable,input_issues=collect_inputs(state)
+                inside=[r for r in fixed if str(ctx['start'])<=r['date']<=str(ctx['end'])]
+                unique={(r['employee_id'],r['date'],r['shift_code']):r for r in inside}
+                a,b,c=st.columns(3)
+                a.metric('Gece kayıtları',sum(r['shift_code']=='GECE' for r in unique.values()))
+                b.metric('Yıllık izin günleri',sum(r['shift_code']=='YILLIK_IZIN' for r in unique.values()))
+                c.metric('Uygunluk kaydı olan personel',len(unavailable))
+                st.caption('Gece ve yıllık izinler kayıtlı kaynaklardan otomatik alınır. Sınav, kişinin kullanıcı adı/employee_id eşleşmesiyle Sınav Takvimi içindeki Tarih alanından bulunur. Sınav bitişi belirtilmediği için o gün tamamen kapatılır; kayıt yoksa sınav var diye varsayılmaz.')
+                if unique:
+                    names={str(e['employee_id']):e.get('full_name') for e in staff}
+                    st.dataframe([{'Personel':names.get(r['employee_id'],r['employee_id']),**r} for r in unique.values()],hide_index=True,use_container_width=True)
+                if input_issues:
+                    st.dataframe(input_issues,hide_index=True,use_container_width=True)
+            except ValueError as exc:
+                st.error(str(exc))
     if st.button("Otomatik Vardiya Taslağı Oluştur", disabled=not bool(ready), key="planning_generate"):
         try:
             with st.spinner("Kurallar kontrol ediliyor, vardiyalar yerleştiriliyor..."):

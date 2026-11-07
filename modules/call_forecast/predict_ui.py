@@ -409,6 +409,7 @@ def render():
     if options:
         st.markdown("### Üretilen Tahminler")
         combined = pd.concat([o["frame"].set_index("tarih").y_pred.rename(o["name"]) for o in options],axis=1)
-        st.line_chart(combined)
+        from core.charts import daily_chart
+        daily_chart(combined.reset_index(),'tarih',list(combined.columns))
         st.dataframe(combined.reset_index(),hide_index=True,use_container_width=True)
         st.download_button("Dört Tahmini CSV İndir",combined.to_csv().encode("utf-8-sig"),"dort_model_tahmin.csv","text/csv")

@@ -157,13 +157,15 @@ def bootstrap(state, path=DEFAULT_DB):
         state['workspace_db_path']=str(path)
         save_keys(state)
     hydrate(state,path)
-    state.setdefault('employees_cache',[e for e in employees() if e['position']=='agent'])
+    if not state.get('employees_cache'):
+        state['employees_cache']=[e for e in employees() if e['position']=='agent']
     if state.get('cf_all_df') is None:
         load_demo_history(state,path=path)
     # Four genuine model fits per session; persisted forecasts stay intact.
     if not state.get('cf_model_candidates') and state.get('cf_last_filename','').startswith('SQLite'):
         from core.forecast_service import reference_models,forecast_candidates
-        reference_models(state,load_calls(path=path))
+        from core.data_cache import cached_calls,demo_model_snapshot
+        state.update(demo_model_snapshot(cached_calls(str(path))))
         if not state.get('cf_forecast_options'):
             ctx=state['plan_ctx']
             forecast_candidates(state,ctx['start'],ctx['end'])
@@ -171,9 +173,10 @@ def bootstrap(state, path=DEFAULT_DB):
         from core.forecast_service import activate_forecast
         first=state['cf_forecast_options'][0]
         activate_forecast(state,first['frame'],first['meta'])
-    if state.get('sp_active_ratio_profile_df') is None:
+    if state.get('sp_active_ratio_profile_df') is None and not state.get('demo_initial_profile_done'):
         from core.forecast_service import DAY_NAMES
-        df=load_calls(interval=True,path=path)
+        from core.data_cache import cached_calls
+        df=cached_calls(str(path),True)
         df['Gün']=df.tarih.dt.weekday.map(dict(enumerate(DAY_NAMES)))
         df['Slot']=df.slot
         grp=df.groupby(['Gün','Slot'],as_index=False).cagri_sayisi.sum()
@@ -183,7 +186,10 @@ def bootstrap(state, path=DEFAULT_DB):
         name='Demo · 2 yıllık 30 dk dağılım'
         state.update(sp_active_ratio_profile_df=profile,sp_active_ratio_profile_name=name,
                      sp_ratio_profiles=[{'name':name,'profile_df':profile,'created_at':datetime.now().isoformat(), 'meta':{'source':'SQLite demo'}}])
-    if state.get('sp_staffing_result_df') is None and state.get('sp_forecast_df') is not None and not state.get('demo_initial_staffing_done'):
+    if state.get('sp_active_ratio_profile_df') is not None:
+        state['demo_initial_profile_done']=True
+    if (state.get('sp_staffing_result_df') is None and state.get('sp_forecast_df') is not None
+            and state.get('sp_active_ratio_profile_df') is not None and not state.get('demo_initial_staffing_done')):
         from modules.shift_planner.staffing_forecast import calculate_staffing
         state['sp_staffing_result_df']=calculate_staffing(state['sp_forecast_df'],state['sp_active_ratio_profile_df'])
         state['plan_ctx_confirmed']=True

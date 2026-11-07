@@ -33,11 +33,11 @@ def _load_staffing_df():
 
 
 def render():
-    st.subheader("1) Plan Dönem Seçimi")
+    st.subheader('Plan Dönem Seçimi')
 
     df = _load_staffing_df()
     if df is None:
-        st.warning("Önce **📅 Mesai Planı → 4) Personel Hesap** adımında hesaplama yapmalısın.")
+        st.warning('Önce **📅 Mesai Planı → Personel Hesap** adımında hesaplama yapmalısın.')
         return
 
     all_dates = sorted(df["Tarih"].unique().tolist())

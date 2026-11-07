@@ -27,12 +27,12 @@ def render(profile=None):
     st.subheader("Mevcut Plan Ayarları")
     st.caption("Personel listesini görüntüle ve mesai yazma kurallarını belirle.")
 
-    tab1, tab2 = st.tabs(["👥 Personel Listesi", "🧩 Mesai Kuralları"])
+    part=st.segmented_control('Mevcut plan bölümü',['Personel Listesi','Mesai Kuralları'],default='Personel Listesi',key='nav_current_plan')
 
     # ==========================================================
     # TAB 1: Personel Listesi
     # ==========================================================
-    with tab1:
+    if part=='Personel Listesi':
         # ====== ÖZET ======
         try:
             s = _api_get("/employees/summary", token=token)
@@ -166,7 +166,7 @@ def render(profile=None):
     # ==========================================================
     # TAB 2: Mesai Kuralları
     # ==========================================================
-    with tab2:
+    if part=='Mesai Kuralları':
         # --- helpers ---
         def _init_rules():
             from core.defaults import default_shift_rules

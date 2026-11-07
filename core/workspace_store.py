@@ -15,7 +15,9 @@ STATE_KEYS = ("acad_schedules", "acad_exam_calendar", "acad_bayram_requests",
               "fixed_shift_records", "shift_overrides", "draft_shift_plan", "published_shift_plan",
               "shift_rules", "plan_group_priority", "cf_forecast_options", "sp_forecast_df", "sp_forecast_meta",
               "sp_ratio_profiles", "sp_active_ratio_profile_df", "sp_active_ratio_profile_name",
-              "sp_staffing_result_df", "plan_ctx", "plan_ctx_confirmed", "planning_class_term", "demo_initial_staffing_done")
+              "sp_staffing_result_df", "plan_ctx", "plan_ctx_confirmed", "planning_class_term", "demo_initial_staffing_done",
+              "sp_active_ratio_profile_meta", "interval_last_used_profile", "interval_used_profiles", "shift_edit_history", "plan_removed_assignments",
+              "demo_initial_profile_done")
 
 
 def _encode(value):
@@ -134,8 +136,10 @@ def hydrate(state, path=DEFAULT_DB):
             key, payload = row["key"], row["payload"]
             if key not in STATE_KEYS:
                 continue
-            state[key] = loads(payload)
-            baseline[key] = hashlib.sha256(payload.encode()).hexdigest()
+            digest=hashlib.sha256(payload.encode()).hexdigest()
+            if baseline.get(key)!=digest or key not in state:
+                state[key] = loads(payload)
+            baseline[key] = digest
     state["workspace_baseline"] = baseline
     state["workspace_hydrated_path"] = str(path)
     state["trk_requests"] = get_requests(path)

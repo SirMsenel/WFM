@@ -615,7 +615,8 @@ def render():
         # Trend grafik (Mutlak Hata%)
         st.markdown("#### 📈 Günlük Ortalama |Hata%| Trend")
         trend = daily_agg.sort_values("Tarih")[["Tarih", "Ortalama_Mutlak_Hata_Yuzde"]].set_index("Tarih")
-        st.line_chart(trend, height=220)
+        from core.charts import daily_chart
+        daily_chart(trend.reset_index(),'Tarih',list(trend.columns),height=220,y_title='Ortalama mutlak hata (%)')
 
         # En kötü / en iyi günler (Mutlak Hata% ile)
         worst = daily_agg.sort_values("Ortalama_Mutlak_Hata_Yuzde", ascending=False).head(10)

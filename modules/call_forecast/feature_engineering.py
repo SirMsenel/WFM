@@ -385,6 +385,19 @@ def apply_feature_pipeline(
 # ----------------------------
 # UI
 # ----------------------------
+def _set_feature_group(state_key, values, prefix, nonce, enabled):
+    current=[v for v in st.session_state.get(state_key,[]) if v not in values]
+    st.session_state[state_key]=current+(list(values) if enabled else [])
+    for value in values:
+        st.session_state[f'{prefix}{value}_{nonce}']=enabled
+
+
+def _group_actions(group,state_key,values,prefix,nonce):
+    a,b,_=st.columns([1,1,3])
+    a.button('Tümünü Seç',key=f'fe_all_{group}',on_click=_set_feature_group,args=(state_key,list(values),prefix,nonce,True))
+    b.button('Seçimi Temizle',key=f'fe_clear_{group}',on_click=_set_feature_group,args=(state_key,list(values),prefix,nonce,False))
+
+
 def render():
     _ensure_state()
     nonce = st.session_state.get("cf_reset_nonce", 0)
@@ -455,6 +468,7 @@ def render():
         "Ramazan Günleri": "Ramazan",
     }
 
+    _group_actions('date','cf_selected_features',features.values(),'cf_chk_',nonce)
     selected = st.session_state["cf_selected_features"]
 
     cols = st.columns(3)
@@ -481,6 +495,7 @@ def render():
             "Akşam Yoğunluğu (17–20)": "Slot_Evening",
         }
 
+        _group_actions('slot','cf_selected_features',slot_features.values(),'cf_slot_',nonce)
         cols = st.columns(3)
         for i, (label, key) in enumerate(slot_features.items()):
             checked = key in selected
@@ -504,6 +519,7 @@ def render():
         "Son Ödeme": "SON_ODEME",
     }
 
+    _group_actions('bank','cf_bank_features',bank_feature_map.values(),'cf_bank_',nonce)
     bank_selected = st.session_state["cf_bank_features"]
     cols = st.columns(3)
     for i, (label, key) in enumerate(bank_feature_map.items()):
@@ -560,6 +576,7 @@ def render():
     }
 
     if is_daily:
+        _group_actions('daily','cf_daily_features',daily_map.values(),'cf_daily_',nonce)
         cols = st.columns(3)
         for i, (label, key) in enumerate(daily_map.items()):
             checked = key in st.session_state["cf_daily_features"]
@@ -570,6 +587,7 @@ def render():
                 st.session_state["cf_daily_features"].remove(key)
 
     if is_intraday:
+        _group_actions('intraday','cf_slot_features',slot_map.values(),'cf_intr_',nonce)
         cols = st.columns(3)
         for i, (label, key) in enumerate(slot_map.items()):
             checked = key in st.session_state["cf_slot_features"]

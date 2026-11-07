@@ -181,6 +181,9 @@ def render():
         if st.button("⭐ Aktif Yap", use_container_width=True, key="sp_btn_activate"):
             st.session_state["sp_active_ratio_profile_name"] = pick
             st.session_state["sp_active_ratio_profile_df"] = df.copy()
+            st.session_state['sp_active_ratio_profile_meta']=meta
+            st.session_state['sp_staffing_result_df']=None
+            st.session_state['plan_ctx_confirmed']=False
             msg_slot.success("✅ Aktif profil güncellendi.")
 
     with c_del:
@@ -195,8 +198,13 @@ def render():
                 if st.session_state.get("sp_active_ratio_profile_name") == pick:
                     st.session_state["sp_active_ratio_profile_name"] = None
                     st.session_state["sp_active_ratio_profile_df"] = None
+                    st.session_state['sp_active_ratio_profile_meta']=None
+                    st.session_state['sp_staffing_result_df']=None
+                    st.session_state['plan_ctx_confirmed']=False
 
                 msg_slot.success("🗑️ Profil silindi.")
+                from core.workspace_store import save_keys
+                save_keys(st.session_state)
                 st.rerun()
     
     st.markdown("---")
@@ -211,13 +219,6 @@ def render():
     # ----------------------------
     # Görselleştirme alanı (sekme)
     # ----------------------------
-    t1, t2, t3 = st.tabs(["📈 Çizgi (Gün Seç)", "🟧 Heatmap", "📋 Gün Tabloları"])
-
-    with t1:
-        _render_day_line(df, key_prefix="sp_registry")
-
-    with t2:
-        _render_heatmap(df)
-
-    with t3:
-        _render_day_tables(df)
+    from core.navigation import sections
+    sections('nav_ratio_registry',{'Gün Dağılımı':lambda:_render_day_line(df,key_prefix='sp_registry'),
+                                  'Isı Haritası':lambda:_render_heatmap(df),'Gün Tabloları':lambda:_render_day_tables(df)})
