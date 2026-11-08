@@ -1,23 +1,25 @@
 # WFM
 
+Güncel kurulum: [ILK-OKU.txt](ILK-OKU.txt). Türkçe kaynaklar: [DOSYA_HARITASI.md](DOSYA_HARITASI.md). Kurum API/veritabanı hazırlığı ve sınırları: [KURUMSAL_BAGLANTI.md](KURUMSAL_BAGLANTI.md). Eski İngilizce Python dosyaları geriye uyumluluk yönlendirmeleridir.
+
 Python 3.10+ gerekir. Proje kökünde:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn backend:app --host 127.0.0.1 --port 8001
+uvicorn sunucu:app --host 127.0.0.1 --port 8001
 ```
 
 Ayrı terminalde aynı sanal ortamla:
 
 ```bash
-streamlit run ui.py
+streamlit run arayuz.py
 ```
 
 Varsayılan API adresi `http://127.0.0.1:8001`; `BACKEND_URL` ile değiştirilebilir.
 Mevcut demo giriş bilgileri giriş ekranında listelenir. Otomatik plan oluşturma
-WFM, yönetici ve moderatör rolleri içindir.
+Planlama, Yönetici ve Müdür rolleri içindir.
 
 ## Otomatik vardiya planlama
 
@@ -25,14 +27,11 @@ WFM, yönetici ve moderatör rolleri içindir.
    30 dakikalık personel ihtiyacını hesapla.
 2. Vardiya Planı → Plan Dönem Seçimi ekranında dönemi onayla.
 3. Mevcut Plan → Mesai Kuralları bölümündeki grup kurallarını ayarla.
-4. Oluştur & Kontrol & Yayınla bölümünden personelleri API'den al veya CSV/XLSX
-   yükle. Zorunlu sütunlar `employee_id`, `full_name`, `work_type`;
-   talep/ders/sınav kayıtları için mevcut hesapla aynı `username` de gerekli.
-   Çalışma tipleri: `fulltime`, `akademi`, `dis_kaynak`. Kimlikler benzersiz olmalı.
+4. Personeller yerel personel deposundan veya yapılandırılmış kurum personel adaptöründen alınır. Sicil, kullanıcı adı ve sabit iç kimlik eşleşmesi gereklidir. Çalışma tipleri `fulltime`, `akademi`, `dis_kaynak`.
 5. Tüm Vardiyalar → Gece / Yıllık İzin ekranlarında kesin kayıtları gir.
    Talepler bölümünden son kararları ver; WFM/TL kuyruğunda bekleyen talepler
    uygulanmaz. Vardiya Saatleri bölümünden elle atamalar yapılabilir.
-6. Oluştur bölümünde grup sırasını kaydet ve varsa ders dönemini seç.
+6. Oluştur bölümünde grup sırasını belirle. Ders dönemi tarihe göre seçilir; varsa sınav takvimi uygulanır. Bayram önceliği ve yaz ayları Mesai Kuralları üzerinden belirlenir.
    **Otomatik Vardiya Taslağı Oluştur** düğmesine bas.
 7. 30 dakikalık ihtiyaç/atama/eksik/fazla tablosunu ve çakışmaları incele.
    Taslak Vardiya Saatleri ekranına aktarılır. Elle değiştirdikten sonra yeniden

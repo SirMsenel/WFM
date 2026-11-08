@@ -1,8 +1,4 @@
-import streamlit as st
-from core.request_ui import render_center
-
-
-def render():
-    st.subheader('Talep Durumu ve Sonuçları')
-    st.caption('Talebin şu an kimde olduğunu, gönderilen içeriği, değerlendirme notlarını ve tüm işlem adımlarını takip et.')
-    render_center('all','tracking_requests')
+"""Uyumluluk dosyası. Asıl kod: modules/takip/talep_sonuclari.py"""
+import importlib as _importlib
+import sys as _sys
+_sys.modules[__name__] = _importlib.import_module('modules.takip.talep_sonuclari')

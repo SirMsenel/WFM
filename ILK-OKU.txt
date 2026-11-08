@@ -12,17 +12,33 @@ WFM — GÜNCEL SÜRÜM / macOS BAŞLANGIÇ
    python -m pip install -r requirements.txt
 
 5. İlk terminalde:
-   python -m uvicorn backend:app --host 127.0.0.1 --port 8001
+   python -m uvicorn sunucu:app --host 127.0.0.1 --port 8001
 
 6. Aynı klasörde ikinci terminal aç, ortamı etkinleştir ve çalıştır:
    source .venv/bin/activate
-   python -m streamlit run ui.py --server.port 8501
+   python -m streamlit run arayuz.py --server.port 8501
 
 7. http://localhost:8501 adresini aç. Demo hesap: moderator / 1234
    Yalnızca tarayıcıyı yenilemek eski klasörden çalışan uygulamayı güncellemez.
    Windows ortam etkinleştirme: .venv\Scripts\activate
 
 BU SÜRÜMDE
+- Türkçe kaynak dosyaları: arayuz.py, sunucu.py, modules/vardiya_plani vb.
+  DOSYA_HARITASI.md asıl dosyaları gösterir. Eski dosyalar uyumluluk içindir.
+- Son ödeme takviminin Mesai Planı'nda kalan eski hesabı da ortak takvime bağlandı.
+- Plan dönemi 1–93 gün; daha uzun dönem için önce tahmin ve ihtiyacı o aralıkta üret.
+- Plan dönem kartlarında minimum, ortalama ve zirve ihtiyaç; kutulu gün/tarih başlıkları.
+- Mesai Kuralları: ihtiyaca göre OFF dağılımı, grup minimum OFF, esnek üst süre,
+  yaz dönemi ve bayram önceliği. Kaydet ve Uygula ile etkinleştir.
+- Eksik listesi altından Uygun Aksiyonları Bul: uygun boş güne mesai veya süre uzatma.
+- Sicil no ve kullanıcı adı; personel ekleme/ayrılma TL → Yönetici → Planlama.
+- Tüm Vardiyalar → Değişim Alanı: gerekçe zorunlu; OFF/saat koruyan değişimler.
+  Erken/geç giriş ve izinler ayrı işlem türleri. Rapor girişi yalnızca Takım Lideri.
+- Yayındaki vardiya değişim talebi onaylanınca tablo ve denetim kaydı birlikte güncellenir.
+- Veri ve Kayıt Merkezi: Planlama, Yönetici, Müdür. Ayarlar yetkilerini Planlama yönetir.
+- Sentetik alanda bir geçmiş haftanın tahmin/dağılım örneği otomatik hazırlanır;
+  geriye dönük örnek olduğu açıkça belirtilir. Gerçek operasyon başarısı sayılmaz.
+- Kurum bağlantıları hazırlığı ve henüz gereken sözleşmeler KURUMSAL_BAGLANTI.md'de.
 - Geçmiş Hafta Analizi > Güncel Takip: 48 yarım saatte tahmin, gerçekleşen, fark ve hata.
   Ekran 30 saniyede bir yenilenir. Gerçekleşenler CSV/Excel veya servisle beslenebilir.
 - Kullanılan tahminler ve dağılımlar SQLite'ta sürümlü, geçmişi silinmeden saklanır.
@@ -37,7 +53,7 @@ BU SÜRÜMDE
 - Aynı tarih/dil kapsamına ikinci yayın yapılamaz. Yayın Yönetimi'nden önce geri al
   veya düzenlemek için taslağa taşı. Diğer dillerin yayınları korunur, eski sürüm arşivlenir.
 - Onaylı vardiya/izin talepleri otomatik alınır; iki taraflı değişimler onay anında sabitlenir.
-  Genel talepler vardiya oluşturmaz. Yayındaki tablo kendiliğinden değiştirilmez.
+  Genel talepler vardiya oluşturmaz. Yayındaki dengeli değişim onayla ve denetim kaydıyla uygulanır.
 - Talep araması düzeltildi; içerik ve işlem geçmişi daha sade gösterilir.
 - Takım lideri ders/sınav ekranında kendi ekibini; WFM/yönetici bütün personelleri görür.
 - Önceki Ekrana Dön düğmesi ve alt ekran seçiminin korunması eklendi.

@@ -1,8 +1,4 @@
-import streamlit as st
-from core.request_ui import render_center
-
-
-def render():
-    st.subheader('Planlama Talep Merkezi')
-    st.caption('Takım liderinin onaylayıp ilettiği kayıtlar burada değerlendirilir. Onaylanan kayıtlar otomatik vardiya motoruna aktarılır; içerik ve işlem geçmişi tüm ekranlarda aynıdır.')
-    render_center('planning','planning_requests')
+"""Uyumluluk dosyası. Asıl kod: modules/vardiya_plani/talepler.py"""
+import importlib as _importlib
+import sys as _sys
+_sys.modules[__name__] = _importlib.import_module('modules.vardiya_plani.talepler')
