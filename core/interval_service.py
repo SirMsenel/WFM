@@ -189,6 +189,16 @@ def build_weekly_distribution(raw,week_start,dt_col='tarih',calls_col='cagri_say
 
 def record_used_profile(state,forecast,profile):
     """Record the profile actually consumed by staffing, rather than previewed."""
+    if state.get('workspace_db_path'):
+        from core.forecast_ledger import capture_forecast
+        run=capture_forecast(state,forecast,profile)
+        from core.forecast_ledger import capture_profile
+        dated=[]
+        for day in pd.to_datetime(forecast.tarih):
+            part=profile[profile.Gün==DAY_NAMES[day.weekday()]].copy()
+            if 'Tarih' in part:part=part[pd.to_datetime(part.Tarih).dt.normalize()==day.normalize()]
+            part['Tarih']=day;dated.append(part)
+        capture_profile(state,pd.concat(dated,ignore_index=True),{'name':state.get('sp_active_ratio_profile_name'),'usage':'staffing','forecast_run':run})
     used=dict(state.get('interval_used_profiles',{}))
     dates=pd.to_datetime(forecast.tarih).dt.normalize()
     for monday in sorted({d-pd.Timedelta(days=d.weekday()) for d in dates}):

@@ -273,63 +273,10 @@ def apply_feature_pipeline(
     else:
         fe_df.drop(columns=["MTV_Donem_Etkisi"], inplace=True, errors="ignore")
 
-    if "EKSTRE_KESIM" in selected_bank_features:
-        day = dt.dt.day
-        last_day_in_month = dt.dt.days_in_month
-
-        is_kesim = day.isin([9, 16, 24])
-
-        # 31 çeken aylarda 31'inde kesim
-        is_kesim |= (day == 31) & (last_day_in_month == 31)
-
-        # 1 Mart kuralı: Şubat 28/29'un ertesi günüyse kesim
-        prev = dt - pd.Timedelta(days=1)
-        prev_last = prev.dt.days_in_month
-
-        is_kesim |= (
-            (day == 1) &
-            (prev.dt.month == 2) &          # bir önceki ay Şubat
-            (prev.dt.day == prev_last)      # bir önceki gün Şubat'ın son günü (28 veya 29)
-        )
-
-        fe_df["EKSTRE_KESIM"] = is_kesim.astype(int)
-    else:
-        fe_df.drop(columns=["EKSTRE_KESIM"], inplace=True, errors="ignore")
-
-    if "SON_ODEME" in selected_bank_features:
-        all_son_odeme = set()
-        year_min = int(dt.dt.year.min())
-        year_max = int(dt.dt.year.max())
-
-        for yy in range(year_min - 1, year_max + 2):
-            for mm in range(1, 13):
-                ld = calendar.monthrange(yy, mm)[1]
-                kesimler = [9, 16, 24]
-                if ld == 31:
-                    kesimler.append(31)
-                elif ld == 29 and mm == 2:
-                    kesimler.append(29)
-                elif ld in [28, 30]:
-                    next_month = pd.Timestamp(yy, mm, ld) + pd.Timedelta(days=1)
-                    kesimler.append(int(next_month.day))
-
-                for k in kesimler:
-                    try:
-                        kesim_tarihi = pd.Timestamp(yy, mm, k)
-                    except Exception:
-                        continue
-
-                    son_odeme = kesim_tarihi + pd.Timedelta(days=9)
-                    if son_odeme.weekday() == 5:
-                        son_odeme += pd.Timedelta(days=2)
-                    elif son_odeme.weekday() == 6:
-                        son_odeme += pd.Timedelta(days=1)
-
-                    all_son_odeme.add(son_odeme.date())
-
-        fe_df["SON_ODEME"] = dt.dt.date.isin(all_son_odeme).astype(int)
-    else:
-        fe_df.drop(columns=["SON_ODEME"], inplace=True, errors="ignore")
+    from core.billing_calendar import billing_flag
+    for feature,kind in [('EKSTRE_KESIM','cut'),('SON_ODEME','due')]:
+        if feature in selected_bank_features:fe_df[feature]=billing_flag(dt,kind)
+        else:fe_df.drop(columns=[feature],inplace=True,errors='ignore')
 
     # ----------------------------
     # Lag / Roll (opsiyonel)

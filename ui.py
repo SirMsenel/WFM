@@ -30,6 +30,7 @@ from modules.shift_planing.current_plan import render as render_current_plan
 from modules.shift_planing.requests_tab import render as render_requests_tab
 from modules.shift_planing.shift_hours import render as render_shift_hours
 from modules.shift_planing.publish import render as render_publish
+from modules.shift_planing.publication_management import render as render_publication_management
 
 # ---------------- Tracking ----------------
 from modules.tracking.my_shift import render as render_my_shift
@@ -328,9 +329,15 @@ with st.sidebar:
             )
         else:
             if st.button(page, use_container_width=True, key=f"menu_{page}"):
-                st.session_state["main_page"] = page
+                from core.navigation import navigate
+                navigate(st.session_state,page)
                 st.rerun()
 
+if st.session_state.get('navigation_history'):
+    from core.navigation import go_back
+    if st.sidebar.button('← Önceki Ekrana Dön',key='go_previous'):
+        go_back(st.session_state);st.rerun()
+st.markdown('<style>.stMainBlockContainer{padding-top:1rem!important}h1{padding-top:.15rem!important}</style>',unsafe_allow_html=True)
 main = st.session_state["main_page"]
 
 
@@ -352,7 +359,7 @@ elif main == "🗓️ Vardiya Planı":
     st.title(main)
     sections('nav_roster',{'Plan Dönem Seçimi':render_plan_period,'Mevcut Plan':render_current_plan,
                           'Talepler':render_requests_tab,'Vardiya Saatleri':render_shift_hours,
-                          'Oluştur & Kontrol & Yayınla':render_publish})
+                          'Oluştur & Kontrol & Yayınla':render_publish,'Yayın Yönetimi':render_publication_management})
 elif main == "📈 Geçmiş Hafta Analizi":
     render_history_comparison()
 elif main == "🧪 Demo Veritabanı":

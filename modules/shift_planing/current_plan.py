@@ -366,3 +366,5 @@ def render(profile=None):
             from core.rule_service import apply_rules
             changed=apply_rules(st.session_state,rules,sync)
             st.success(f'Mesai kuralları kaydedildi ve uygulandı. {changed} gece kaydının saati güncellendi. Otomatik taslağı yeniden oluşturun.')
+            from core.night_checks import show_night_popup
+            show_night_popup(st.session_state)

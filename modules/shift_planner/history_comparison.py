@@ -42,13 +42,14 @@ def render_daily():
     tail=history[history.tarih<=pd.Timestamp(cutoff)].set_index('tarih').asfreq('D').reset_index()
     st.markdown('### Hafta İçi ve Hafta Sonu Hareketli Ortalamaları')
     tail=grouped_rolling(tail)
-    st.caption('7 ve 30 takvim günü içindeki yalnızca aynı gün türü kullanılır. Hafta içi değerleri hafta sonu ortalamasına katılmaz; eksik günler sıfır sayılmaz.')
+    st.caption('Her gün kendi içinde hesaplanır: Pazartesi için son 7/30 Pazartesi, Salı için son 7/30 Salı gibi. Eksik günler sıfır sayılmaz; iki grafik yalnızca hafta içi/hafta sonu görünümüdür.')
     columns=st.columns(2)
     for col,kind in zip(columns,['Hafta içi','Hafta sonu']):
         with col:
             st.markdown('**'+kind+'**')
             selected=tail[(tail['Gün türü']==kind)&(tail.tarih>tail.tarih.max()-pd.Timedelta(days=60))]
-            daily_chart(selected,'tarih',['cagri_sayisi','7 günlük hareketli ortalama','30 günlük hareketli ortalama'],height=260)
+            selected=selected.rename(columns={'7 günlük hareketli ortalama':'Son 7 aynı hafta günü ort.','30 günlük hareketli ortalama':'Son 30 aynı hafta günü ort.'})
+            daily_chart(selected,'tarih',['cagri_sayisi','Son 7 aynı hafta günü ort.','Son 30 aynı hafta günü ort.'],height=260)
 
 
 def grouped_rolling(history):
@@ -56,8 +57,8 @@ def grouped_rolling(history):
     out['Gün türü']=np.where(out.tarih.dt.weekday<5,'Hafta içi','Hafta sonu')
     for days in (7,30):
         out[f'{days} günlük hareketli ortalama']=np.nan
-        for _,part in out.groupby('Gün türü'):
-            values=part.set_index('tarih').cagri_sayisi.rolling(f'{days}D',min_periods=1).mean()
+        for _,part in out.groupby(out.tarih.dt.weekday):
+            values=part.cagri_sayisi.rolling(days,min_periods=1).mean()
             out.loc[part.index,f'{days} günlük hareketli ortalama']=values.to_numpy()
     return out
 
@@ -69,7 +70,8 @@ def interval_references(raw,start,cutoff):
     rows=[]
     for day in pd.date_range(start,periods=7):
         last=counts.reindex([day-pd.Timedelta(days=7)]).iloc[0]
-        two=counts.reindex([day-pd.Timedelta(days=7),day-pd.Timedelta(days=14)]).mean()
+        same=counts[(counts.index.weekday==day.weekday())&(counts.index<day)]
+        two=same.tail(2).mean()
         month=counts[(counts.index>pd.Timestamp(cutoff)-pd.Timedelta(days=30))&(counts.index.weekday==day.weekday())].mean()
         for slot in range(1,49):
             rows.append({'Tarih':day,'Gün':DAY_NAMES[day.weekday()],'Slot':slot,'Geçen hafta aynı gün':last[slot],
@@ -77,7 +79,7 @@ def interval_references(raw,start,cutoff):
     return pd.DataFrame(rows)
 
 
-def render_interval():
+def render_interval_references():
     from core.data_cache import cached_calls
     from core.workspace_store import DEFAULT_DB
     from core.interval_service import prepare_intervals
@@ -108,6 +110,9 @@ def render_interval():
 
 
 def render():
-    st.title('Geçmiş Hafta Analizi')
+    st.title('📈 Geçmiş Hafta Analizi')
     st.caption('Lag ve rolling referanslarını günlük toplamlar veya 30 dakikalık yoğunluk olarak karşılaştırın.')
-    sections('nav_history',{'Günlük':render_daily,'30 Dakikalık':render_interval})
+    from modules.shift_planner.performance_tracking import render_current,render_accuracy
+    def interval():
+        sections('nav_interval_history',{'Dağılım Başarısı':render_accuracy,'Geçmiş Referanslar':render_interval_references})
+    sections('nav_history',{'Güncel Takip':render_current,'Günlük':render_daily,'30 Dakikalık':interval})

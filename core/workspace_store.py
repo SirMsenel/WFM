@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "wfm_demo.db"
-STATE_KEYS = ("planning_exclude_early_hours", "planning_languages", "group_hour_targets", "acad_schedules", "acad_exam_calendar", "acad_bayram_requests",
+STATE_KEYS = ("planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "acad_schedules", "acad_exam_calendar", "acad_bayram_requests",
               "fixed_shift_records", "shift_overrides", "draft_shift_plan", "published_shift_plan",
               "shift_rules", "plan_group_priority", "cf_forecast_options", "sp_forecast_df", "sp_forecast_meta",
               "sp_ratio_profiles", "sp_active_ratio_profile_df", "sp_active_ratio_profile_name",
@@ -98,6 +98,8 @@ def put_request(row, expected_version=None, path=DEFAULT_DB):
                     raise ValueError("Gönderilen talep içeriği değiştirilemez; yeni bir kayıt oluşturun.")
             if row.get("events", [])[:len(old.get("events", []))] != old.get("events", []):
                 raise ValueError("İşlem geçmişi değiştirilemez.")
+            if old.get('resolved_assignments') is not None and row.get('resolved_assignments')!=old.get('resolved_assignments'):
+                raise ValueError('Onaylanan vardiya değişiminin saatleri değiştirilemez.')
             version = expected_version+1
         row["version"] = version
         con.execute("INSERT INTO requests VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,payload=excluded.payload",

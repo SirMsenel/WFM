@@ -119,6 +119,9 @@ def act(state, request, action, note=""):
     elif action in {"apply","reject"} and role in {"wfm","manager","moderator"} and queue=="WFM":
         if action == "reject" and not note.strip():
             raise ValueError("Ret gerekçesi yazın.")
+        if action=="apply" and request.get("type")=="Vardiya Değişim Talebi":
+            from core.request_assignments import resolve_swap
+            new["resolved_assignments"]=resolve_swap(state,request)
         status,new_queue,label = (("Onaylandı","Closed","Planlama onayladı; plana alınacak") if action=="apply"
                                   else ("Reddedildi","Closed","Planlama reddetti"))
     else:

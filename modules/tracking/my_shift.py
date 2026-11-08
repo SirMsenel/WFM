@@ -3,7 +3,7 @@ import os
 import requests
 import hashlib
 import calendar
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from modules.shift_planing.engine import bounds
 
 import pandas as pd
@@ -475,123 +475,87 @@ def _academy_wage_ui(total_hours: float, dense_hours: float, normal_hours: float
 # -------------------------
 # Employee picker
 # -------------------------
-def _employee_picker_if_allowed(current_profile: dict) -> dict:
+def _employee_picker_if_allowed(current_profile):
     if not _can_pick_employee(current_profile):
+        st.markdown('#### Personel')
+        st.write(_fullname(current_profile));st.caption('Yalnızca kendi vardiyan ve bilgilerin görüntülenir.')
         return current_profile
-
-    with st.container(border=True):
-        st.markdown("#### 👥 Personel Seç (Sadece Agent)")
-        q = st.text_input("Ara (isim / TL / manager)", key="trk_emp_search", placeholder="örn: ahmet, ayşe, mehmet...")
-
-        token = st.session_state.get("auth_token")
-        try:
-            res = _api_get(
-                "/employees/query",
-                token=token,
-                params={
-                    "search": q or None,
-                    "position": "agent",
-                    "limit": 50,
-                    "offset": 0,
-                },
-            )
-            items = res.get("items", []) or []
-        except Exception as e:
-            st.error(f"Personel listesi alınamadı: {e}")
-            items = []
-
-        if not items:
-            st.info("Agent bulunamadı.")
-            return current_profile
-
-        def _fmt(emp: dict) -> str:
-            return f"{emp.get('full_name','')} | {emp.get('location','')} | {emp.get('work_type','')} | TL: {emp.get('team_lead','-')}"
-
-        selected = st.selectbox("Agent", options=items, format_func=_fmt, key="trk_emp_selected")
-
-    return {
-        "username": str(selected.get("employee_id")),
-        "employee_id": selected.get("employee_id"),
-        "full_name": selected.get("full_name"),
-        "position": selected.get("position"),
-        "work_type": selected.get("work_type"),
-        "team_lead": selected.get("team_lead"),
-        "manager": selected.get("manager"),
-        "location": selected.get("location"),
-        "language": selected.get("language"),
-        "is_superuser": True,
-    }
+    from core.personnel import get_people,visible_people
+    st.markdown('#### Personel Seç')
+    query=st.text_input('Ara (isim / TL / manager)',key='trk_emp_search')
+    items=visible_people(current_profile,get_people(st.session_state))
+    items=[e for e in items if not query or query.casefold() in ' '.join(str(e.get(k,'')) for k in ['full_name','team_lead','manager','username']).casefold()]
+    if not items:st.info('Bu kapsamda personel bulunamadı.');return None
+    people={str(e['employee_id']):e for e in items}
+    selected=st.selectbox('Personel',list(people),format_func=lambda i:people[i]['full_name'],key='trk_emp_selected_id')
+    return people[selected]
 
 
-# -------------------------
-# Main render
-# -------------------------
+def _compact_period():
+    from zoneinfo import ZoneInfo
+    now=datetime.now(ZoneInfo('Europe/Istanbul')).date()
+    first=now.replace(day=1);last=now.replace(day=calendar.monthrange(now.year,now.month)[1])
+    selected=st.date_input('Vardiya tarih aralığı',value=(first,last),key='my_shift_range_v2')
+    if len(selected)!=2:st.info('Başlangıç ve bitiş tarihini seçin.');return None
+    return selected
+
+
 def render():
-    current = _profile()
-    _inject_css()
-
-    target = _employee_picker_if_allowed(current)
-
-    st.subheader("🧍 Benim Vardiyam")
-    _person_card(target)
-
-    academy = _is_academy(target)
-
-    tab1, tab2 = st.tabs(["📅 Vardiya", "🏫 Akademi Ücret"])
-
-    with tab1:
-        year, month, start, end = _period_selector()
-
-        published = [r for r in st.session_state.get("published_shift_plan", [])
-                     if str(r.get("employee_id")) == str(target.get("employee_id"))
-                     and str(r.get("date", "")).startswith(f"{year}-{month:02d}")]
-        if not published:
-            st.info("Bu personel ve ay için yayınlanmış vardiya planı yok.")
-            return
-        rows = []
-        for record in published:
-            interval = bounds(record)
-            hours = (interval[1]-interval[0]).total_seconds()/3600 if interval else 0.0
-            rows.append({"date": date.fromisoformat(record["date"]), "status": "WORK" if interval else record["shift_code"],
-                         "start": record.get("start"), "end": record.get("end"), "hours": hours})
-        df_month = pd.DataFrame(rows)
-        df = df_month[(df_month["date"] >= start) & (df_month["date"] <= end)].copy()
-
-        st.divider()
-        total_hours, dense_hours, normal_hours = _kpis(df, academy=academy)
-        st.divider()
-        _schedule_table(df)
-
-        st.session_state["my_shift_last_totals"] = {
-            "total_hours": total_hours,
-            "dense_hours": dense_hours,
-            "normal_hours": normal_hours,
-            "year": year,
-            "month": month,
-            "start": str(start),
-            "end": str(end),
-            "academy": academy,
-        }
-
-    with tab2:
-        totals = st.session_state.get("my_shift_last_totals") or {}
-        if not totals.get("academy", False):
-            st.warning("Bu sekme sadece **Akademi (work_type=akademi)** kullanıcıları için aktif.")
-            return
-
+    from html import escape
+    from core.shift_display import shift_stats,WINDOWS,cell_style
+    from core.planning import SHIFT_LABELS
+    from core.forecast_service import DAY_NAMES
+    current=_profile();_inject_css();st.subheader('🧍 Benim Vardiyam')
+    left,right=st.columns([1,1.4])
+    with left:target=_employee_picker_if_allowed(current)
+    if not target:return
+    with right:
         with st.container(border=True):
-            st.markdown("#### 📌 Seçili Dönem")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.write(f"**Yıl/Ay:** {totals.get('year','-')}/{totals.get('month','-')}")
-            with c2:
-                st.write(f"**Başlangıç:** {totals.get('start','-')}")
-            with c3:
-                st.write(f"**Bitiş:** {totals.get('end','-')}")
-
-        st.divider()
-        _academy_wage_ui(
-            total_hours=float(totals.get("total_hours", 0.0)),
-            dense_hours=float(totals.get("dense_hours", 0.0)),
-            normal_hours=float(totals.get("normal_hours", 0.0)),
-        )
+            st.markdown('#### '+escape(_fullname(target)))
+            st.caption(f"{target.get('location') or '—'} · {target.get('work_type') or '—'} · {target.get('language') or '—'}")
+            st.write('Takım lideri: '+str(target.get('team_lead') or '—'))
+            st.caption('Personel No: '+str(target.get('employee_id')))
+    selected=_compact_period()
+    if not selected:return
+    start,end=selected
+    records=[r for r in st.session_state.get('published_shift_plan',[]) if str(r.get('employee_id'))==str(target.get('employee_id')) and str(start-timedelta(days=1))<=str(r.get('date'))<=str(end)]
+    if not records:st.info('Bu personel ve tarih aralığı için yayınlanmış vardiya yok.');return
+    summary=shift_stats(records,start,end);counts=summary['status_counts']
+    cards=[('Toplam saat',f"{summary['total_hours']:.1f}"),('Çalıştığı gün',summary['work_days']),('OFF',summary['off_days']),('Rapor',counts.get('RAPOR',0)),('Yıllık izin',counts.get('YILLIK_IZIN',0)),('Diğer izin',sum(v for k,v in counts.items() if k not in {'OFF','RAPOR','YILLIK_IZIN'}))]
+    for col,(label,value) in zip(st.columns(6),cards):
+        with col.container(border=True):st.metric(label,value)
+    st.markdown('#### Günün Saatlerine Göre Çalışma')
+    columns=st.columns(5)
+    for col,(name,hint,_,__,bg,fg) in zip(columns,WINDOWS):
+        with col:
+            st.markdown(f'<div style="background:linear-gradient(135deg,{bg},#fff);border:1px solid {bg};border-radius:20px;padding:20px;text-align:center;color:{fg}"><b>{name}</b><div style="font-size:28px;font-weight:750;margin:8px 0">{summary["parts"][name]:.1f} sa</div><small>{hint}</small></div>',unsafe_allow_html=True)
+    with columns[4]:st.markdown(f'<div style="background:linear-gradient(135deg,#2c2554,#5b4b91);border-radius:20px;padding:20px;text-align:center;color:white"><b>Gece adedi</b><div style="font-size:28px;font-weight:750;margin:8px 0">{summary["night_count"]}</div><small>Geceye girilen vardiya</small></div>',unsafe_allow_html=True)
+    st.caption('Saatler yalnızca seçili tarih aralığına düşen gerçek süredir. Gece adedi GECE kodlu, 00:00–07:00 arasında başlayan veya gece yarısını aşan vardiyaları sayar; normal 07:00 girişleri sayılmaz.')
+    if counts:
+        st.caption('Statü günleri: '+' · '.join(f"{SHIFT_LABELS.get(k,k)}: {v}" for k,v in counts.items()))
+    st.markdown('### Vardiya Tablosu')
+    output=[]
+    for r in sorted(records,key=lambda r:r['date']):
+        interval=bounds(r)
+        hours=0.
+        if interval:
+            a=max(pd.Timestamp(interval[0]),pd.Timestamp(start));b=min(pd.Timestamp(interval[1]),pd.Timestamp(end)+pd.Timedelta(days=1));hours=max(0.,(b-a).total_seconds()/3600)
+            if not hours:continue
+        elif str(r['date'])<str(start):continue
+        code=r.get('shift_code');label=SHIFT_LABELS.get(code,code)
+        if interval and code!='GECE':
+            hour=interval[0].hour;part='Sabah' if 8<=hour<13 else 'İkindi' if 13<=hour<17 else 'Akşam' if hour>=17 else 'Gece'
+            label+=' · '+part
+        output.append({'Tarih':r['date'],'Gün':DAY_NAMES[pd.Timestamp(r['date']).weekday()],'Durum':label,'Başlangıç':r.get('start') or '—','Bitiş':r.get('end') or '—','Saat':round(hours,2)})
+    view=pd.DataFrame(output)
+    st.dataframe(view.style.map(cell_style,subset=['Durum','Başlangıç','Bitiş']),hide_index=True,use_container_width=True,height=520)
+    if _is_academy(target):
+        with st.expander('Akademi Ücret Hesabı'):
+            dense=0.
+            for record in records:
+                interval=bounds(record)
+                if not interval:continue
+                for day in pd.date_range(start,end):
+                    a=max(pd.Timestamp(interval[0]),day+pd.Timedelta(hours=11));b=min(pd.Timestamp(interval[1]),day+pd.Timedelta(days=1))
+                    if b>a:dense+=(b-a).total_seconds()/3600
+            _academy_wage_ui(summary['total_hours'],dense,max(0,summary['total_hours']-dense))

@@ -621,3 +621,32 @@ def auth_demo_users(limit: int = 20):
         """, (int(limit),))
         rows = [dict(r) for r in cur.fetchall()]
         return {"items": rows, "default_password": "1234"}
+
+
+def _planning_role(user):
+    if str(user.get('position') or '').lower() not in {'wfm','manager','moderator'}:
+        raise HTTPException(status_code=403,detail='Bu servis planlama rollerine açıktır.')
+
+
+@app.get('/forecast-ledger/runs')
+def forecast_ledger_runs(user: Dict[str,Any] = Depends(_auth_required)):
+    _planning_role(user)
+    from core.forecast_ledger import runs
+    return {'items':runs()}
+
+
+@app.get('/forecast-ledger/runs/{run_id}/slots')
+def forecast_ledger_slots(run_id: str,user: Dict[str,Any] = Depends(_auth_required)):
+    _planning_role(user)
+    import json
+    from core.forecast_ledger import slots
+    return {'items':json.loads(slots(run_id).to_json(orient='records'))}
+
+
+@app.post('/actuals/intervals')
+def actual_intervals(body: Dict[str,Any],user: Dict[str,Any] = Depends(_auth_required)):
+    _planning_role(user)
+    import pandas as pd
+    from core.forecast_ledger import ingest_actuals
+    try:return {'updated':ingest_actuals(pd.DataFrame(body.get('rows',[])))}
+    except (ValueError,TypeError) as exc:raise HTTPException(status_code=400,detail=str(exc))

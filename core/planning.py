@@ -47,8 +47,15 @@ def preview_plan(state,include_auto=False):
     exam_keys=set()
     for eid,blocks in unavailable.items():
         for begin,finish in blocks:
-            if (finish-begin).total_seconds()==86400 and start<=str(begin.date())<=end:
-                exam_keys.add((eid,str(begin.date())))
+            if (finish-begin).total_seconds()==86400 and start<=str(begin.date())<=end:exam_keys.add((eid,str(begin.date())))
+    if state.get('planning_exam_hours'):
+        users={e.get('username'):str(e['employee_id']) for e in staff}
+        for user,terms in state.get('acad_exam_calendar',{}).items():
+            if user not in users:continue
+            for records in terms.values():
+                for day in pd.to_datetime(pd.DataFrame(records).get('Tarih',pd.Series(dtype=str)),errors='coerce').dropna():
+                    if start<=str(day.date())<=end:exam_keys.add((users[user],str(day.date())))
+    result['exam_hours']=state.get('planning_exam_hours',False)
     result.update(source_rows=source_rows,exam_keys=exam_keys,staff=staff,unavailable=unavailable)
     return result
 
@@ -66,7 +73,7 @@ def calendar_grid(result,context):
                 if record and record.get('shift_code') in LEAVE_LABELS:
                     label+=' / '+LEAVE_LABELS[record['shift_code']]
                 elif record and record.get('shift_code') not in {'OFF','SINAV'}:
-                    label+=' ⚠'
+                    label=(f"{record.get('start')}–{record.get('end')} · Sınav" if result.get('exam_hours') else label+' ⚠')
             elif record:
                 code=record.get('shift_code')
                 label=SHIFT_LABELS.get(code,code)

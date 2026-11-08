@@ -63,7 +63,7 @@ def _blank_schedule_df():
 def _blank_exam_df():
     return pd.DataFrame(
         [
-            {"Tarih": "", "Saat": "", "Ders": "", "Sınav Türü": "", "Not": ""},
+            {"Tarih": "", "Saat": "", "Bitiş":"", "Ders": "", "Sınav Türü": "", "Not": ""},
         ]
     )
 
@@ -156,6 +156,9 @@ def render():
     _ensure_state()
 
     st.subheader("📚 Ders Programı")
+    if (_profile().get("position") or "agent")!="agent":
+        from core.academic_view import render_academic_browser
+        render_academic_browser(st.session_state);return
     if _work_type() != "akademi":
         st.info("Bu ekran sadece **akademi** personelleri için aktif.")
         return
@@ -334,6 +337,7 @@ def render():
         else:
             df = _blank_exam_df()
 
+        if "Bitiş" not in df:df["Bitiş"]=""
         edited = st.data_editor(
             df,
             use_container_width=True,

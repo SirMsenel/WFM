@@ -135,18 +135,9 @@ def build_shift_grid(employees: list[dict], year: int, month: int) -> pd.DataFra
     return grid
 
 
-def _cell_style(val):
-    v = str(val or "").strip().upper()
-
-    if v == "OFF":
-        return "background-color: rgba(255, 193, 7, 0.18); color:#7a5a00; font-weight:700;"
-    if "YILLIK" in v or "İZİN" in v:
-        return "background-color: rgba(220, 53, 69, 0.16); color:#842029; font-weight:700;"
-    if "22:00" in v or "23:00" in v or "00:00" in v or "21:00" in v:
-        return "background-color: rgba(111, 66, 193, 0.16); color:#4b2e83; font-weight:700;"
-    if "-" in v and ":" in v:
-        return "background-color: rgba(13, 110, 253, 0.07);"
-    return ""
+def _cell_style(value):
+    from core.shift_display import cell_style
+    return cell_style(value)
 
 
 def render_shift_grid(employees: list[dict], year: int, month: int, title: str = "Vardiya Grid"):

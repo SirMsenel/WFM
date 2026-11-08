@@ -15,14 +15,8 @@ SOURCE_LABELS={'fixed_external':'Kesin kayıt','approved_request':'Onaylı talep
 
 
 def _cell_style(value):
-    text=str(value)
-    if '⚠' in text:return 'background-color:#fee2e2;color:#991b1b;font-weight:600'
-    if 'Sınav' in text:return 'background-color:#fef3c7;color:#92400e'
-    if 'Gece' in text:return 'background-color:#e0e7ff;color:#3730a3'
-    if any(word in text for word in ['izin','Rapor']):return 'background-color:#fce7f3;color:#9d174d'
-    if text=='OFF':return 'background-color:#f1f5f9;color:#64748b'
-    if '–' in text:return 'background-color:#dff5ed;color:#065f46'
-    return 'color:#b0bac5'
+    from core.shift_display import cell_style
+    return cell_style(value)
 
 
 def _manual_form(state,result,context):
@@ -55,6 +49,8 @@ def _manual_form(state,result,context):
         if warnings:
             st.warning(f'{len(warnings)} gün/kural kontrolü nedeniyle bazı girişler yazılmayacak. Mevcut vardiyalar değiştirilmez.')
             st.dataframe(warnings,hide_index=True,use_container_width=True)
+            from core.conflict_cleanup import propose_cleanup
+            propose_cleanup(state,[(r['Personel No'],r['Tarih']) for r in warnings],'manual')
         if additions:st.caption(f'{len(additions)} boş ve uygun güne yerleştirme yapılacak.')
         if st.button('Seçili Günlere Yerleştir',disabled=not additions,type='primary',key='manual_place'):
             edit_shifts(state,additions)
@@ -96,12 +92,17 @@ def render():
     context=period_banner(state)
     if not context:return
     coverage_controls(state)
+    state['planning_exam_hours']=st.toggle('Sınav saatleri dışında vardiya yazılabilsin',value=state.get('planning_exam_hours',False),key='manual_exam_hours_toggle')
+    from core.workspace_store import save_keys
+    save_keys(state)
     planner_people(state)
     try:result=preview_plan(state,include_auto=True)
     except (ValueError,KeyError) as exc:
         st.info(str(exc));return
     if state.get('shift_notice'):st.success(state.pop('shift_notice'))
+    from core.planning_guard import render_guard
     coverage_summary(result)
+    if not render_guard(state):return
     _manual_form(state,result,context)
     _edit_controls(state,result)
     def show_calendar():
@@ -127,3 +128,5 @@ def render():
     # Show actual errors immediately, even when another subview is selected.
     if result['issues']:
         with st.expander("Kayıtlardaki uyuşmazlıklar ve düzeltme adımları",expanded=True):render_issues(result)
+        from core.conflict_cleanup import propose_cleanup
+        propose_cleanup(state,[(r.get('employee_id'),r.get('date')) for r in result['issues']],'issues')

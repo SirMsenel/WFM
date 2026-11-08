@@ -257,3 +257,82 @@ Eksikleri kabul ederek yayınlama artık ayrı bir checkbox gerektirmez: düğme
 veritabanına yazar ve gerçek yayınlanan vardiya takvimini gösterir. Genel talepler
 vardiya ataması değildir ve yayın engeli oluşturmaz; gerçek kural ihlalleri engeldir.
 Çalışma saatleri geçmişi plan döneminden bağımsız seçilir ve yalnızca yayınlanmış kayıtları kullanır.
+
+### Sürümlü tahmin, gerçekleşen beslemesi ve güncel takip
+`core/forecast_ledger.py` kullanılan tahminleri 30 dakikalık satırlar olarak SQLite'ta
+saklar. Her kayıtta oluşturma zamanı, model ve profil bilgisi bulunur. Günlük tahmin,
+48 satırın toplamından hesaplanabilir. Aynı içerik yeniden kullanıldığında aynı sürüm
+korunur; farklı tahmin yeni sürüm olur. Kayıtlar 12 haftadan sonra silinmez.
+Dağılım seçimi de ayrıca `profile_versions` içinde tarihli ve değişmez saklanır.
+Önceki çalışma alanındaki kayıtlar ilk açılışta taşınır; ilk seçim zamanı bilinmiyorsa
+bu bilgi açıkça işaretlenir. Eski gerçekleşmelerden yeni bir geçmiş tahmin uydurulmaz.
+
+**Geçmiş Hafta Analizi → Güncel Takip** ilk alt ekrandır. Görünürken 30 saniyede bir
+veritabanını okuyarak 48 dilimde tahmin/gerçekleşen çağrı ve farkı gösterir. Veri gelmeyen
+dilim 0 sayılmaz. Fark yüzdesi `(gerçekleşen - tahmin) / tahmin × 100` şeklindedir;
+tahmin 0 ise yüzde tanımsızdır. WAPE toplam mutlak hatanın gerçekleşen çağrı toplamına
+oranıdır. İsteğe bağlı 03:00–08:00 hariç tutma ölçümü etkiler, saklanan veriyi değiştirmez.
+Dağılım başarısında tamamlanmış günler kullanılır; ölçülen saatler içinde hem tahmin
+payları hem gerçekleşen paylar %100'e normalize edilir.
+
+İnterval hücreleri elle değiştirilebilir. Değişen hücreler sabitlenir. Artış önce
+03:00–08:00'ın serbest paylarından, yetmezse diğer serbest hücrelerden orantılı düşülür.
+Azalışın boşalttığı pay öncelikle 03:00–08:00'a eklenir. Sabitlenen paylar %100'ü aşarsa
+veya dengeleme mümkün değilse işlem reddedilir; başka günlerin payları değiştirilmez.
+Kaydetmeden önce gün toplamı ve dengelenecek fark görülebilir.
+
+Kimlik doğrulamalı servisler (WFM/yönetici/moderatör):
+- `GET /forecast-ledger/runs`: kayıtlı tahmin sürümleri.
+- `GET /forecast-ledger/runs/{run_id}/slots`: değişmez 30 dakikalık tahmin satırları.
+- `POST /actuals/intervals`: gerçekleşen çağrı beslemesi.
+
+POST gövdesi örneği:
+```json
+{"rows":[{"tarih":"2026-11-02","slot":17,"cagri_sayisi":125,"aht_sec":300}]}
+```
+`tarih` yerel gün, `slot` 1–48 aralığında yarım saat numarasıdır (17 = 08:00–08:30).
+Slot verilmezse tarih/saat alanından çıkarılır. Zaman dilimli zaman damgaları İstanbul'a
+çevrilir. `aht_sec` isteğe bağlıdır. Kısmi gün kabul edilir. Aynı tarih/dilim yeniden
+beslenirse o dilimin gerçekleşeni güncellenir, diğer dilimler korunur. Dosyada yinelenen
+aynı tarih/dilim reddedilir. Çağrılar negatif olmayan tam sayı olmalıdır.
+İsteklerde `/auth/login` ile alınan token `Authorization: Bearer ...` başlığına konur.
+
+### Yayın kilidi, talepler ve yayın yönetimi
+Yayınlanmış tarih/dil kapsamı ikinci planı kabul etmez. Türkçe/İngilizce/Arapça seçimi
+ayrı yapılabilir; farklı dillerin yayınları birbirinin yerine yazılmaz. `publication_batches`
+her yayının satırlarını arşivler. Yayınlama ve geri alma SQLite işlemi içinde güncellenir;
+başka oturumun değiştirdiği yayın üzerine yazılamaz. **Yayın Yönetimi** yayınlanmış
+bir tabloyu geri alabilir veya düzenlenebilir taslağa taşıyabilir. İşlem yalnızca seçilen
+yayının personel/dil/tarih anahtarlarını etkiler. Başka dilin vardiyaları korunur.
+
+Seçili dönemin açık talepleri TL veya WFM aşamasında olsa da atama ve oluşturmayı
+durdurur. İlgili tarih/dil/personel kapsamı ve dönemlik ders bildirimleri dikkate alınır.
+Talep onayından sonra izin/gece/mesai kayıtları kaynaktan doğrudan içe alınır ve eski
+alt öncelikli elle girişlerin yerini alır. Kesin kaynaklar arasındaki gerçek çakışma
+saklanmaz; açıkça düzeltilmesi gerekir. Genel talepler vardiya oluşturmaz. Vardiya
+değişiminde iki liderin onayı sonrası WFM onayında iki tarafın saatleri sabitlenir;
+daha sonraki taslak değişikliği onaylanmış değişimin anlamını değiştirmez. Eski ve
+iki taraflı saat kaydı bulunmayan değişimler otomatik uydurulmaz, yeniden değerlendirilir.
+
+Sınav saatine göre çalışma seçeneği kapalıyken sınav günü bütünüyle kapalıdır. Açılırsa
+başlangıç/bitişi bilinen sınavın saatleri dışında ihtiyaç, süre ve dinlenme uygunsa atama
+yapılır. Eksik veya hatalı saat bilgisi bütün günü kapalı tutar. Gece kuralları kaydedildikten
+sonra eksik tarih/dil sayıları popup ile bildirilir. Dolu/uyuşmayan taslak kayıtları açık
+seçimle silinebilir; kesin ve onaylı kaynaklar kendi kaynak ekranlarından değiştirilir.
+
+### Ortak takvim ve takip görünümü
+Kesim/son ödeme hesapları `core/billing_calendar.py` üzerinden FE ve tahminde aynıdır.
+Mevcut proje kuralı: kesimler ayın 9/16/24/31'i; 31 olmayan ayın ek kesimi sonraki ayın
+1'idir. Son ödeme kesim +9 gündür; hafta sonuna gelirse pazartesiye taşınır. Resmi tatil
+için ek erteleme bu kurala dahil değildir. Önceden kısa ayın sonraki ayına ait 1. gün,
+yanlışlıkla aynı ayın 1. günü olarak hesaplanabiliyordu; bu ve FE/tahmin uyumsuzluğu giderildi.
+
+Hareketli ortalamalar her hafta günü için son 7/30 aynı gün gözlemini kullanır (son
+7 Pazartesi vb.). İki grafik hafta içi/hafta sonu sunumudur; hesaplar ayrı yedi gündür.
+Takım lideri okul kayıtlarında yalnızca kendi ekibini, WFM/yönetici bütün personelleri,
+personel kendi bilgilerini görür. Takip ekranı yalnızca yayınlanmış vardiyalardan saatleri
+hesaplar: Sabah 08–13, İkindi 13–17, Akşam 17–00, Gece 00–08. Gece adedi GECE kodlu,
+00–07 içinde başlayan veya gece yarısını gerçekten aşarak 00–08 içinde çalışan vardiyaları
+sayar; 07 girişleri veya tam 00'da biten akşam vardiyası gece adedi değildir. Süreler seçili
+tarih aralığına kırpılır; izin ve raporlar ayrı statülerdir. Akademi ücret örneğinin 11–00
+yoğun saat hesabı korunur. Statü ve başlangıç/bitiş saatleri ortak renk kurallarını kullanır.

@@ -197,3 +197,5 @@ def bootstrap(state, path=DEFAULT_DB):
         state['plan_ctx_confirmed']=True
         state['demo_initial_staffing_done']=True
     save_keys(state)
+    from core.forecast_ledger import migrate_legacy
+    migrate_legacy(state)

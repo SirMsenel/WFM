@@ -47,15 +47,22 @@ def render():
     if not context:return
     coverage_controls(state)
     people=planner_people(state)
+    if state.get('publication_notice'):st.success(state.pop('publication_notice'))
     render_group_priority()
     language=state.get('planning_languages',{'en':True,'ar':True})
-    en,ar=st.columns(2)
+    tr,en,ar=st.columns(3)
+    turkish=tr.toggle('Türkçe personeller dahil',value=language.get('tr',True),key='planning_include_tr')
     english=en.toggle('İngilizce personeller dahil',value=language.get('en',True),key='planning_include_en')
     arabic=ar.toggle('Arapça personeller dahil',value=language.get('ar',True),key='planning_include_ar')
-    state['planning_languages']={'en':english,'ar':arabic}
+    state['planning_languages']={'tr':turkish,'en':english,'ar':arabic}
     save_keys(state)
     st.caption('Kapalı dilin personelleri bu taslağa ve ihtiyaç karşılama hesabına katılmaz. Önceden yayınlanan vardiyaları korunur. İhtiyaç tahmini ortak havuzdur; dilin ayrı talebi burada tahmin edilmez.')
     st.caption(f"{len(people)} personel otomatik alındı · Ders dönemi tarihe göre seçilir. Sınav günleri önceliklidir; diğer günlerde ilgili Bahar/Güz programı kullanılır.")
+    from core.planning_guard import render_guard
+    if not render_guard(state):return
+    exam=st.toggle('Sınav gününde saat bilgisi varsa diğer uygun saatlere vardiya yaz',value=state.get('planning_exam_hours',False),key='planning_exam_hours_toggle')
+    state['planning_exam_hours']=exam;save_keys(state)
+    st.caption('Sınav başlangıç ve bitişi varsa yalnızca o saatler kapanır. Bitiş bilinmiyorsa gün tamamen kapalı kalır.')
     ready=bool(state.get('plan_ctx_confirmed') and people and state.get('plan_group_priority')
                and len(state['plan_group_priority'])==len(state['shift_rules']['work_type'])
                and isinstance(state.get('sp_staffing_result_df'),pd.DataFrame) and not state['sp_staffing_result_df'].empty)
@@ -63,6 +70,8 @@ def render():
     if st.button('Otomatik Vardiya Taslağı Oluştur',disabled=not ready,key='planning_generate',type='primary'):
         try:
             with st.spinner('İhtiyaç ve uygunluklara göre yerleştiriliyor…'):
+                from core.planning_guard import assert_can_plan
+                assert_can_plan(state)
                 staff,fixed,history,unavailable,source_issues=collect_inputs(state)
                 result=generate_plan(staff,state['sp_staffing_result_df'],state['shift_rules'],state['plan_group_priority'],
                                      context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
@@ -96,6 +105,9 @@ def render():
         st.dataframe(pd.DataFrame(result['plan']),hide_index=True,use_container_width=True)
         st.dataframe(result['coverage'],hide_index=True,use_container_width=True)
     render_issues(result)
+    if result.get('issues'):
+        from core.conflict_cleanup import propose_cleanup
+        propose_cleanup(state,[(r.get('employee_id'),r.get('date')) for r in result['issues']],'publish')
     roster=pd.DataFrame(result['plan'])
     st.download_button('Vardiya CSV İndir',roster.to_csv(index=False).encode('utf-8-sig'),'vardiya_taslagi.csv','text/csv')
     hard=blocking_issues(result)
@@ -121,4 +133,5 @@ def render():
         ids={str(e['employee_id']) for e in result['staff']}
         published=[r for r in state.get('published_shift_plan',[]) if str(r['employee_id']) in ids and receipt['start']<=str(r['date'])<=receipt['end']]
         grid=calendar_grid({**result,'source_rows':published,'exam_keys':set()},result['period'])
-        st.dataframe(grid,hide_index=True,use_container_width=True,height=500)
+        from core.shift_display import cell_style
+        st.dataframe(grid.style.map(cell_style,subset=[c for c in grid if c!='Personel']),hide_index=True,use_container_width=True,height=500)

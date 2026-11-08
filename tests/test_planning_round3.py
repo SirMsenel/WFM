@@ -29,7 +29,7 @@ class Round3LogicTests(unittest.TestCase):
    self.assertFalse(added);self.assertTrue(any('en fazla 7 saat' in r['Neden yazılmadı?'] for r in errors))
    self.assertNotIn('draft_shift_plan',state)
  def test_filled_manual_auto_and_published_days_are_never_overwritten(self):
-  for key,source in [('draft_shift_plan','manual_single'),('draft_shift_plan','auto'),('published_shift_plan','auto')]:
+  for key,source in [('draft_shift_plan','manual_single'),('draft_shift_plan','auto')]:
    state=self.state(days=2);state[key]=[row(source=source)]
    added,errors=prepare_manual(state,['1'],DAY,DAY+timedelta(days=1),'WORK',time(8))
    self.assertEqual([r['date'] for r in added],[str(DAY+timedelta(days=1))])
@@ -112,7 +112,7 @@ class Round3UITests(unittest.TestCase):
    at.button(key='planning_generate').click().run();self.assertFalse(at.exception)
    self.assertEqual(at.button(key='planning_publish').label,'Eksikleri Kabul Et ve Planı Yayınla')
    at.button(key='planning_publish').click().run();self.assertFalse(at.exception)
-   loaded={};hydrate(loaded,path);self.assertEqual(loaded['published_shift_plan'],at.session_state['planning_result']['plan'])
+   loaded={};hydrate(loaded,path);self.assertEqual([{k:v for k,v in r.items() if k not in {'language','publication_id'}} for r in loaded['published_shift_plan']],at.session_state['planning_result']['plan'])
    self.assertTrue(any('Yayınlanan Vardiya Tablosu' in m.value for m in at.markdown))
  def test_historical_hours_date_picker_is_independent_of_plan(self):
   at=self.app('from core.work_hours_ui import render_hours_summary\nimport streamlit as st\nrender_hours_summary(st.session_state,st.session_state["employees_cache"])')

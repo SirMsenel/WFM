@@ -10,7 +10,7 @@ from .engine import minutes
 from core.planning import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
@@ -18,6 +18,12 @@ SOURCE_KEYS = ("planning_exclude_early_hours", "planning_languages", "group_hour
 
 def fingerprint(state):
     data = {key: state.get(key) for key in SOURCE_KEYS}
+    for key in ('employees_cache','fixed_shift_records','trk_requests','plan_overrides','shift_overrides','published_shift_plan','draft_shift_plan','plan_removed_assignments','group_hour_targets'):
+        data[key]=state.get(key) or []
+    for key in ('acad_schedules','acad_exam_calendar'):data[key]=state.get(key) or {}
+    for key in ('planning_exam_hours','planning_exclude_early_hours'):data[key]=bool(state.get(key,False))
+    data['planning_languages']={'tr':True,'en':True,'ar':True,**(state.get('planning_languages') or {})}
+    data['trk_requests']=sorted(data['trk_requests'],key=lambda r:str(r.get('id','')))
     df = state.get("sp_staffing_result_df")
     data["demand"] = None if df is None else df.to_json(date_format="iso", orient="split")
     return hashlib.sha256(json.dumps(data, default=str, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
@@ -145,6 +151,11 @@ def collect_inputs(state):
         typ = req.get("type")
         if typ in {"Ders Programı", "Sınav Takvimi", "Genel Talep"}:
             continue  # Structured availability below is the source of truth.
+        if typ=='Vardiya Değişim Talebi':
+            if not req.get('resolved_assignments'):
+                problem(req,'Bu eski değişimin iki taraflı vardiya kaydı yok; yeni bir değişim talebiyle saatleri belirleyin')
+            for assignment in req.get('resolved_assignments',[]):expand(assignment,assignment['shift_code'],'approved_request')
+            continue
         if typ not in codes:
             problem(req, "Onaylı talep otomatik uygulanamıyor; Vardiya Saatleri'nde elle atayıp talebi kapatın")
             continue
@@ -180,7 +191,18 @@ def collect_inputs(state):
                     continue
                 eid=lookup[user];base=datetime.combine(exam.date(),time())
                 exam_days.setdefault(eid,set()).add(exam.date())
-                unavailable.setdefault(eid,[]).append((base,base+timedelta(days=1)))
+                finish=base+timedelta(days=1);begin=base
+                if state.get('planning_exam_hours'):
+                    try:
+                        clock=str(row.get('Saat','')).strip();end_clock=str(row.get('Bitiş','')).strip()
+                        if '-' in clock and not end_clock:clock,end_clock=clock.split('-',1)
+                        if clock and end_clock:
+                            a,b=minutes(clock),minutes(end_clock)
+                            if b<=a:raise ValueError('Sınav bitişi başlangıçtan sonra olmalı')
+                            begin,finish=base+timedelta(minutes=a),base+timedelta(minutes=b)
+                    except ValueError:
+                        problem({'employee':user,'date':str(exam.date())},'Sınav saati okunamadı; gün tamamen kapalı tutuldu')
+                unavailable.setdefault(eid,[]).append((begin,finish))
     for user,terms in (state.get('acad_schedules') or {}).items():
         if user in excluded:continue
         if user not in lookup:
@@ -204,6 +226,11 @@ def collect_inputs(state):
                     unavailable.setdefault(eid,[]).append((base+timedelta(minutes=begin),base+timedelta(minutes=finish)))
                 except (ValueError,KeyError) as exc:
                     problem({'employee':user},f'Ders saati okunamadı: {exc}')
+
+    # Approved/source records supersede old lower-priority manual entries.
+    # Keep conflicts between authoritative sources visible for review.
+    strong={(r['employee_id'],r['date']) for r in fixed if r.get('source') in {'fixed_external','approved_request','published_fixed'}}
+    fixed=[r for r in fixed if r.get('source') not in manual_sources or (r['employee_id'],r['date']) not in strong]
 
     # Prefer manual draft over published history for the same employee/day.
     hist = {(str(r.get("employee_id")), str(r.get("date"))): dict(r)

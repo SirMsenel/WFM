@@ -34,7 +34,8 @@ class PlanningUITests(unittest.TestCase):
         self.assertEqual(len(at.session_state['published_shift_plan']), 1)
         at.session_state['shift_rules']['work_type']['fulltime']['shift_total_hours'] = 8
         at.run()
-        self.assertTrue(self.button(at, 'planning_publish').disabled)
+        self.assertFalse(any(b.key=='planning_publish' for b in at.button))
+        self.assertTrue(at.warning)
 
     def test_unmet_demand_is_published_by_explicit_accept_button(self):
         at = self.app(count=2)

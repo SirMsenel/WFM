@@ -24,3 +24,10 @@ def personnel_summary(people):
         return {'total':0,'location':{},'language':{},'work_type':{}}
     return {'total':len(df),**{field:df[field].fillna('Belirtilmemiş').value_counts().to_dict()
                                for field in ('location','language','work_type')}}
+
+
+def visible_people(profile,people):
+    role=profile.get('position');agents=[dict(e) for e in people if e.get('position','agent')=='agent']
+    if role in {'wfm','manager','moderator'}:return agents
+    if role=='tl':return [e for e in agents if str(e.get('team_lead','')).strip().casefold()==str(profile.get('full_name','')).strip().casefold()]
+    return [e for e in agents if str(e.get('employee_id'))==str(profile.get('employee_id')) or e.get('username')==profile.get('username')]

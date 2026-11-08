@@ -6,6 +6,8 @@ from modules.shift_planing.engine import generate_plan
 
 
 def prepare_manual(state,employee_ids,start,end,kind,begin=None,finish=None,note=''):
+    from core.planning_guard import assert_can_plan
+    assert_can_plan(state)
     if pd.Timestamp(start)>pd.Timestamp(end) or pd.Timestamp(start)<pd.Timestamp(state['plan_ctx']['start']) or pd.Timestamp(end)>pd.Timestamp(state['plan_ctx']['end']):
         raise ValueError('Elle giriş seçili plan dönemi içinde olmalı.')
     staff,fixed,history,unavailable,source_issues=collect_inputs(state)
@@ -23,7 +25,7 @@ def prepare_manual(state,employee_ids,start,end,kind,begin=None,finish=None,note
             key=(eid,str(day.date()))
             if key in rows:
                 old=rows[key];label=(f"{old['start']}–{old['end']}" if old.get('start') and old.get('end') else old.get('shift_code','Kayıt'))
-                warnings.append({'Personel':person['full_name'],'Tarih':key[1],'Vardiya':label,'Neden yazılmadı?':'Bu gün zaten dolu; mevcut kayıt korundu.'});continue
+                warnings.append({'Personel':person['full_name'],'Personel No':eid,'Tarih':key[1],'Vardiya':label,'Neden yazılmadı?':'Bu gün zaten dolu; mevcut kayıt korundu.'});continue
             a,b=None,None
             if kind in {'WORK','GECE','MESAI'}:
                 if begin is None:raise ValueError('Başlangıç saati gerekli.')
@@ -41,6 +43,6 @@ def prepare_manual(state,employee_ids,start,end,kind,begin=None,finish=None,note
                          languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),reject_invalid_sources=('manual_candidate',))
     for issue in result['issues']:
         if issue.get('source')=='manual_candidate':
-            eid=issue['employee_id'];warnings.append({'Personel':people[eid]['full_name'],'Tarih':issue['date'],'Vardiya':f"{issue.get('start') or '—'}–{issue.get('end') or '—'}",'Neden yazılmadı?':issue['Sorun']})
+            eid=issue['employee_id'];warnings.append({'Personel':people[eid]['full_name'],'Personel No':eid,'Tarih':issue['date'],'Vardiya':f"{issue.get('start') or '—'}–{issue.get('end') or '—'}",'Neden yazılmadı?':issue['Sorun']})
     additions=[dict(r,source='manual_single') for r in result['plan'] if r.get('source')=='manual_candidate']
     return additions,warnings

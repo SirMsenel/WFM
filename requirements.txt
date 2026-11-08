@@ -16,3 +16,5 @@ sqlalchemy
 passlib[bcrypt]
 python-jose[cryptography]
 altair>=5,<7
+
+httpx

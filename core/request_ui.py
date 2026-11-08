@@ -29,48 +29,45 @@ def rows_for_table(items):
              "Son işlem":formatted(r.get('last_action_at') or r.get('created_at'),True)} for r in items]
 
 
-def render_detail(req, key):
-    with st.container(border=True):
-        st.markdown("#### "+TYPE_LABELS.get(req.get('type'),req.get('type','Talep')))
-        a,b,c = st.columns(3)
-        a.caption("Durum")
-        a.markdown(badge(req.get('status','—')),unsafe_allow_html=True)
-        b.caption("Aşama")
-        b.write(stage(req))
-        c.caption("Kayıt no")
-        c.write(req['id'])
-        st.write(f"**Talep eden:** {req.get('created_by_name') or req.get('created_by')} · **Hesap:** {req.get('created_by')}")
-        st.write(f"**İlgili liderler:** {', '.join(req.get('assigned_tls',[])) or '—'}")
-        if req.get('tl_approvals'):
-            st.write("**Onaylayan liderler:** "+', '.join(req['tl_approvals']))
-        if req.get('start_date'):
-            st.write(f"**Tarih:** {formatted(req['start_date'])} → {formatted(req.get('end_date') or req['start_date'])}")
-        if req.get('overtime_start'):
-            st.write(f"**Saat:** {req['overtime_start']} → {req.get('overtime_end') or 'Bitiş belirtilmemiş'}")
-        if req.get('targets'):
-            st.write("**Değişim yapılacak personel:** "+', '.join(t.get('full_name','') for t in req['targets']))
-        st.write("**Personelin açıklaması**")
-        st.write(req.get('note') or 'Açıklama eklenmemiş.')
-        attachment = req.get('attachment')
-        if attachment:
-            st.markdown("##### Gönderilen İçerik")
-            st.caption(attachment.get('title','Kayıt anındaki içerik'))
-            if attachment.get('rows'):
-                st.dataframe(pd.DataFrame(attachment['rows']),use_container_width=True,hide_index=True)
-        if req.get('decision_note'):
-            st.write("**Değerlendirme notu:** "+req['decision_note'])
-    events = req.get('events',[])
-    st.markdown("##### İşlem Geçmişi")
-    if events:
-        history=pd.DataFrame([{'Tarih':formatted(e.get('at'),True),'İşlemi yapan':e.get('actor_name') or e.get('actor'),
-                              'İşlem':e.get('action'),'Önceki durum':e.get('from'),'Yeni durum':e.get('to'),'Not':e.get('note')} for e in events])
-        st.dataframe(history.style.map(cell_style,subset=['Önceki durum','Yeni durum']),hide_index=True,use_container_width=True)
-    else:
-        st.caption("Eski kayıt: ayrıntılı işlem geçmişi bulunmuyor.")
+def render_detail(req,key):
+    st.markdown('### '+TYPE_LABELS.get(req.get('type'),req.get('type','Talep')))
+    st.caption('Kayıt '+str(req['id']))
+    a,b,c=st.columns(3)
+    with a.container(border=True):
+        st.caption('Durum');st.markdown(badge(req.get('status','—')),unsafe_allow_html=True)
+    with b.container(border=True):st.caption('Değerlendirme aşaması');st.write(stage(req))
+    with c.container(border=True):st.caption('Talep eden');st.write(req.get('created_by_name') or req.get('created_by'));st.caption('@'+str(req.get('created_by','')))
+    fields=[]
+    if req.get('start_date'):fields.append(('Tarih',formatted(req['start_date'])+' → '+formatted(req.get('end_date') or req['start_date'])))
+    if req.get('overtime_start'):fields.append(('Saat',str(req['overtime_start'])+' → '+str(req.get('overtime_end') or 'Belirtilmedi')))
+    fields.append(('İlgili takım lideri',', '.join(req.get('assigned_tls',[])) or '—'))
+    if req.get('targets'):fields.append(('Değişim yapılacak personel',', '.join(t.get('full_name','') for t in req['targets'])))
+    st.dataframe(pd.DataFrame(fields,columns=['Bilgi','İçerik']),hide_index=True,use_container_width=True)
+    st.markdown('#### Personelin Açıklaması')
+    st.info(req.get('note') or 'Açıklama eklenmemiş.')
+    attachment=req.get('attachment') or {}
+    if attachment.get('rows'):
+        st.markdown('#### Gönderilen Ders / Sınav / Talep İçeriği')
+        frame=pd.DataFrame(attachment['rows']).fillna('')
+        if 'Saat' in frame and any(c in frame for c in ['Pazartesi','Salı','Çarşamba']):
+            frame=frame.melt(id_vars='Saat',var_name='Gün',value_name='Ders');frame=frame[frame.Ders.astype(str).str.strip()!=''][['Gün','Saat','Ders']]
+        st.dataframe(frame,hide_index=True,use_container_width=True)
+    if req.get('resolved_assignments'):
+        st.markdown('#### Onaylanan Vardiya Değişimi')
+        st.dataframe(req['resolved_assignments'],hide_index=True,use_container_width=True)
+    if req.get('decision_note'):
+        st.markdown('#### Değerlendirme Sonucu');st.write(req['decision_note'])
+    with st.expander('İşlem Geçmişini Göster'):
+        events=req.get('events',[])
+        if events:
+            history=pd.DataFrame([{'Tarih':formatted(e.get('at'),True),'İşlemi yapan':e.get('actor_name') or e.get('actor'),'İşlem':e.get('action'),'Durum':e.get('to'),'Not':e.get('note')} for e in events])
+            st.dataframe(history.style.map(cell_style,subset=['Durum']),hide_index=True,use_container_width=True)
+        else:st.caption('Ayrıntılı işlem geçmişi bulunmuyor.')
 
 
 def render_center(audience='all', key='requests'):
     state = st.session_state
+    if state.get('request_notice'):st.success(state.pop('request_notice'))
     profile = state.get('profile') or {}
     role = profile.get('position')
     items = [r for r in refresh(state) if visible(r,profile)]
@@ -80,16 +77,16 @@ def render_center(audience='all', key='requests'):
         items = [r for r in items if profile.get('full_name') in r.get('assigned_tls',[])]
     pending = [r for r in items if not is_terminal(r)]
     a,b,c = st.columns(3)
-    for col,title,count,status in [(a,'Değerlendirmede',len(pending),'Beklemede'),
+    for col,card_title,count,status in [(a,'Değerlendirmede',len(pending),'Beklemede'),
                                     (b,'Onaylanan',sum(r.get('status') in {'Uygulandı','Onaylandı'} and is_terminal(r) for r in items),'Onaylandı'),
                                     (c,'Reddedilen',sum(r.get('status')=='Reddedildi' for r in items),'Reddedildi')]:
         with col.container(border=True):
             st.markdown(badge(status),unsafe_allow_html=True)
-            st.metric(title,count)
+            st.metric(card_title,count)
     category = st.radio('Göster',['Bekleyen kayıtlar','Sonuçlanan kayıtlar','Tüm kayıtlar'],horizontal=True,key=key+'_category')
     search = st.text_input('Kayıt ara',placeholder='Personel, talep türü veya kayıt numarası',key=key+'_search')
     filtered = [r for r in items if (category=='Tüm kayıtlar' or (is_terminal(r)==(category=='Sonuçlanan kayıtlar')))
-                and (not search or search.casefold() in (title(r)+' '+r['id']+' '+r.get('note','')).casefold())]
+                and (not search or search.casefold() in (title(r)+' '+r['id']+' '+(r.get('note') or '')).casefold())]
     filtered.sort(key=lambda r:r.get('created_at',''),reverse=True)
     if not filtered:
         st.info('Bu görünümde kayıt yok.')
@@ -125,6 +122,10 @@ def render_center(audience='all', key='requests'):
     if action:
         try:
             act(state,req,action,note)
+            from core.planning import REQUEST_CODES
+            if action=='apply' and (req.get('type') in REQUEST_CODES or req.get('type')=='Vardiya Değişim Talebi'):state['request_notice']='Onaylanan vardiya/izin Vardiya Saatleri ekranına otomatik alındı. Yayınlanmış dönem için önce yayını düzenlemeye açın.'
+            elif action=='apply':state['request_notice']='Talep onaylandı. Okul kayıtları uygunluk kontrolünde kullanılır; genel talepler vardiya ataması oluşturmaz.'
+            else:state['request_notice']='Talebin durumu güncellendi.'
             st.rerun()
         except ValueError as exc:
             st.error(str(exc))

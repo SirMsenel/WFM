@@ -306,7 +306,10 @@ def render():
         result=_weekly_model(raw,str(week.date()),date_col,count_col,state.get('interval_last_used_profile'),state.get('interval_used_profiles',{}),use_iqr,iqr_k,iqr_mode)
     except (ValueError,TypeError,KeyError) as exc:
         st.error(str(exc));return
-    meta=result['meta'];profile=result['profile']
+    meta=dict(result['meta']);profile=result['profile']
+    from core.interval_edit_ui import edit_distribution
+    profile,manual_meta=edit_distribution(profile);meta.update(manual_meta)
+    if manual_meta['manual_adjusted']:st.caption('Elle dengelenmiş profil gösteriliyor. Aşağıdaki geçmiş başarı puanları otomatik modellerindir; elle değiştirilen seçimin başarısı kaydedildikten sonra gerçek çağrılarla ölçülür.')
     if use_iqr:st.caption(f"IQR: {meta['iqr_changed_slots']} aykırı yarım saat saptandı; {meta['iqr_removed_days']} tam gün çıkarıldı.")
     st.info(f'{week:%d.%m.%Y} – {week+pd.Timedelta(days=6):%d.%m.%Y} · Her günün çağrıları kendi sütununda %100’e tamamlanır.')
     st.markdown('### Önerilen Haftalık Dağılım')
@@ -341,5 +344,7 @@ def render():
         state.update(sp_ratio_profiles=[p for p in state.get('sp_ratio_profiles',[]) if p.get('name')!=name.strip()]+[snapshot],
                      sp_active_ratio_profile_df=profile.copy(),sp_active_ratio_profile_name=name.strip(),sp_active_ratio_profile_meta=meta,
                      sp_staffing_result_df=None,plan_ctx_confirmed=False)
+        from core.forecast_ledger import capture_profile
+        capture_profile(state,profile,{'name':name.strip(),**meta})
         save_keys(state)
         st.success('Dağılım aktif. Personel Hesap ekranından devam edebilirsin.')

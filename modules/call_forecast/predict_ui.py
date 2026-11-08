@@ -136,44 +136,8 @@ def _tr_holiday_flags(dt_series: pd.Series) -> pd.DataFrame:
 
 
 def _son_odeme_flag(dt_series: pd.Series) -> pd.Series:
-    # FE mantığı ile uyumlu (kesim +9 gün, wknd kaydırma)
-    import calendar
-
-    dt_series = pd.to_datetime(dt_series, errors="coerce")
-    years = sorted(set(dt_series.dt.year.dropna().astype(int).tolist()))
-    if not years:
-        return pd.Series(0, index=dt_series.index)
-
-    y_min, y_max = min(years), max(years)
-
-    all_son_odeme = set()
-    for yy in range(y_min - 1, y_max + 2):
-        for mm in range(1, 13):
-            ld = calendar.monthrange(yy, mm)[1]
-            kesimler = [9, 16, 24]
-            if ld == 31:
-                kesimler.append(31)
-            elif ld == 29 and mm == 2:
-                kesimler.append(29)
-            elif ld in [28, 30]:
-                next_month = pd.Timestamp(yy, mm, ld) + pd.Timedelta(days=1)
-                kesimler.append(int(next_month.day))
-
-            for k in kesimler:
-                try:
-                    kesim_tarihi = pd.Timestamp(yy, mm, k)
-                except Exception:
-                    continue
-
-                son_odeme = kesim_tarihi + pd.Timedelta(days=9)
-                if son_odeme.weekday() == 5:
-                    son_odeme += pd.Timedelta(days=2)
-                elif son_odeme.weekday() == 6:
-                    son_odeme += pd.Timedelta(days=1)
-
-                all_son_odeme.add(son_odeme.date())
-
-    return dt_series.dt.date.isin(all_son_odeme).astype(int)
+    from core.billing_calendar import billing_flag
+    return billing_flag(dt_series,'due')
 
 
 def _mtv_donem_etkisi(dt_series: pd.Series) -> pd.Series:
@@ -189,19 +153,8 @@ def _mtv_donem_etkisi(dt_series: pd.Series) -> pd.Series:
 
 
 def _ekstre_kesim_flag(dt_series: pd.Series) -> pd.Series:
-    d = pd.to_datetime(dt_series, errors="coerce")
-    day = d.dt.day
-    last_day_in_month = d.dt.days_in_month
-
-    is_kesim = day.isin([9, 16, 24])
-    is_kesim |= (day == 31) & (last_day_in_month == 31)
-
-    prev = (d - pd.Timedelta(days=1))
-    prev_last = prev.dt.days_in_month
-    is_kesim |= (day == 1) & prev_last.isin([30, 28])
-
-    is_kesim |= (day == 29) & (prev_last == 29) & (prev.dt.month == 2)
-    return is_kesim.astype(int)
+    from core.billing_calendar import billing_flag
+    return billing_flag(dt_series,'cut')
 
 
 def _apply_date_bank_features(

@@ -10,6 +10,8 @@ def key(row):
 
 
 def edit_shifts(state,additions=(),deletions=()):
+    from core.planning_guard import assert_can_plan
+    if state.get('plan_ctx'):assert_can_plan(state)
     from modules.shift_planing.engine import bounds
     rows={key(r):deepcopy(r) for r in state.get('draft_shift_plan',[])}
     deleted={tuple(map(str,k)) for k in deletions}

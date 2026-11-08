@@ -44,7 +44,7 @@ def render():
     dates=sorted(df.Tarih.unique());minimum,maximum=dates[0],dates[-1]
     _init_ctx(minimum)
     ctx=st.session_state['plan_ctx']
-    current_start,current_end=_clamp_range(ctx['start'],ctx['end'],minimum,maximum)
+    current_start,current_end=_clamp_range(pd.Timestamp(ctx['start']).date(),pd.Timestamp(ctx['end']).date(),minimum,maximum)
     with st.container(border=True):
         a,b=st.columns([1,2])
         mode=a.radio('Planlama aralığı',['Haftalık','Özel Aralık'],horizontal=True,key='vp_period_mode_v2')
@@ -93,4 +93,12 @@ def render():
                 st.caption(DAY_NAMES[day.weekday()]);st.write(f'**{day:%d.%m}**')
                 st.metric('Zirve',int(record['Zirve ihtiyaç']))
     with st.expander('30 dakikalık ihtiyaç tablosu'):
-        st.dataframe(base[[c for c in ['Tarih','Gün','Aralık','Planlanan Agent','Net Agent','Tahmin Çağrı'] if c in base]],hide_index=True,use_container_width=True)
+        from core.time_labels import slot_label
+        days=sorted(base.Tarih.unique())
+        for offset in range(0,len(days),3):
+            columns=st.columns(3)
+            for col,day in zip(columns,days[offset:offset+3]):
+                with col:
+                    st.markdown(f"**{DAY_NAMES[day.weekday()]} · {day:%d.%m}**")
+                    view=base[base.Tarih==day].copy().sort_values('Slot');view['Saat aralığı']=view.Slot.map(slot_label)
+                    st.dataframe(view[['Saat aralığı']+[c for c in ['Planlanan Agent','Net Agent','Tahmin Çağrı'] if c in view]],hide_index=True,use_container_width=True,height=400)
