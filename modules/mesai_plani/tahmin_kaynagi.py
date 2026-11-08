@@ -329,23 +329,37 @@ def render():
     st.subheader("Planlamada Kullanılacak Çağrı Tahmini")
     st.caption("Dört modelin tahminini karşılaştır, birini seç veya günlük çağrı sayılarını elle gir. Seçimi kaydetmeden aktif planlama kaynağı değişmez.")
     options = state.get("cf_forecast_options", [])
-    mode = st.radio("Tahmin kaynağı", ["Model tahmini seç", "Elle günlük tahmin gir"], horizontal=True, key="sp_source_mode")
+    mode = st.radio("Tahmin kaynağı", ["Model tahmini seç", "Kayıtlı tahmin seç", "Elle günlük tahmin gir"], horizontal=True, key="sp_source_mode")
     if mode == "Model tahmini seç":
         if not options:
             st.info("Çağrı Tahmini → Tahmin ekranından dört modelin tahminini üretin. Elle giriş de kullanabilirsiniz.")
         else:
-            st.dataframe(pd.DataFrame([{"Sıra":o['rank'],"Model":o['name'],**o['metrics'],"Başlangıç":o['meta']['start'],"Bitiş":o['meta']['end']} for o in options]),hide_index=True,use_container_width=True)
+
             combined = pd.concat([o['frame'].set_index('tarih').y_pred.rename(o['name']) for o in options],axis=1)
+            st.dataframe(combined.rename_axis('Tarih').reset_index(),hide_index=True,use_container_width=True,column_config={'Tarih':st.column_config.DateColumn(format='DD.MM.YYYY')})
             from ortak.grafikler import daily_chart
             daily_chart(combined.reset_index(),'tarih',list(combined.columns))
             names = {o['id']:o for o in options}
-            selected = st.selectbox("Kullanılacak model tahmini",list(names),key="sp_selected_model")
+            selected = st.selectbox("Kullanılacak model tahmini",list(names),format_func=lambda i:names[i]["name"],key="sp_selected_model")
             if st.button("Bu Tahmini Planlamada Kullan",key="sp_activate_model"):
                 try:
                     activate_forecast(state,names[selected]['frame'],names[selected]['meta'])
                     st.success("Planlama tahmini kaydedildi. Personel Hesap ekranında ihtiyacı yeniden hesaplayın.")
                 except ValueError as exc:
                     st.error(str(exc))
+    elif mode=="Kayıtlı tahmin seç":
+        from ortak.gunluk_tahmin_deposu import saved_daily,daily_label
+        from ortak.calisma_alani_deposu import DEFAULT_DB
+        path=state.get('workspace_db_path') or DEFAULT_DB
+        records=saved_daily(path)
+        if not records:st.info('Henüz günlük tahmin kaydı yok.')
+        else:
+            byid={r['id']:r for r in records}
+            ident=st.selectbox('Kayıtlı günlük tahmin',list(byid),format_func=lambda i:daily_label(byid[i],path),key='sp_saved_daily_pick')
+            selected=byid[ident]
+            st.dataframe(selected['frame'].rename(columns={'tarih':'Tarih','y_pred':'Çağrı tahmini'}),hide_index=True,use_container_width=True)
+            if st.button('Kayıtlı Tahmini Planlamada Kullan',key='sp_activate_saved'):
+                activate_forecast(state,selected['frame'],selected['meta']);st.success('Kayıtlı tahmin planlamaya alındı.')
     else:
         current = state.get("sp_forecast_df")
         initial_start = current.tarih.min().date() if isinstance(current,pd.DataFrame) and not current.empty else date.today()

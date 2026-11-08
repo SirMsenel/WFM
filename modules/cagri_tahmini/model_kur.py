@@ -701,6 +701,7 @@ Lütfen:
     compare_df = pd.DataFrame([{"Model": name, **b["metrics"]} for name,b in bundles.items()]).sort_values(["RMSE", "MAE", "Model"])
     st.dataframe(compare_df, use_container_width=True)
 
+    st.divider()
     st.markdown("### 📌 Kaydedilecek model:")
     to_save = st.selectbox("Model seç:", compare_df["Model"].tolist(), key="cf_model_save_pick")
 
@@ -747,8 +748,11 @@ Lütfen:
         else:
             st.session_state["cf_model_fe_meta"] = None
 
-        st.success("✅ Model kaydedildi. Model Raporu sekmesine geçebilirsin.")
-        st.rerun()
+        @st.dialog('Model kaydedildi')
+        def saved():
+            st.success(f'{to_save} modeli kaydedildi.')
+            if st.button('Tamam',key='model_saved_close'):st.rerun()
+        saved()
 
     # ------------------ GridSearch ------------------
     st.markdown("---")

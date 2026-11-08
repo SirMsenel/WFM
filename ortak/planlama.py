@@ -84,8 +84,6 @@ def calendar_grid(result,context):
                 label='—'
             from ortak.cagri_tahmin_servisi import DAY_NAMES
             row[d.strftime('%d.%m')+' '+DAY_NAMES[d.weekday()]]=label
-        row['Sicil no']=emp.get('sicil_no') or emp.get('registry_no') or eid
-        row['Kullanıcı adı']=emp.get('username','')
         output.append(row)
     return pd.DataFrame(output)
 

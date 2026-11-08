@@ -19,6 +19,7 @@ def publish_plan(state,result):
         refresh(state)
     if state.get('planning_result_fingerprint')!=fingerprint(state):raise ValueError('Taslak güncel değil. Yeniden oluşturun.')
     if blocking_issues(result):raise ValueError('Kayıt veya çalışma kuralı ihlallerini düzeltin; eksik ihtiyacın kabulü bu ihlalleri kaldırmaz.')
+    if any(r.get('severity')=='warning' and r.get('override_required',True) for r in result.get('issues',[])) and not state.get('planning_accept_soft'):raise ValueError('Esnek kural aşımlarını inceleyip onaylayın.')
     path=state.get('workspace_db_path');previous=state.get('published_shift_plan',[])
     start,end=result['period']['start'],result['period']['end'];included={str(e['employee_id']) for e in result['staff']}
     language={str(e['employee_id']):e.get('language') or 'tr' for e in result['staff']}

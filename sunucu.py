@@ -578,6 +578,8 @@ def auth_login(body: Dict[str, Any]):
     # Base profile: herkes için ortak
     profile = {
         "username": username,
+        "company":user.get("company"),
+        "employment_start":user.get("employment_start"),
         "sicil_no":user.get("sicil_no") or str(user.get("employee_id")),
         "employee_id": user.get("employee_id"),
         "full_name": user.get("full_name"),
@@ -612,6 +614,8 @@ def auth_me(user: Dict[str, Any] = Depends(_auth_required)):
 
     base = {
         "username": user.get("username"),
+        "company":user.get("company"),
+        "employment_start":user.get("employment_start"),
         "sicil_no":user.get("sicil_no") or str(user.get("employee_id")),
         "employee_id": user.get("employee_id"),
         "full_name": user.get("full_name"),

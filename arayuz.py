@@ -266,27 +266,20 @@ def get_role(profile: dict) -> str:
     return (profile.get("position") or "").lower().strip()
 
 
-def get_allowed_pages(profile: dict) -> set[str]:
-    role = get_role(profile)
-    base = {"📌 Takip", "🗓️ Tüm Vardiyalar", "⚙️ Ayarlar", "🧪 Demo Veritabanı"}
-
-    if role == "agent":
-        return base
-
-    if role == "tl":
-        return base | {"📊 İzleme", "👥 Personel Takip"}
-
-    return set(PAGES)
+def get_allowed_pages(profile):
+    from ortak.erisim import allowed_pages
+    return allowed_pages(profile,PAGES)
 
 
 # ---------------- Main App ----------------
-st.session_state.setdefault("main_page", "📌 Takip")
+from ortak.erisim import landing_page
+st.session_state.setdefault("main_page", landing_page(st.session_state.get("profile") or {}))
 
 profile = st.session_state.get("profile") or {}
 allowed_pages = get_allowed_pages(profile)
 
 if st.session_state["main_page"] not in allowed_pages:
-    st.session_state["main_page"] = "📌 Takip"
+    st.session_state["main_page"] = landing_page(profile)
 
 with st.sidebar:
     full_name = profile.get("full_name", "") or "Kullanıcı"
@@ -384,8 +377,9 @@ elif main == "🗓️ Tüm Vardiyalar":
                               'Gece':render_all_night,'Yıllık İzin':render_all_annual_leave,
                               'Hafta Sonu Sorumlu':render_all_weekend_owner,'Değişim Alanı':__import__('modules.tum_vardiyalar.vardiya_duzenleme',fromlist=['render']).render})
 elif main == "📊 İzleme":
-    st.title(main)
-    st.info('İzleme ekranı hazırlanıyor.')
+    from modules.izleme import render as render_monitor
+    render_monitor()
+
 elif main == "🗃️ Veri ve Kayıt Merkezi":
     from modules.kayit_merkezi import render as render_registry
     render_registry()

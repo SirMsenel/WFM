@@ -509,20 +509,10 @@ def render():
     from ortak.planlama import SHIFT_LABELS
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     current=_profile();_inject_css();st.subheader('🧍 Benim Vardiyam')
-    left,right=st.columns([1,1.4])
-    with left:target=_employee_picker_if_allowed(current)
+    from ortak.personel_karti import pick_person,render_person
+    target=pick_person(st.session_state,current,'my_shift')
     if not target:return
-    with right:
-        with st.container(border=True):
-            st.markdown('#### '+escape(_fullname(target)))
-            from ortak.personel import WORK_LABELS,LANG_LABELS
-            st.caption(f"{target.get('location') or '—'} · {WORK_LABELS.get(target.get('work_type'),'—')} · {LANG_LABELS.get(target.get('language'),'—')}")
-            st.write('Takım lideri: '+str(target.get('team_lead') or '—'))
-            st.caption('Sicil no: '+str(target.get('sicil_no') or target.get('employee_id'))+' · Kullanıcı adı: '+str(target.get('username','')))
-            from ortak.roller_ve_yetkiler import ROLE_LABELS
-            from ortak.personel import WORK_LABELS,LANG_LABELS
-            st.caption(ROLE_LABELS.get(target.get('position'),'Müşteri Temsilcisi')+' · '+WORK_LABELS.get(target.get('work_type'),str(target.get('work_type')))+' · '+LANG_LABELS.get(target.get('language'),str(target.get('language'))))
-            st.write('Yönetici: '+str(target.get('manager') or '—'))
+    render_person(target)
     selected=_compact_period()
     if not selected:return
     start,end=selected
@@ -538,9 +528,6 @@ def render():
         with col:
             st.markdown(f'<div style="background:linear-gradient(135deg,{bg},#fff);border:1px solid {bg};border-radius:20px;padding:20px;text-align:center;color:{fg}"><b>{name}</b><div style="font-size:28px;font-weight:750;margin:8px 0">{summary["parts"][name]:.1f} sa</div><small>{hint}</small></div>',unsafe_allow_html=True)
     with columns[4]:st.markdown(f'<div style="background:linear-gradient(135deg,#2c2554,#5b4b91);border-radius:20px;padding:20px;text-align:center;color:white"><b>Gece adedi</b><div style="font-size:28px;font-weight:750;margin:8px 0">{summary["night_count"]}</div><small>Geceye girilen vardiya</small></div>',unsafe_allow_html=True)
-    st.caption('Saatler yalnızca seçili tarih aralığına düşen gerçek süredir. Gece adedi GECE kodlu, 00:00–07:00 arasında başlayan veya gece yarısını aşan vardiyaları sayar; normal 07:00 girişleri sayılmaz.')
-    if counts:
-        st.caption('Statü günleri: '+' · '.join(f"{SHIFT_LABELS.get(k,k)}: {v}" for k,v in counts.items()))
     st.markdown('### Vardiya Tablosu')
     output=[]
     for r in sorted(records,key=lambda r:r['date']):
@@ -554,7 +541,7 @@ def render():
         if interval and code!='GECE':
             hour=interval[0].hour;part='Sabah' if 8<=hour<13 else 'İkindi' if 13<=hour<17 else 'Akşam' if hour>=17 else 'Gece'
             label='Çalışma'
-        output.append({'Tarih':r['date'],'Gün':DAY_NAMES[pd.Timestamp(r['date']).weekday()],'Durum':label,'Başlangıç':r.get('start') or '—','Bitiş':r.get('end') or '—','Saat':round(hours,2)})
+        output.append({'Tarih':r['date'],'Gün':DAY_NAMES[pd.Timestamp(r['date']).weekday()],'Durum':label,'Başlangıç':r.get('start') or '—','Bitiş':r.get('end') or '—','Saat':f'{round(hours*60)//60:02d}:{round(hours*60)%60:02d}'})
     view=pd.DataFrame(output)
     st.dataframe(view.style.map(cell_style,subset=['Durum','Başlangıç','Bitiş']),hide_index=True,use_container_width=True,height=520)
     if _is_academy(target):

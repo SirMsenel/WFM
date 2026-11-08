@@ -19,6 +19,7 @@ def render():
             a,b=st.columns(2)
             values.update(full_name=a.text_input('Ad soyad',key='hr_name'),sicil_no=b.text_input('Sicil no',key='hr_registry'),username=a.text_input('Kullanıcı adı',key='hr_username'),
                           work_type=b.selectbox('Çalışma grubu',list(WORK_LABELS),format_func=WORK_LABELS.get,key='hr_work'),language=a.selectbox('Dil',list(LANG_LABELS),format_func=LANG_LABELS.get,key='hr_lang'),location=b.text_input('Şehir / lokasyon',key='hr_location'))
+            values['company']=st.text_input('Şirket (Ulak, Teleperformance, Assistt vb.)',key='hr_company')
         else:
             team=[p for p in list_people(state) if p.get('team_lead')==profile.get('full_name') and p.get('position')=='agent']
             if not team:st.info('Aktif ekip personeli yok.');return

@@ -66,9 +66,10 @@ class PlanningUITests(unittest.TestCase):
         at = AppTest.from_string('from modules.all_shifts._fixed_records import render_fixed_records\nrender_fixed_records("YILLIK_IZIN", 2026, 11)')
         at.session_state['profile'] = {'position': 'wfm'}
         at.session_state['employees_cache'] = [emp()]
+        at.session_state['personnel_cache'] = [emp()]
         at.run()
         at.multiselect[0].select('1')
-        next(b for b in at.button if b.label == 'Planlama İçin Kaydet').click().run()
+        next(b for b in at.button if b.label == 'Kesin Kaydı Kaydet').click().run()
         self.assertFalse(at.exception)
         self.assertEqual(len(at.session_state['fixed_shift_records']), 1)
         self.button(at, 'fixed_delete_YILLIK_IZIN').click().run()

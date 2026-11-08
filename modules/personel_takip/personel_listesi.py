@@ -32,11 +32,12 @@ def render():
     st.caption(f'{len(df)} personel gösteriliyor.')
     df['sicil_no']=df.get('sicil_no',df.employee_id.astype(str))
     df['username']=df.get('username','')
-    output=df[['sicil_no','username','full_name','position','location','work_type','language','team_lead','manager']].copy()
+    df['company']=df.get('company','')
+    output=df[['company','sicil_no','username','full_name','position','location','work_type','language','team_lead','manager']].copy()
     output['position']=output.position.map(lambda r:ROLE_LABELS.get(r,r))
     output['work_type']=output.work_type.map(lambda k:WORK_LABELS.get(k,k))
     output['language']=output.language.map(lambda k:LANG_LABELS.get(k,k))
-    output=output.rename(columns={'sicil_no':'Sicil no','username':'Kullanıcı adı','full_name':'Ad soyad','position':'Pozisyon','location':'Şehir',
+    output=output.rename(columns={'company':'Şirket','sicil_no':'Sicil no','username':'Kullanıcı adı','full_name':'Ad soyad','position':'Pozisyon','location':'Şehir',
                                  'work_type':'Çalışma biçimi','language':'Dil','team_lead':'Takım lideri','manager':'Yönetici'})
     st.dataframe(output,hide_index=True,use_container_width=True,height=530)
     st.download_button('Personel Listesi CSV İndir',output.to_csv(index=False).encode('utf-8-sig'),'personel_listesi.csv','text/csv')

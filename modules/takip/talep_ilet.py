@@ -13,8 +13,11 @@ def render():
     state=st.session_state;profile=state.get('profile') or {};role=profile.get('position')
     st.subheader('Yeni Personel Talebi')
     if role not in {'agent','tl'}:st.info('Müşteri Temsilcisi talepleri kendi hesabından iletir; rapor girişini yalnızca Takım Lideri yapar.');return
-    types=['Rapor Bildirimi'] if role=='tl' else ['Yıllık İzin Talebi','Evlilik İzni Talebi','Mazeret İzni Talebi','Ücretsiz İzin Talebi','Doğum İzni Talebi','Gece Vardiyası Talebi','Mesai Talebi','Vardiya Değişim Talebi','Genel Talep']
+    types=['Rapor Bildirimi'] if role=='tl' else ['Yıllık İzin Talebi','Evlilik İzni Talebi','Mazeret İzni Talebi','Ücretsiz İzin Talebi','Doğum İzni Talebi','Gece Vardiyası Talebi','Mesai Talebi','Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi','Genel Talep']
     typ=st.selectbox('Ne için talep oluşturuyorsun?',types,format_func=TYPE_LABELS.get,key='new_request_type')
+    if typ in {'Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi'}:
+        from ortak.degisim_ekrani import render_change_form
+        render_change_form(state,'personal_change',{'Vardiya Değişim Talebi':'Vardiya değişimi','Erken Çıkış Talebi':'Erken çıkış','Geç Giriş Talebi':'Geç giriş'}[typ]);return
     today=datetime.now(ZoneInfo('Europe/Istanbul')).date();a,b=st.columns(2)
     start=a.date_input('Başlangıç tarihi',value=today,key='new_request_start');end=b.date_input('Bitiş tarihi',value=today,key='new_request_end')
     payload={'type':typ,'start_date':str(start),'end_date':str(end),'targets':[]};valid=start<=end
@@ -45,6 +48,10 @@ def render():
             except ValueError as exc:valid=False;st.warning(str(exc))
         st.caption('Nihai onayda güncel vardiya, ders/sınav ve dinlenme kuralları yeniden kontrol edilir.')
         st.caption('Örnek: bugün sen OFF / Mehmet çalışıyor, yarın Mehmet OFF / sen çalışıyorsan iki günü aynı talepte seç. Tek günle OFF veya saat dengesini bozarsan talep gönderilmez.')
+    if typ=='Gece Vardiyası Talebi' and valid:
+        from ortak.kesin_kayit_deposu import night_capacity_check
+        try:night_capacity_check(state,profile['employee_id'],start,end)
+        except ValueError as exc:st.warning(str(exc));valid=False
     payload['note']=st.text_area('Açıklama / gerekçe',key='new_request_reason',placeholder='Değişiklik ne hakkında? Gerekçeni yaz.')
     if typ=='Vardiya Değişim Talebi':valid=valid and bool(payload['note'].strip())
     if st.button('Talebi Takım Liderime Gönder' if role=='agent' else 'Raporu Planlamaya İlet',disabled=not valid,key='request_send'):

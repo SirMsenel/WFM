@@ -26,7 +26,7 @@ def prepare_manual(state,employee_ids,start,end,kind,begin=None,finish=None,note
             key=(eid,str(day.date()))
             if key in rows:
                 old=rows[key];label=(f"{old['start']}–{old['end']}" if old.get('start') and old.get('end') else old.get('shift_code','Kayıt'))
-                warnings.append({'Personel':person['full_name'],'employee_id':eid,'Sicil no':people[eid].get('sicil_no',eid),'Kullanıcı adı':people[eid].get('username',''),'Tarih':key[1],'Vardiya':label,'Neden yazılmadı?':'Bu gün zaten dolu; mevcut kayıt korundu.'});continue
+                warnings.append({'Personel':person['full_name'],'employee_id':eid,'Sicil no':people[eid].get('sicil_no',eid),'Kullanıcı adı':people[eid].get('username',''),'Tarih':key[1],'Vardiya':label,'Neden yazılmadı?':'Bu gün zaten dolu; mevcut kayıt korundu.','Tür':'Engel'});continue
             a,b=None,None
             if kind in {'WORK','GECE','MESAI'}:
                 if begin is None:raise ValueError('Başlangıç saati gerekli.')
@@ -44,6 +44,6 @@ def prepare_manual(state,employee_ids,start,end,kind,begin=None,finish=None,note
                          languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),reject_invalid_sources=('manual_candidate',))
     for issue in result['issues']:
         if issue.get('source')=='manual_candidate':
-            eid=issue['employee_id'];warnings.append({'Personel':people[eid]['full_name'],'employee_id':eid,'Sicil no':people[eid].get('sicil_no',eid),'Kullanıcı adı':people[eid].get('username',''),'Tarih':issue['date'],'Vardiya':f"{issue.get('start') or '—'}–{issue.get('end') or '—'}",'Neden yazılmadı?':issue['Sorun']})
+            eid=issue['employee_id'];warnings.append({'Personel':people[eid]['full_name'],'employee_id':eid,'Sicil no':people[eid].get('sicil_no',eid),'Kullanıcı adı':people[eid].get('username',''),'Tarih':issue['date'],'Vardiya':f"{issue.get('start') or '—'}–{issue.get('end') or '—'}",'Neden yazılmadı?':issue['Sorun'],'Tür':'Uyarı' if issue.get('severity')=='warning' else 'Engel'})
     additions=[dict(r,source='manual_single') for r in result['plan'] if r.get('source')=='manual_candidate']
     return additions,warnings

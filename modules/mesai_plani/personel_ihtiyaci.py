@@ -92,7 +92,7 @@ def calculate_staffing(forecast_df, ratio_df, aht=300, target_sl=.8,
         raise ValueError("Geçersiz personel hesaplama parametreleri.")
     if not {'Gün','Slot','Oran(%)'} <= set(ratio_df):
         raise ValueError("Oran profilinde Gün, Slot ve Oran(%) gerekli.")
-    if ratio_df.duplicated(['Gün','Slot']).any():
+    if ratio_df.duplicated(['Tarih','Slot'] if 'Tarih' in ratio_df else ['Gün','Slot']).any():
         raise ValueError("Oran profilinde aynı gün/slot birden fazla kez var.")
     rows=[]
     for row in forecast.itertuples(index=False):
@@ -118,7 +118,6 @@ def calculate_staffing(forecast_df, ratio_df, aht=300, target_sl=.8,
 
 def render():
     st.subheader("👥 Personel Tahmin (Erlang C)")
-    st.caption("Günlük tahmini, 30 dk slot oranlarına dağıtıp Erlang C ile agent ihtiyacını hesaplar.")
     st.markdown("---")
 
     # Gerekli veriler
@@ -131,16 +130,15 @@ def render():
         return
 
     forecast_df = st.session_state["sp_forecast_df"].copy()
-    st.caption("Kullanılan kaynak: " + st.session_state.get("sp_forecast_meta", {}).get("model_name", "Seçili tahmin"))
     ratio_df=st.session_state['sp_active_ratio_profile_df'].copy()
-    if 'Tarih' in ratio_df:
-        scope=st.radio('Interval profilinin uygulanacağı dönem',['Tüm tahmin dönemi','Yalnızca profilin tarihleri'],horizontal=True,key='staffing_profile_scope')
-        if scope=='Tüm tahmin dönemi':
-            ratio_df=ratio_df.drop(columns='Tarih').drop_duplicates(['Gün','Slot'])
-            st.caption('Seçili gün payları tahmin döneminin bütün Pazartesi/Salı vb. günlerine uygulanır. Dönem Seçimi’nde 1–93 gün seçebilirsin.')
-        else:
-            dates=pd.to_datetime(ratio_df.Tarih).dt.normalize().unique()
-            forecast_df=forecast_df[pd.to_datetime(forecast_df.tarih).dt.normalize().isin(dates)]
+    first=pd.to_datetime(forecast_df.tarih).min().date();last=pd.to_datetime(forecast_df.tarih).max().date()
+    st.markdown('#### Interval profilinin uygulanacağı dönem')
+    a,b=st.columns(2)
+    start=a.date_input('Başlangıç',value=first,min_value=first,max_value=last,key=f'staffing_start_{first}_{last}',format='DD.MM.YYYY')
+    end=b.date_input('Bitiş',value=last,min_value=first,max_value=last,key=f'staffing_end_{first}_{last}',format='DD.MM.YYYY')
+    if end<start:st.error('Bitiş tarihi başlangıçtan önce olamaz.');return
+    forecast_df=forecast_df[pd.to_datetime(forecast_df.tarih).dt.date.between(start,end)].copy()
+    if 'Tarih' in ratio_df:ratio_df=ratio_df.sort_values('Tarih').drop(columns='Tarih').drop_duplicates(['Gün','Slot'],keep='last')
 
     if forecast_df.empty or ratio_df.empty:
         st.error("Tahmin veya oran profili boş.")

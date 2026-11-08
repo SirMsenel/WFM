@@ -76,7 +76,7 @@ def styled_shortage_matrix(matrix):
 
 def render_shortages(result,key='gap'):
     coverage=result['coverage'];missing,daily=shortage_summary(coverage)
-    st.markdown('### Haftalık Eksik Personel · 7 gün × 48 dilim')
+    st.markdown('### Haftalık Eksik Personel')
     if coverage.empty:st.info('İhtiyaç verisi bulunamadı.');return
     dates=pd.to_datetime(coverage.Tarih)
     first=dates.min().normalize()-pd.Timedelta(days=dates.min().weekday())
@@ -99,7 +99,7 @@ def render_shortages(result,key='gap'):
 
 
 def blocking_issues(result):
-    return [r for r in result.get('issues',[]) if not (str(r.get('Sorun','')).startswith('Gece ') and 'kesin kayıt var' in str(r.get('Sorun','')))]
+    return [r for r in result.get('issues',[]) if r.get('severity')!='warning' and not (str(r.get('Sorun','')).startswith('Gece ') and 'kesin kayıt var' in str(r.get('Sorun','')))]
 
 
 def issue_help(reason):
@@ -146,5 +146,5 @@ def issue_table(result):
 def render_issues(result):
     if not result.get('issues'):return
     hard=blocking_issues(result);warning=len(result['issues'])-len(hard)
-    st.warning(f'{len(hard)} kayıt düzeltilmeli · {warning} gece sayısı uyarısı. Her satırda mevcut vardiya ve karşılaması gereken kural gösterilir.')
+    st.warning(f'{len(hard)} kayıt düzeltilmeli · {warning} esnek kural / gece sayısı uyarısı. Her satırda mevcut vardiya ve karşılaması gereken kural gösterilir.')
     st.dataframe(issue_table(result),hide_index=True,use_container_width=True)

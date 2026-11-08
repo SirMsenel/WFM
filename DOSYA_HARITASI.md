@@ -96,3 +96,18 @@ Eski İngilizce yollar yalnızca uyumluluk dosyalarıdır; değişiklik yaparken
 | `modules/tracking/requests_inbox.py` | `modules/takip/talep_sonuclari.py` |
 | `modules/tracking/requests_submit.py` | `modules/takip/talep_ilet.py` |
 | `ui.py` | `arayuz.py` |
+
+## 6. güncellemede eklenen kaynaklar
+
+| Ekran / işlev | Kaynak |
+|---|---|
+| Günlük tahmin arşivi | `ortak/gunluk_tahmin_deposu.py` |
+| Kullanıcı kayıt başlıkları | `ortak/kayit_basliklari.py` |
+| Değişim formu ve önizleme | `ortak/degisim_ekrani.py` |
+| Değişim önerisi ve Planlama onayı | `ortak/degisim_onaylari.py` |
+| Ortak gece/izin kaynakları ve kontenjan | `ortak/kesin_kayit_deposu.py` |
+| Ortak takvim | `ortak/takvim_gorunumu.py` |
+| Personel/kıdem kartı | `ortak/personel_karti.py` |
+| Rol ve başlangıç ekranı | `ortak/erisim.py` |
+| İzleme | `modules/izleme.py` |
+

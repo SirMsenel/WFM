@@ -1,71 +1,48 @@
-# Tum Vardiyalar / Kesin Kayitlar — bu ekranın / servisin uygulama kodu.
-"""Night/annual-leave records consumed before requests and manual assignments."""
+"""Gece ve Yıllık İzin — onaylı talepleri de içeren ortak vardiya takvimi."""
+import calendar,uuid
 from datetime import date
-import uuid
-
-import pandas as pd
 import streamlit as st
-
+from ortak.personel import get_people
+from ortak.kesin_kayit_deposu import fixed_calendar_rows
+from ortak.takvim_gorunumu import render_calendar
+from ortak.calisma_alani_deposu import save_keys
 from modules.vardiya_plani.vardiya_motoru import bounds
-from modules.vardiya_plani.planlama_verileri import fetch_employees
 
 
-def render_fixed_records(code, year, month):
-    state = st.session_state
-    records = state.setdefault("fixed_shift_records", [])
-    rows = [r for r in records if r.get("shift_code") == code
-            and str(r.get("start_date", ""))[:7] <= f"{year}-{month:02d}" <= str(r.get("end_date", ""))[:7]]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-    published = [r for r in state.get("published_shift_plan", [])
-                 if r.get("shift_code") == code and str(r.get("date", "")).startswith(f"{year}-{month:02d}")]
-    if published:
-        st.markdown("#### Yayınlanan Plandaki Kayıtlar")
-        st.dataframe(published, use_container_width=True, hide_index=True)
-    role = (state.get("profile") or {}).get("position")
-    if role not in {"wfm", "manager", "moderator"}:
-        st.caption("Kayıtlar WFM, yönetici veya moderatör tarafından düzenlenebilir.")
-        return
-    if st.button("Personel Listesini Al", key=f"fixed_fetch_{code}"):
+def render_fixed_records(code,year,month):
+    state=st.session_state;start=date(year,month,1);end=date(year,month,calendar.monthrange(year,month)[1])
+    rows=[r for r in fixed_calendar_rows(state,start,end) if r['shift_code']==code]
+    from ortak.personel_deposu import list_people
+    people=[p for p in (list_people(state,True) if state.get('all_include_inactive') else get_people(state)) if str(p['employee_id']) in {r['employee_id'] for r in rows}]
+    if rows:render_calendar(rows,people,start,end,key='fixed_calendar_'+code)
+    else:st.info('Seçili ayda kayıt yok.')
+    if code=='GECE':
+        from ortak.gece_kontrolleri import night_gaps
         try:
-            fetch_employees(state)
-        except Exception as exc:
-            st.error(f"Personeller alınamadı: {exc}")
-    employees = state.get("employees_cache", [])
-    if not employees:
-        st.info("Personelleri al veya Vardiya Planı → Oluştur ekranından personel dosyası yükle.")
-        return
-    with st.form(f"fixed_form_{code}"):
-        ids = [str(e["employee_id"]) for e in employees]
-        labels = {str(e["employee_id"]): f"{e.get('full_name', '')} ({e['employee_id']})" for e in employees}
-        selected = st.multiselect("Personeller", options=ids, format_func=labels.get)
-        dates = st.date_input("Tarih aralığı", value=(date(year, month, 1), date(year, month, 1)))
-        start, end = None, None
-        if code == "GECE":
-            a, b = st.columns(2)
-            start = a.text_input("Başlangıç", value=st.session_state.get("shift_rules",{}).get("general",{}).get("night_window_start","00:00"))
-            end = b.text_input("Bitiş", value=st.session_state.get("shift_rules",{}).get("general",{}).get("night_window_end","08:00"))
-        note = st.text_input("Not")
-        save = st.form_submit_button("Planlama İçin Kaydet")
-    if save:
-        try:
-            if not selected or not isinstance(dates, tuple) or len(dates) != 2:
-                raise ValueError("Personel ve başlangıç/bitiş tarihini seç.")
-            if dates[1] < dates[0] or (dates[1]-dates[0]).days > 366:
-                raise ValueError("Tarih aralığı 1–367 gün arasında olmalı.")
-            if code == "GECE":
-                bounds({"date": str(dates[0]), "shift_code": code, "start": start, "end": end})
-            additions = [{"id": uuid.uuid4().hex, "employee_id": eid,
-                          "full_name": labels[eid], "start_date": dates[0].isoformat(),
-                          "end_date": dates[1].isoformat(), "shift_code": code,
-                          "start": start, "end": end, "note": note} for eid in selected]
-            state["fixed_shift_records"] = records + additions
-            st.rerun()
-        except ValueError as exc:
-            st.error(str(exc))
-    if rows:
-        selected_id = st.selectbox("Silinecek kayıt", [r["id"] for r in rows], key=f"fixed_delete_pick_{code}",
-                                  format_func=lambda rid: next(f"{r.get('full_name', r['employee_id'])} | {r['start_date']} → {r['end_date']}" for r in rows if r["id"] == rid))
-        if st.button("Seçili Kaydı Sil", key=f"fixed_delete_{code}"):
-            state["fixed_shift_records"] = [r for r in records if r["id"] != selected_id]
-            st.rerun()
-    st.caption("Kayıtlar hazır çalışma alanı veritabanına kaydedilir; otomatik motor bu kayıtları önce yerleştirir. Kural çakışmaları plan kontrolünde gösterilir." if state.get('workspace_db_path') else "Kayıtlar bu oturumda saklanır; otomatik motor bu kayıtları önce yerleştirir.")
+            missing=night_gaps(state)
+            if missing:
+                st.warning(f'Seçili plan döneminde {len(missing)} tarih/dil için gece eksiği var.')
+                with st.expander('Gece eksiklerini göster'):st.dataframe(missing,hide_index=True,use_container_width=True)
+            elif state.get('shift_rules',{}).get('night',{}).get('enabled'):st.success('Seçili plan dönemi için gece kontrolleri tamam.')
+        except (ValueError,KeyError):pass
+    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator'}:return
+    with st.expander('Kesin Kayıt Ekle / Kaldır'):
+        all_people={str(p['employee_id']):p for p in get_people(state) if p.get('position')=='agent'}
+        selected=st.multiselect('Personeller',list(all_people),format_func=lambda i:all_people[i]['full_name'],key='fixed_people_'+code)
+        a,b=st.columns(2);first=a.date_input('Başlangıç',value=start,key='fixed_start_'+code);last=b.date_input('Bitiş',value=start,key='fixed_end_'+code)
+        begin,finish=None,None
+        if code=='GECE':
+            general=state.get('shift_rules',{}).get('general',{});begin=a.text_input('Gece başlangıç',value=general.get('night_window_start','00:00'),key='fixed_ns');finish=b.text_input('Gece bitiş',value=general.get('night_window_end','08:00'),key='fixed_ne')
+        note=st.text_input('Kayıt açıklaması',key='fixed_note_'+code)
+        if st.button('Kesin Kaydı Kaydet',key='fixed_save_'+code):
+            try:
+                if not selected or last<first or (last-first).days>366:raise ValueError('Personel ve geçerli tarih aralığı seçin.')
+                if code=='GECE':bounds({'date':str(first),'shift_code':code,'start':begin,'end':finish})
+                state['fixed_shift_records']=state.get('fixed_shift_records',[])+[{'id':uuid.uuid4().hex,'employee_id':i,'full_name':all_people[i]['full_name'],'start_date':str(first),'end_date':str(last),'shift_code':code,'start':begin,'end':finish,'note':note} for i in selected]
+                save_keys(state);st.rerun()
+            except ValueError as exc:st.error(str(exc))
+        existing={r['id']:r for r in state.get('fixed_shift_records',[]) if r.get('shift_code')==code}
+        if existing:
+            ident=st.selectbox('Kaldırılacak kesin kayıt',list(existing),format_func=lambda i:f"{existing[i].get('full_name','Personel')} · {existing[i]['start_date']} – {existing[i]['end_date']}",key='fixed_delete_pick_'+code)
+            if st.button('Kesin Kaydı Kaldır',key='fixed_delete_'+code):
+                state['fixed_shift_records']=[r for r in state['fixed_shift_records'] if r['id']!=ident];save_keys(state);st.rerun()

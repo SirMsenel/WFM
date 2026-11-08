@@ -1,46 +1,101 @@
-# Kayit Merkezi — bu ekranın / servisin uygulama kodu.
-"""Veri ve Kayıt Merkezi — değişmez kaynaklar ve işlem geçmişi."""
+"""Veri ve Kayıt Merkezi — anlaşılır başlıklarla, alt ekranlara ayrılmış sürümlü kayıtlar."""
+import json
 import pandas as pd
 import streamlit as st
 from ortak.roller_ve_yetkiler import require,init_governance
 from ortak.calisma_alani_deposu import connect,loads
+from ortak.gezinme import sections
+from ortak.kayit_basliklari import title_for,title_editor,record_picker
+
+
+def show_table(rows,name):
+    if not rows:st.info('Henüz kayıt yok.');return
+    frame=pd.DataFrame(rows)
+    for col in frame:
+        if frame[col].map(lambda v:isinstance(v,(dict,list))).any():frame[col]=frame[col].map(str)
+    st.dataframe(frame,hide_index=True,use_container_width=True,height=520)
+    st.download_button('CSV İndir',frame.to_csv(index=False).encode('utf-8-sig'),name+'.csv','text/csv',key='registry_csv_'+name)
+
+
+def render_daily(state):
+    from ortak.gunluk_tahmin_deposu import saved_daily,daily_label
+    path=state['workspace_db_path'];records=saved_daily(path)
+    if not records:st.info('Henüz günlük tahmin kaydı yok.');return
+    byid={r['id']:r for r in records};ident=record_picker('Günlük tahmin kaydı',records,lambda r:daily_label(r,path),'registry_daily');record=byid[ident]
+    title_editor(state,ident,daily_label(record,path));show_table(record['frame'].rename(columns={'tarih':'Tarih','y_pred':'Çağrı tahmini'}).to_dict('records'),'gunluk_tahminler')
+
+
+def render_slots(state):
+    from ortak.tahmin_kayit_servisi import runs,slots
+    from modules.mesai_plani.guncel_takip import run_label
+    records=runs(state['workspace_db_path']);byid={r['id']:r for r in records}
+    if not records:st.info('Henüz kullanılan 30 dakikalık tahmin kaydı yok.');return
+    ident=record_picker('30 dakikalık tahmin kaydı',records,lambda r:title_for(state['workspace_db_path'],r['id'],run_label(r)),'registry_slots')
+    title_editor(state,ident,run_label(byid[ident]))
+    from ortak.saat_etiketleri import slot_label
+    frame=slots(ident,state['workspace_db_path']);frame['Saat aralığı']=frame.slot.map(slot_label)
+    show_table(frame[['tarih','Saat aralığı','predicted','share']].rename(columns={'tarih':'Tarih','predicted':'Çağrı tahmini','share':'Dağılım (%)'}).to_dict('records'),'30_dk_tahminler')
+
+
+def render_profiles(state):
+    from ortak.tahmin_kayit_servisi import profile_versions
+    from modules.mesai_plani.guncel_takip import profile_label
+    versions=profile_versions(state['workspace_db_path']);byid={r['id']:r for r in versions}
+    if not versions:st.info('Henüz profil kaydı yok.');return
+    ident=record_picker('Interval dağılımı',versions,lambda r:title_for(state['workspace_db_path'],r['id'],profile_label(r)),'registry_profile')
+    title_editor(state,ident,profile_label(byid[ident]));show_table(byid[ident]['frame'].to_dict('records'),'interval_profilleri')
+
+
+def render_publications(state):
+    from ortak.yayin_servisi import publications
+    from ortak.takvim_gorunumu import render_calendar
+    from ortak.personel_deposu import list_people
+    records=publications(state)
+    if not records:st.info('Henüz açıklanmış vardiya yok.');return
+    byid={r['id']:r for r in records};path=state['workspace_db_path']
+    def label(i):
+        r=byid[i];return title_for(path,i,f"{pd.Timestamp(r['start']):%d.%m.%Y} – {pd.Timestamp(r['end']):%d.%m.%Y} · {', '.join(r.get('languages',[])).upper()} · {'Yayında' if r['status']=='active' else 'Geri alındı'}")
+    ident=record_picker('Açıklanan vardiya dönemi',records,lambda r:label(r['id']),'registry_publication');record=byid[ident]
+    title_editor(state,ident,label(ident));lookup={str(e['employee_id']):e for e in list_people(state,True)}
+    people=[lookup.get(i,{'employee_id':i,'full_name':i}) for i in sorted({str(r['employee_id']) for r in record['rows']})]
+    render_calendar(record['rows'],people,record['start'],record['end'],key='registry_roster')
+    with st.expander('İlk açıklanan sürüm'):
+        with connect(path) as db:raw=db.execute('SELECT payload FROM publication_batches WHERE id=?',(ident,)).fetchone()
+        original=loads(raw[0]) if raw else record
+        render_calendar(original['rows'],people,original['start'],original['end'],key='registry_original')
+
+
+def render_changes(state):
+    from ortak.degisim_ekrani import render_change_approvals
+    render_change_approvals(state,'registry_change_review')
+    with connect(state['workspace_db_path']) as db:raw=db.execute('SELECT payload FROM shift_change_batches ORDER BY rowid DESC').fetchall()
+    from ortak.personel_deposu import list_people
+    people={str(p['employee_id']):p for p in list_people(state,True)};rows=[]
+    for item in raw:
+        p=loads(item[0])
+        for old,new in zip(p['before'],p['after']):rows.append({'Personel':people.get(str(new['employee_id']),{}).get('full_name',new['employee_id']),'Vardiya tarihi':new['date'],'İşlem':p['type'],'Eski değer':f"{old['shift_code']} {old.get('start') or ''}–{old.get('end') or ''}",'Yeni değer':f"{new['shift_code']} {new.get('start') or ''}–{new.get('end') or ''}",'Gerekçe':p['reason'],'İşlemi yapan':p['actor'],'Kayıt zamanı':p['date']})
+    st.markdown('#### Uygulanan değişiklikler');show_table(rows,'vardiya_degisimleri')
+
+
+def render_requests(state):
+    from ortak.talep_servisi import refresh
+    from ortak.talep_gorunumu import rows_for_table
+    show_table(rows_for_table(refresh(state)),'talep_kayitlari')
+
+
+def render_hr(state):
+    from ortak.personel_is_akisi import proposals
+    show_table([{'Personel':r['values'].get('full_name'),'İşlem':r['kind'],'Durum':r['stage'],'Tarih':r['values'].get('effective_date'),'İleten':r['created_by'],'Yönetici':r['manager'],'Gerekçe':r['reason']} for r in proposals(state)],'personel_islemleri')
+
+
+def render_audit(state):
+    with connect(state['workspace_db_path']) as db:raw=db.execute('SELECT * FROM audit_events ORDER BY rowid DESC').fetchall()
+    show_table([{'Tarih':r['created_at'],'Alan':r['category'],'İşlemi yapan':r['actor'],'İçerik':r['payload']} for r in raw],'denetim_gecmisi')
 
 
 def render():
     state=st.session_state;st.title('🗃️ Veri ve Kayıt Merkezi')
     try:require(state,'kayit_merkezi')
     except ValueError as exc:st.info(str(exc));return
-    kind=st.selectbox('Kayıt alanı',['Günlük / 30 dk tahminler','Interval profilleri','Vardiya değişiklikleri','Talep kayıtları','Personel işlemleri','Yetki ve denetim geçmişi'],key='registry_area')
-    path=state['workspace_db_path'];init_governance(path);rows=[]
-    if kind=='Günlük / 30 dk tahminler':
-        from ortak.tahmin_kayit_servisi import runs,slots
-        versions=runs(path)
-        if versions:
-            ident=st.selectbox('Tahmin sürümü',[r['id'] for r in versions],key='registry_forecast')
-            frame=slots(ident,path);st.dataframe(frame.groupby('tarih',as_index=False).predicted.sum().rename(columns={'tarih':'Tarih','predicted':'Günlük tahmin'}),hide_index=True,use_container_width=True);rows=frame.to_dict('records')
-    elif kind=='Interval profilleri':
-        from ortak.tahmin_kayit_servisi import profile_versions
-        versions=profile_versions(path)
-        if versions:
-            ident=st.selectbox('Profil sürümü',[r['id'] for r in versions],key='registry_profile');rows=next(r['frame'] for r in versions if r['id']==ident).to_dict('records')
-    elif kind=='Talep kayıtları':
-        from ortak.talep_servisi import refresh
-        rows=refresh(state)
-    elif kind=='Personel işlemleri':
-        from ortak.personel_is_akisi import proposals
-        rows=proposals(state)
-    else:
-        table='shift_change_batches' if kind=='Vardiya değişiklikleri' else 'audit_events'
-        with connect(path) as db:
-            raw=db.execute('SELECT * FROM '+table+' ORDER BY rowid DESC').fetchall()
-        if kind=='Vardiya değişiklikleri':
-            for r in raw:
-                payload=loads(r['payload'])
-                for old,new in zip(payload['before'],payload['after']):rows.append({'Kayıt':payload['id'],'Tarih':payload['date'],'İşlemi yapan':payload['actor'],'İşlem':payload['type'],'Gerekçe':payload['reason'],'Sicil':new.get('sicil_no',new['employee_id']),'Kullanıcı adı':new.get('username',''),'Vardiya günü':new['date'],'Eski değer':str({k:old.get(k) for k in ['shift_code','start','end']}),'Yeni değer':str({k:new.get(k) for k in ['shift_code','start','end']})})
-        else:rows=[{'Tarih':r['created_at'],'Alan':r['category'],'İşlemi yapan':r['actor'],'İçerik':r['payload']} for r in raw]
-    if not rows:st.info('Henüz kayıt yok.');return
-    frame=pd.DataFrame(rows)
-    for col in frame:
-        if frame[col].map(lambda v:isinstance(v,(dict,list))).any():frame[col]=frame[col].map(str)
-    st.dataframe(frame,hide_index=True,use_container_width=True,height=550)
-    st.download_button('Görünen Kayıtları CSV İndir',frame.to_csv(index=False).encode('utf-8-sig'),'kayit_merkezi.csv','text/csv')
+    init_governance(state['workspace_db_path'])
+    sections('nav_registry',{'Günlük Tahminler':lambda:render_daily(state),'30 Dakikalık Tahminler':lambda:render_slots(state),'Interval Profilleri':lambda:render_profiles(state),'Açıklanan Vardiyalar':lambda:render_publications(state),'Vardiya Değişimleri':lambda:render_changes(state),'Talep Kayıtları':lambda:render_requests(state),'Personel İşlemleri':lambda:render_hr(state),'Yetki Geçmişi':lambda:render_audit(state)})

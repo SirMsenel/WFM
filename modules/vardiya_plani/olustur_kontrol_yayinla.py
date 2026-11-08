@@ -83,7 +83,7 @@ def render():
                 outside=[r for r in state.get('draft_shift_plan',[]) if not start<=str(r.get('date'))<=end or str(r['employee_id']) not in included]
                 state['draft_shift_plan']=outside+result['plan']
                 result['period']={'start':start,'end':end}
-                state['planning_result']=result;state['planning_allow_gaps']=False;state['planning_accept_warnings']=False
+                state['planning_result']=result;state['planning_allow_gaps']=False;state['planning_accept_warnings']=False;state['planning_accept_soft']=False;state['planning_soft_consent']=False
                 state['planning_result_fingerprint']=fingerprint(state)
                 save_keys(state)
             st.success('Taslak hazır. Takvimi Vardiya Saatleri ekranından da inceleyebilirsin.')
@@ -102,9 +102,6 @@ def render():
     if stale:st.warning('Kayıtlar veya kurallar değişti. Güncel sonucu yayınlamak için yeniden oluşturun.')
     coverage_summary(result,'Planın İhtiyacı Karşılama Durumu')
     render_shortages(result,'auto_gaps')
-    with st.expander('Tüm atamalar ve 30 dakikalık karşılaştırma'):
-        st.dataframe(pd.DataFrame(result['plan']),hide_index=True,use_container_width=True)
-        st.dataframe(result['coverage'],hide_index=True,use_container_width=True)
     render_issues(result)
     if result.get('issues'):
         from ortak.cakisma_temizleme import propose_cleanup
@@ -114,7 +111,10 @@ def render():
     hard=blocking_issues(result)
     warnings=len(result.get('issues',[]))-len(hard)
     has_gaps=bool(result['coverage'].Eksik.sum())
+    soft=any(r.get('severity')=='warning' and r.get('override_required',True) for r in result.get('issues',[]))
+    if soft:state['planning_accept_soft']=st.checkbox('Esnek kural aşımlarını inceledim ve onaylıyorum',value=False,key='planning_soft_consent')
     reasons=[]
+    if soft and not state.get('planning_accept_soft'):reasons.append('Esnek kural aşımları için onay verin.')
     if stale:reasons.append('Kayıtlar değişti: Otomatik Vardiya Taslağı Oluştur düğmesine tekrar basın.')
     if hard:reasons.append(f'{len(hard)} kayıt/kural ihlali var. Yukarıdaki tabloda Mevcut vardiya ve Olması gereken sütunlarını karşılaştırarak düzeltin, sonra yeniden oluşturun.')
     if reasons:st.info('Yayınlamak için kalan adımlar:\n\n'+'\n\n'.join(reasons))

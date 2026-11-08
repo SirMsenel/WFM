@@ -27,18 +27,6 @@ def profile_label(version):
 @st.fragment(run_every=30)
 def render_current():
     st.subheader('Güncel Takip · Tahmin ve Gerçekleşen Çağrı')
-    st.caption('Ekran açıkken gerçekleşen çağrılar 30 saniyede bir yenilenir. CSV/Excel veya /actuals/intervals servisiyle beslenebilir.')
-    with st.expander('Gerçekleşen çağrıları besle · anlık veya geçmiş CSV/Excel'):
-        st.caption('tarih, cagri_sayisi ve isteğe bağlı slot (1–48), aht_sec. Kısmi gün yüklenebilir. Aynı tarih/dilim güncellenir, diğer dilimler korunur. Zaman damgası kullanıyorsan yarım saat başlangıcı olmalı.')
-        upload=st.file_uploader('Gerçekleşen 30 dk çağrı dosyası',type=['csv','xlsx'],key='tracking_actual_upload')
-        if upload and st.button('Gerçekleşenleri Kaydet',key='tracking_actual_save'):
-            try:
-                raw=pd.read_csv(upload) if upload.name.lower().endswith('.csv') else pd.read_excel(upload)
-                count=ingest_actuals(raw,path())
-                from ortak.veri_onbellegi import cached_calls
-                cached_calls.clear();st.success(f'{count} yarım saat kaydedildi.')
-            except (ValueError,TypeError) as exc:st.error(str(exc))
-        if st.button('Gerçekleşenleri Yenile',key='tracking_refresh'):st.rerun()
     versions=runs(path())
     if not versions:st.info('Henüz kullanılan bir tahmin kaydı yok. Mesai Planı → Personel Hesap ile hesapladığın 48 dilim burada sürümlü saklanır. Eski gerçekleşmelerden geriye dönük tahmin üretilmez.');return
     ident=st.selectbox('Kullanılan tahmin kaydı',[r['id'] for r in versions],format_func=lambda i:next(run_label(r) for r in versions if r['id']==i),key='tracking_forecast_run')

@@ -152,7 +152,7 @@ def collect_inputs(state):
         typ = req.get("type")
         if typ in {"Ders Programı", "Sınav Takvimi", "Genel Talep"}:
             continue  # Structured availability below is the source of truth.
-        if typ=='Vardiya Değişim Talebi':
+        if typ in {'Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi'} or (typ=='Rapor Bildirimi' and req.get('resolved_assignments')):
             if not req.get('resolved_assignments'):
                 problem(req,'Bu eski değişimin iki taraflı vardiya kaydı yok; yeni bir değişim talebiyle saatleri belirleyin')
             for assignment in req.get('resolved_assignments',[]):expand(assignment,assignment['shift_code'],'approved_request')

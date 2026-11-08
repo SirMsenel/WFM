@@ -83,11 +83,12 @@ class RosterChangeTests(WorkflowTests):
  def balanced(self):
   return [dict(r,shift_code='WORK' if r['shift_code']=='OFF' else 'OFF',start='08:00' if r['shift_code']=='OFF' else None,end='17:00' if r['shift_code']=='OFF' else None) for r in self.old]
  def test_two_day_off_exchange_is_saved_with_old_new_actor_and_reason(self):
-  ident=apply_changes(self.s,self.balanced(),'Vardiya değişimi','OFF dengeli değişim')
+  self.planner();ident=apply_changes(self.s,self.balanced(),'Vardiya değişimi','OFF dengeli değişim')
   check_conservation(self.old,self.s['published_shift_plan'])
   with connect(self.s['workspace_db_path']) as db:payload=loads(db.execute('SELECT payload FROM shift_change_batches WHERE id=?',(ident,)).fetchone()[0])
-  self.assertEqual(payload['actor'],'lead');self.assertEqual(payload['reason'],'OFF dengeli değişim');self.assertEqual(len(payload['before']),4);self.assertEqual(len(payload['after']),4)
+  self.assertEqual(payload['actor'],'planner');self.assertEqual(payload['reason'],'OFF dengeli değişim');self.assertEqual(len(payload['before']),4);self.assertEqual(len(payload['after']),4)
  def test_single_day_off_exchange_rejected_without_any_write(self):
+  self.planner()
   with self.assertRaises(ValueError):apply_changes(self.s,self.balanced()[:2],'Vardiya değişimi','Tek gün')
   self.assertEqual(self.s['published_shift_plan'],self.old)
   with connect(self.s['workspace_db_path']) as db:self.assertEqual(db.execute('SELECT COUNT(*) FROM shift_change_batches').fetchone()[0],0)
@@ -100,11 +101,12 @@ class RosterChangeTests(WorkflowTests):
   self.manager()
   with self.assertRaises(ValueError):apply_changes(self.s,[changed],'Rapor','Rapor')
   self.s['profile']={'position':'tl','username':'lead','full_name':'Lead'}
-  apply_changes(self.s,[changed],'Rapor','Sağlık raporu')
+  from ortak.degisim_onaylari import submit_change,decide_change
+  proposal=submit_change(self.s,[changed],'Rapor','Sağlık raporu');self.planner();decide_change(self.s,proposal,True)
   self.assertEqual(next(r for r in self.s['published_shift_plan'] if r['employee_id']=='2' and r['date']==str(DAY))['shift_code'],'RAPOR')
  def test_early_departure_is_logged_and_keeps_work_status(self):
   changed=dict(self.old[1],end='16:00')
-  apply_changes(self.s,[changed],'Erken çıkış','Onaylı erken çıkış')
+  self.planner();apply_changes(self.s,[changed],'Erken çıkış','Onaylı erken çıkış')
   row=next(r for r in self.s['published_shift_plan'] if r['employee_id']=='2' and r['date']==str(DAY))
   self.assertEqual(row['shift_code'],'WORK');self.assertEqual(row['end'],'16:00');self.assertTrue(row['attendance_adjusted'])
  def test_agent_preview_balances_two_off_days_and_rejects_one_day(self):
@@ -155,9 +157,9 @@ class PlanningRulesTests(unittest.TestCase):
 class UIExpansionTests(unittest.TestCase):
  def test_period_accepts_two_weeks_or_three_days(self):
   at=AppTest.from_string('from modules.shift_planing.period import render\nrender()');at.session_state['sp_staffing_result_df']=demand(days=14);at.run();self.assertFalse(at.exception)
-  control=at.date_input[0];control.set_value((DAY,DAY+timedelta(days=13))).run();at.button(key='vp_confirm').click().run()
+  at.date_input[0].set_value(DAY);at.date_input[1].set_value(DAY+timedelta(days=13)).run();at.button(key='vp_confirm').click().run()
   self.assertEqual(at.session_state['plan_ctx']['end'],DAY+timedelta(days=13))
-  at.date_input[0].set_value((DAY,DAY+timedelta(days=2))).run();self.assertEqual(at.session_state['plan_ctx']['end'],DAY+timedelta(days=2));self.assertFalse(at.exception)
+  at.date_input[1].set_value(DAY+timedelta(days=2)).run();self.assertEqual(at.session_state['plan_ctx']['end'],DAY+timedelta(days=2));self.assertFalse(at.exception)
  def test_staffing_does_not_truncate_two_week_forecast(self):
   from modules.shift_planner.staffing_forecast import render
   at=AppTest.from_string('from modules.shift_planner.staffing_forecast import render\nrender()',default_timeout=60)

@@ -270,7 +270,6 @@ def render():
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     state=st.session_state
     st.subheader('Haftalık Çağrı Dağılımı')
-    st.caption('Günlük çağrı tahmininin gün içindeki 48 yarım saate nasıl bölüneceğini belirler. Önce haftayı seç, dağılımı incele ve kullanmak istediğin profili kaydet.')
     with st.expander('Veri kaynağı',expanded=False):
         source=st.radio('30 dakikalık veri',['Hazır Veritabanı','Dosya (CSV/Excel)'],horizontal=True,key='interval_source')
         raw=None
@@ -316,7 +315,7 @@ def render():
     st.markdown('### Önerilen Haftalık Dağılım')
     slot_heatmap(profile)
     with st.container(border=True):
-        st.markdown('#### Haftanın Slot Ağırlıkları · 7 gün × 48 dilim')
+        st.markdown('#### Haftanın Slot Ağırlıkları')
         st.caption('Örnek: Pazartesi 09:00–09:30 hücresinde %4 yazıyorsa, Pazartesi çağrı tahmininin %4’ü bu yarım saate ayrılır.')
         table=matrix_table(profile)
         st.dataframe(table.style.format('{:.2f}%').background_gradient(cmap='Blues',axis=None).set_properties(**{'text-align':'center'}),use_container_width=True,height=485)
@@ -324,7 +323,6 @@ def render():
     with st.expander('Bu dağılım neden önerildi?'):
         st.write('Son 2 hafta, 1 ay, 3 ay, 6 ay, 12 ay ve tüm geçmiş ayrı ayrı karşılaştırılır. Geçen tam haftayı daha iyi açıklayan geçmişlere daha fazla pay verilir; yeni günler eski günlerden daha etkilidir.')
         scores=result['scores'][['Pencere','Başarı ağırlığı (%)','MAE (yüzde puan)']].rename(columns={'Pencere':'Hesaplamada kullanılan geçmiş','Başarı ağırlığı (%)':'Son dağılıma katkısı (%)','MAE (yüzde puan)':'Geçen haftadaki ortalama sapma (yüzde puan)'})
-        st.caption('Her satır ayrı bir denemedir: örneğin Son 2 hafta, yalnızca son 14 günün dağılımını kullanır. Geçen tam hafta üzerinde hatası ölçülür. Katkı yüzdesi yüksek olan deneme son öneriyi daha çok etkiler; katkılar toplamı %100’dür. Sapma örneği: gerçek %4, tahmin %5 ise fark 1 yüzde puandır.')
         st.dataframe(scores,hide_index=True,use_container_width=True,column_config={'Son dağılıma katkısı (%)':st.column_config.NumberColumn(format='%.1f'),'Geçen haftadaki ortalama sapma (yüzde puan)':st.column_config.NumberColumn(format='%.3f')})
         st.caption(f"Kontrol edilen hafta: {meta['validation_start']} – {meta['validation_end']}. Hatanın düşük olması daha iyi uyum demektir; gelecek hafta için garanti değildir.")
         flags=calendar_flags(pd.date_range(week,periods=7))

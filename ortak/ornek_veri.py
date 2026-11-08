@@ -167,6 +167,9 @@ def bootstrap(state, path=DEFAULT_DB):
         today=datetime.now(ZoneInfo('Europe/Istanbul')).date();start=today+timedelta(days=7-today.weekday())
         state.update(plan_ctx={'start':start,'end':start+timedelta(days=6)},plan_ctx_confirmed=False)
     enforce_current_rules(state)
+    from ortak.gunluk_tahmin_deposu import capture_daily
+    for option in state.get('cf_forecast_options',[]):
+        if not option.get('daily_record_id'):option['daily_record_id']=capture_daily(state,option['frame'],option['meta'])
     from ortak.personel import get_people
     get_people(state)
     if not state.get('employees_cache'):

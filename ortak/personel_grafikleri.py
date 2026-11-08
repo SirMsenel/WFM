@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 from ortak.personel import LANG_LABELS,WORK_LABELS
 
-CITIES={'Ankara':(32.86,39.93),'Istanbul':(28.98,41.01),'İstanbul':(28.98,41.01),
+CITIES={'Rize':(40.52,41.03),'Artvin':(41.82,41.18),'Ordu':(37.88,40.98),'Giresun':(38.39,40.92),'Sakarya':(30.40,40.78),'Balıkesir':(27.89,39.65),'Manisa':(27.43,38.61),'Aydın':(27.84,37.85),'Muğla':(28.36,37.22),'Hatay':(36.16,36.20),'Malatya':(38.31,38.36),'Sivas':(37.02,39.75),'Denizli':(29.09,37.77),'Tekirdağ':(27.51,40.98),'Ankara':(32.86,39.93),'Istanbul':(28.98,41.01),'İstanbul':(28.98,41.01),
         'Izmir':(27.14,38.42),'İzmir':(27.14,38.42),'Konya':(32.49,37.87),
         'Diyarbakir':(40.23,37.91),'Diyarbakır':(40.23,37.91),'Adana':(35.32,37.0),
         'Bursa':(29.06,40.19),'Antalya':(30.71,36.9),'Gaziantep':(37.38,37.07),

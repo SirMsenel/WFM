@@ -1,37 +1,52 @@
-# Güncelleme notları — 8 Kasım 2026
+# WFM — 8 Kasım 2026 / 6. güncelleme
 
-## Planlama ve ihtiyaç
+## Çağrı tahmini ve mesai planı
 
-- Ana başlıklar 8 piksel aşağı alındı. Giriş ve sol panel mevcut başlık/simgeler korunarak yenilendi.
-- Mesai Planı'ndaki ayrı eski kesim/son ödeme hesabı kaldırıldı. Kasım 2026 için 9 Kasım son ödeme, 10 Kasım değil; tüm ekranlar aynı takvim servisini kullanır. Takvim kuralı: kesimler 9/16/24/31, son ödeme +9 gün, hafta sonu pazartesiye kayar. Kurumun farklı bir takvimi varsa `ortak/odeme_takvimi.py` değişmelidir.
-- Dönem 1–93 gün seçilebilir. İki hafta için Çağrı Tahmini'nde o tarih aralığının tahminini üretip Personel Hesap'ta ihtiyacı hesaplayın. İnterval profili varsayılan olarak haftanın günlerine göre tüm tahmin dönemine uygulanır; istenirse yalnızca profilin tarihleriyle sınırlanabilir.
-- Dönem kartları sabit ölçülü; minimum/ortalama/zirve ihtiyaç ve çağrı toplamı görünür. Grafik de üç ihtiyaç ölçüsünü gösterir. Gün/tarih başlıkları kutuludur.
-- Bekleyen taleplerde ve planlamayı durduran popup'ta onayı beklenen lider adları görünür.
-- Ders dönemi tarihe göre seçilir, sınav günleri önceliklidir. Mesai Kuralları'nda Bayram önceliği açıksa bayram gününde ders/sınav kısıtı uygulanmaz. Varsayılan yaz ayları Haziran–Ağustos; normal dersler uygulanmaz, ayrıca girilmiş yaz sınavı varsa geçerlidir. Her vardiyada en az 11 saat dinlenme korunur.
-- Grup bazlı minimum OFF ve ihtiyaca göre OFF dağılımı eklendi. OFF rezervasyonu tam takvim haftalarında uygulanır; kısa dönemlerde önceki/sonraki vardiyalarla haftalık gün/dinlenme kontrolleri sürer. Mevcut sabit kayıtlar değiştirilmez. Kaydet ve Uygula ile kuralları etkinleştirin.
-- İhtiyaç varsa Full Time için tanımlı üst saate çıkılabilir; Akademi kendi üst süresine kadar değerlendirilir, Dış Kaynak 10 saattir. Kural ihlaliyle ihtiyaç kapatılmaz.
-- Eksik tablosunda **Eksik için ne yapabilirim?** alanı gün ve saat bloğuna göre uygun ek mesai/süre uzatma adaylarını arar. Öneri yoksa engeller gösterilir. Seçilen öneri gerekçeyle taslağa işlenir; sonra taslak yeniden oluşturulup kontrol edilir. Motor sezgisel çalışır, küresel en iyi sonucu garanti etmez.
+- İşlenecek tarih aralığında kontroller hizalandı; başlangıç/bitiş tarihleri veri aralığından otomatik doluyor. Model kaydetme başlığına ayırıcı, kayıt sonrasına popup eklendi.
+- Dört modelin günlük tahminleri üretildiği anda, elle girilen/seçilen tahmin de seçildiği anda SQLite'a kaydedilir. Artık interval/personel hesabı yapmayı beklemez. Yıllık ve dönemsel tahminler birbirini ezmez; Mesai Planı → Tahmin Kaynağı → Kayıtlı tahmin seç üzerinden tekrar kullanılabilir.
+- Model seçimi üst tablosu başarı puanları yerine tarih bazında tahmin adetlerini gösterir. Altındaki karşılaştırma grafiği korunur.
+- İstenen açıklama yazıları kaldırıldı; matris başlığı Haftanın Slot Ağırlıkları olarak sadeleştirildi. Personel Hesap'ta intervalin uygulanacağı başlangıç ve bitiş doğrudan seçilir. Bu seçim yalnızca hesaplanan ihtiyacı daraltır; kayıtlı tam günlük tahmin korunur.
+- Geçmiş Hafta Analizi'ndeki teknik açıklamalar, gerçekleşen dosya yükleme alanı ve günlük çağrı sütunu seçimi kaldırıldı. Gerçekleşen çağrılar mevcut veri deposu/API üzerinden beslenmeye devam eder.
 
-## Personel ve talepler
+## Vardiya planı ve kurallar
 
-- Ekranlarda sicil no ve kullanıcı adı bulunur. Sabit iç personel kimliği kayıt ilişkileri için korunur; eski demo personelinin sicili mevcut iç kimlikten taşınır.
-- Personel Ekleme / Ayrılma: TL önerir, ilgili Yönetici onaylar, Planlama sonlandırır. Ayrılma geçmiş kayıtları silmez. Gelecek işe giriş/ayrılma tarihleri vardiya uygunluğunda kontrol edilir.
-- Benim Vardiyam personel kimlik kartı ve özetleri yenilendi. Normal mesai durumu **Çalışma**, saat dilimi renkleri ayrıca gösterilir. Tüm Vardiyalar aynı renk servisini kullanır.
-- MT değişim talebinde yalnızca diğer Müşteri Temsilcileri ve gerçek kayıtlı vardiyalar seçilir. Birden fazla gün aynı talebe eklenir. Her kişinin OFF sayısı ve toplam saati korunmalıdır. Önizleme bu dengeyi açıklar; son onayda güncel kurallar yeniden doğrulanır.
-- Rapor bildirimini/girişini yalnızca Takım Lideri kendi ekibi için yapar. Diğer roller rapor giriş yetkisi alamaz.
-- Rol adları Müşteri Temsilcisi, Takım Lideri, Yönetici, Planlama, Müdür olarak birleştirildi.
+- Dönem başlangıcı/bitişi ayrı kutular; ihtiyaç tablolarında gün/tarih tek satır. Fazladan açıklamalar kaldırıldı; çalışma saatleri özeti ayırıcıyla ayrıldı.
+- Mesai Kuralları'nın alt bölümleri kartlara alındı. OFF dağıtım yaklaşımı seçimi kaldırıldı; grup bazında haftalık en az OFF günü seçilir. Dağıtımı sistem ihtiyaca göre yapar. Saat bütçesi ayrıca Çalışma Süreleri'ndeki kişi başına dönem üst sınırından gelir; otomatik motor ihtiyaç yokken yalnızca bütçeyi doldurmak için mesai yazmaz.
+- Soft/Hard grup bitiş kuralları gerçekten ayrıldı. Hard aşımı engeldir. Soft aşımı uyarıdır; “Soft ihlalde onay iste” açıksa yayın öncesi ayrıca onay gerekir. Otomatik motor soft sınırı kendiliğinden aşmaz. Dinlenme, okul, günlük süre ve üst üste gün sınırları hard kalır.
+- Her personelde en az 11 saat dinlenme ve en fazla 6 gün üst üste çalışma uygulanır. Önceki sürümlerde kaydedilmiş daha yüksek ardışık gün değerleri 6'ya çekilir.
+- Talep detayındaki üç kart aynı yükseklik ve renkli başlıklara sahip. Planlama Talep Merkezi'ne Planlamaya iletilmeyi bekleyenler görünümü eklendi; ilgili lider adları görünür.
+- Fazladan takvim açıklamaları, uzun eksik başlığı ve Oluştur ekranındaki tüm ham atama/30 dakika karşılaştırma alanı kaldırıldı. Ayrıntılı eksik analizi ve uygun aksiyon önerileri korundu.
 
-## Yayınlanan vardiya ve kayıtlar
+## Vardiya değişim iş akışı
 
-- Tüm Vardiyalar → Değişim Alanı: TL kendi ekibini, Yönetici/Planlama yetkili olduğu kayıtları düzenler. Müdür de yetkilendirilen yönetim işlemlerine erişir.
-- Değişiklikte gerekçe zorunlu; eski/yeni değer, vardiya tarihi, işlemi yapan ve işlem zamanı saklanır. Vardiya değişimi her kişinin OFF/saat toplamını korur. Erken çıkış, geç giriş ve izinler ayrı devam/izin işlemleri olarak kaydedilir.
-- Onaylanan dengeli değişim talebi yayınlanan vardiyalara aitse tablo, talep sonucu ve denetim kaydı aynı SQLite işleminde güncellenir. Eşzamanlı değişiklik veya geçersiz talepte işlem bütünüyle geri alınır. Taslak kayıtlarına ait onaylar planın kaynaklarına alınır.
-- **Veri ve Kayıt Merkezi** yalnızca Planlama, Yönetici, Müdür içindir: günlük/30 dk tahminler, interval profilleri, vardiya değişiklikleri, talepler, personel işlemleri, yetki/denetim geçmişi.
-- **Ayarlar → Yetkilendirme** Planlama tarafından yönetilir. Değişiklikler denetim kaydına yazılır; rol bazlı sabit sınırlar (rapor ve yetki yönetimi gibi) korunur.
-- Sentetik alana bir geçmiş haftanın tahmin ve dağılım kaydı eklenir. Eğitim verisi hedef haftadan öncedir; kayıt bugün oluşturulduğu için geriye dönük demo olduğu açıkça belirtilir. Gerçek operasyon başarısı gibi sunulmaz.
+- Tüm Vardiyalar → Değişim Alanı → Yeni Değişiklik: personel/karşı personel ve gerçek vardiya günleri seçilir. Şimdiki ve onay sonrası takvim yan yana mantıkla iki önizleme olarak gösterilir. OFF alıp verilecek iki gün birlikte seçilir.
+- Erken çıkış/geç girişte gün seçip Başlangıç/Bitiş hücresine yeni saat yazılır. Rapor girişini yalnızca TL kendi ekibi için başlatır. Yıllık/mazeret izni ayrı işlem türleridir.
+- MT kendi değişimini talep eder; ilgili TL onayından sonra Planlama'ya gider. TL/Yönetici/Müdür önerileri Planlama onay kuyruğuna gider. Planlama da kendi düzenlemesini açıkça onaylar. Yayınlanmış takvimi yalnızca Planlama'nın son onayı değiştirir.
+- **Vardiya değişimi** için aynı çalışma grubu ve aynı dil, eşit vardiya süresi, her personelin her takvim haftasında aynı OFF sayısı ve çalışma saati zorunludur. Saatler diğer kişinin o günkü gerçek vardiyasından alınır. Farklı haftalardaki OFF'lar toplamda dengeli görünse bile haftalık dengenin bozulması reddedilir. 7 saat ile 5 saatlik vardiya değiştirilemez. Dinlenme, ardışık gün ve okul kuralları son onayda yeniden kontrol edilir.
+- Erken/geç giriş ve izin işlemleri vardiya takası değildir; çalışma saatini değiştirebilen ayrı devam/izin işlemleri olarak gerekçeyle kaydedilir.
+- Gerekçe, önceki/yeni değer, talep eden, onaylayan, tarih ve işlem zamanı saklanır. Talep sonrası takvim değişmişse eski içerik uygulanmaz. Takvim, talep sonucu ve denetim kaydı aynı veritabanı işlemiyle güncellenir; hata olursa bütünüyle geri alınır.
 
-## Kod ve kurum bağlantısı
+## Takip, personel ve izleme
 
-Asıl uygulama `arayuz.py`, sunucu `sunucu.py`, ortak servisler `ortak/` altındadır. Ekran klasörleri Türkçeleştirildi. Eski yollar uyumluluk için bırakıldı. Ayrıntılar `DOSYA_HARITASI.md` dosyasında.
+- Benim Vardiyam: yönetim rollerinin personel filtresi üstte; modern personel kartında ad soyad, şehir, şirket, takım lideri, yönetici, sicil/kullanıcı adı, grup ve dil bulunur.
+- Ayrı kıdem kartı işe giriş tarihine göre 0–3 ay, 3–6 ay, 6–12 ay, 1–2 yıl, 2–3 yıl ve 3+ yıl renklerinden birini kullanır. Tarihi bulunmayan kişide veri bekleniyor gösterilir. Şirket alanı yerel personel kaydına ve kurumsal API eşleştirmesine eklendi.
+- Vardiya tablosundaki Saat sütunu HH:MM biçimine çevrildi; istenmeyen açıklamalar kaldırıldı.
+- Yönetim rollerinin ders/sınav/bayram görünümü düz liste yerine personel adı, gün/tarih, saat ve içeriği gösteren takvim kartları oldu. TL kapsamı kendi ekibi, diğer yönetim rolleri tüm personeller; MT kendi kayıtlarını düzenler.
+- MT'nin Talep İlet ekranına erken çıkış ve geç giriş eklendi.
+- İzleme ekranı hazır: erken çıkış/geç giriş işlemleri, rapor/yıllık izin günleri ve vardiya değişim sayıları tarih/personel filtresiyle izlenir. MT yalnızca kendisini, TL kendi ekibini, Yönetici/Planlama/Müdür tüm personelleri görebilir. Sayaçlar onaylanmış gerçek kayıtları kullanır.
 
-Personel ve kurumsal giriş HTTP adaptörleri, çağrı besleme servisi ve demo/kurum ayrımı hazırlandı. Gerçek API adresleri, kurum giriş protokolü ve veri şeması sağlanınca bağlanacak. Kurum HR yazma işlemi ve doğrudan PostgreSQL/SQL Server bağlantısı henüz kurulmadı. Ayrıntılar ve gereken ortam değişkenleri `KURUMSAL_BAGLANTI.md` dosyasında.
+## Tüm vardiyalar ve kayıt merkezi
+
+- Tüm Vardiyalar'ın okuma kapsamı bütün roller için tüm MT vardiyalarıdır. Düzenleme/onay yetkileri bu geniş okumadan bağımsızdır. Takvimlerde yalnızca ad soyad ve tarih sütunları vardır.
+- Yıl/ay seçimi kompakt iki seçici oldu. Eski büyük dönem kartı ve Düzenleme açıklamaları kaldırıldı.
+- Gece/Yıllık İzin listeleri takvim görünümüne geçti. Onaylı talepler ayrıca kopyalanmadan aynı kaynak takvimde görünür ve planlamaya alınır.
+- Gece başvurusunda dil/grup uygunluğu ve kontenjan kontrol edilir. Bekleyen başvurular da yer ayırır; dolu listeye başvuru yapılamaz. Ret/iptal kontenjanı serbest bırakır. Eşzamanlı başvurular için kontrol ile kayıt tek işlem içindedir. Onayda tekrar kontrol edilir; mevcut gece eksiği kontrolleri korunur.
+- Veri ve Kayıt Merkezi alt ekranları: Günlük Tahminler, 30 Dakikalık Tahminler, Interval Profilleri, Açıklanan Vardiyalar, Vardiya Değişimleri, Talep Kayıtları, Personel İşlemleri, Yetki Geçmişi. Açıklanan ilk plan sürümü ve güncel hali incelenebilir.
+- Tahmin/profil/yayın kayıtlarına kullanıcı başlığı verilebilir. Başlık değişikliği içerikteki tahmini veya arşivi değiştirmez.
+- Alt ekran etiketi kaldırıldı. İlk girişte MT Takip'e, TL/Yönetici/Müdür İzleme'ye, Planlama Vardiya Planı'na açılır. Hesap değişiminde önceki hesabın alt ekran/personel filtreleri sıfırlanır.
+
+## Yeni kategoriler ve kurum bağlantısı
+
+Şehir ve şirketler personel verisinden okunur. Akademi/Dış Kaynak şehirleri sabit listeden gelmez; Rize gibi yeni şehirler filtre/takvimlere otomatik eklenir. Harita için Rize dahil il koordinatları bulunur; koordinatı tanımlı olmayan yer ayrıca belirtilir. Yeni bir **çalışma grubu** veya **rol**, şehrin aksine yeni çalışma/yetki kuralları gerektirir ve kendiliğinden mevcut gruplara eşlenmez.
+
+Kurum API adresleri, gerçek veri şeması ve giriş protokolü hâlâ sağlanmayı bekliyor. Bu paket gerçek kurum bağlantısı yapıldığı anlamına gelmez. Ayrıntılar KURUMSAL_BAGLANTI.md içinde. Mevcut SQLite verileri korunur; şirket alanı ilk açılışta şemaya eklenir.

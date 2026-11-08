@@ -20,7 +20,7 @@ def is_terminal(request):
 
 
 TYPE_LABELS.update({'Evlilik İzni Talebi':'Evlilik izni','Mazeret İzni Talebi':'Mazeret izni',
-                    'Rapor Bildirimi':'Rapor','Ücretsiz İzin Talebi':'Ücretsiz izin','Doğum İzni Talebi':'Doğum izni'})
+                    'Erken Çıkış Talebi':'Erken çıkış','Geç Giriş Talebi':'Geç giriş','Rapor Bildirimi':'Rapor','Ücretsiz İzin Talebi':'Ücretsiz izin','Doğum İzni Talebi':'Doğum izni'})
 
 
 def now():
@@ -62,6 +62,9 @@ def create_request(state, payload, attachment=None):
     request = deepcopy(payload)
     typ = request.get("type")
     if typ=="Rapor Bildirimi" and profile.get("position")!="tl":raise ValueError("Rapor girişini yalnızca Takım Lideri yapabilir.")
+    if typ=='Gece Vardiyası Talebi':
+        from ortak.kesin_kayit_deposu import night_capacity_check
+        night_capacity_check(state,profile.get('employee_id'),request.get('start_date'),request.get('end_date') or request.get('start_date'))
     if typ not in TYPE_LABELS:
         raise ValueError("Geçerli bir talep türü seçin.")
     if typ != "Ders Programı":
@@ -92,12 +95,30 @@ def create_request(state, payload, attachment=None):
     if typ=='Rapor Bildirimi' and profile.get('position')=='tl':
         target=next((e for e in state.get('employees_cache',[]) if str(e['employee_id'])==str(payload.get('report_employee_id')) and e.get('team_lead')==profile.get('full_name')),None)
         if not target:raise ValueError('Rapor için kendi ekibinden bir Müşteri Temsilcisi seçin.')
-        request.update(employee_id=target['employee_id'],created_by=target.get('username',str(target['employee_id'])),created_by_name=target['full_name'],submitted_by=profile['username'],status='Planlamaya İletildi',queue='WFM')
+        request.update(employee_id=target['employee_id'],created_by=target.get('username',str(target['employee_id'])),created_by_name=target['full_name'],submitted_by=profile['username'],submitted_by_role='tl',status='Planlamaya İletildi',queue='WFM')
     if typ=='Vardiya Değişim Talebi':
         from ortak.talep_yerlestirme import resolve_swap
         request['proposed_assignments']=resolve_swap(state,request)
+    if typ in {'Erken Çıkış Talebi','Geç Giriş Talebi'}:
+        records=[r for r in state.get('published_shift_plan',[]) if str(r['employee_id'])==str(profile['employee_id']) and request['start_date']<=r['date']<=request['end_date']]
+        if not records:raise ValueError('Bu tarihlerde yayınlanmış vardiyan yok.')
+        from modules.vardiya_plani.vardiya_motoru import bounds
+        if any(not bounds(r) for r in records):raise ValueError('Erken/geç giriş talebi yalnızca çalışma gününe girilebilir.')
+        request['proposed_assignments']=[dict(r,**({'end':request.get('overtime_end')} if typ=='Erken Çıkış Talebi' else {'start':request.get('overtime_start')})) for r in records]
+    if typ=='Rapor Bildirimi':
+        existing=[r for r in state.get('published_shift_plan',[]) if str(r['employee_id'])==str(request['employee_id']) and request['start_date']<=r['date']<=request['end_date']]
+        if existing:request['proposed_assignments']=[dict(r,shift_code='RAPOR',start=None,end=None) for r in existing]
+    if request.get('proposed_assignments'):
+        proposed=request['proposed_assignments'];bykey={(str(r['employee_id']),str(r['date'])):r for key in ('draft_shift_plan','published_shift_plan') for r in state.get(key,[])}
+        request['proposed_before']=[deepcopy(bykey[(str(r['employee_id']),str(r['date']))]) for r in proposed]
+        if all(r in state.get('published_shift_plan',[]) for r in request['proposed_before']):
+            from ortak.vardiya_degisimleri import validate_changes
+            validate_changes(state,proposed,{'Vardiya Değişim Talebi':'Vardiya değişimi','Erken Çıkış Talebi':'Erken çıkış','Geç Giriş Talebi':'Geç giriş','Rapor Bildirimi':'Rapor'}[typ],request.get('note',''),submitting=True)
     request["events"].append({"at":now(),"actor":profile["username"],"actor_name":profile.get("full_name",profile["username"]),
                               "action":"Talep oluşturuldu","from":"—","to":"Takım lideri değerlendirmesi","note":request.get("note","")})
+    if typ=="Gece Vardiyası Talebi" and state.get("workspace_db_path"):
+        from ortak.kesin_kayit_deposu import store_night_request
+        return store_night_request(state,request)
     return _store(state,request)
 
 
@@ -109,6 +130,10 @@ def act(state, request, action, note=""):
         raise ValueError("Sonuçlanan talep tekrar işlenemez.")
     role = profile.get("position")
     queue = request.get("queue")
+    if action=="apply" and request.get("type") in {"Vardiya Değişim Talebi","Erken Çıkış Talebi","Geç Giriş Talebi","Rapor Bildirimi"} and role!="wfm":raise ValueError("Vardiya değişimleri için son onayı yalnızca Planlama verir.")
+    if action=='apply' and request.get('proposed_before'):
+        sources={(str(r['employee_id']),str(r['date'])):r for key in ('draft_shift_plan','published_shift_plan') for r in state.get(key,[])}
+        if any(sources.get((str(r['employee_id']),str(r['date'])))!=r for r in request['proposed_before']):raise ValueError('Vardiyalar talep sonrası değişmiş; yeni talep oluşturun.')
     new = deepcopy(request)
     if action == "cancel":
         if request.get("created_by") != profile.get("username"):
@@ -135,6 +160,7 @@ def act(state, request, action, note=""):
         if action=="apply" and request.get("type")=="Vardiya Değişim Talebi":
             from ortak.talep_yerlestirme import resolve_swap
             new["resolved_assignments"]=resolve_swap(state,request)
+        if action=="apply" and request.get("type") in {"Erken Çıkış Talebi","Geç Giriş Talebi","Rapor Bildirimi"} and request.get("proposed_assignments"):new["resolved_assignments"]=request["proposed_assignments"]
         status,new_queue,label = (("Onaylandı","Closed","Planlama onayladı; plana alınacak") if action=="apply"
                                   else ("Reddedildi","Closed","Planlama reddetti"))
     else:
@@ -149,8 +175,21 @@ def act(state, request, action, note=""):
             from ortak.vardiya_degisimleri import apply_changes
             new['status']='Uygulandı';new['last_action']='Planlama onayladı; yayınlanan vardiyaya uygulandı'
             new['events'][-1].update(to='Uygulandı',action=new['last_action'])
-            apply_changes(state,new['resolved_assignments'],'Vardiya değişimi',request['note'],request_update=(new,request.get('version',1)))
+            apply_changes(state,new['resolved_assignments'],{'Vardiya Değişim Talebi':'Vardiya değişimi','Erken Çıkış Talebi':'Erken çıkış','Geç Giriş Talebi':'Geç giriş','Rapor Bildirimi':'Rapor'}[request['type']],request['note'],request_update=(new,request.get('version',1)))
             return next(r for r in state['trk_requests'] if r['id']==new['id'])
+    if action=='apply' and request.get('type')=='Gece Vardiyası Talebi' and state.get('workspace_db_path'):
+        from ortak.calisma_alani_deposu import connect,loads,put_request_in_transaction
+        from ortak.kesin_kayit_deposu import night_capacity_check
+        with connect(state['workspace_db_path']) as db:
+            db.execute('BEGIN IMMEDIATE');check=dict(state)
+            for field in ('shift_rules','fixed_shift_records','published_shift_plan'):
+                stored=db.execute('SELECT payload FROM work_state WHERE key=?',(field,)).fetchone()
+                if stored:check[field]=loads(stored[0])
+            check['trk_requests']=[loads(r[0]) for r in db.execute('SELECT payload FROM requests')]
+            night_capacity_check(check,request['employee_id'],request['start_date'],request['end_date'],exclude_request=request['id'])
+            saved=put_request_in_transaction(db,new,request.get('version',1))
+        state['trk_requests']=[r for r in state.get('trk_requests',[]) if r['id']!=saved['id']]+[saved]
+        return saved
     return _store(state,new,request.get("version",1))
 
 

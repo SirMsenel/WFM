@@ -100,7 +100,7 @@ def put_request_in_transaction(con, row, expected_version=None):
         if not existing or existing["version"] != expected_version:
             raise ValueError("Talep başka bir kullanıcı tarafından değiştirildi. Listeyi yenileyin.")
         old = loads(existing["payload"])
-        for field in ("created_by", "created_at", "type", "start_date", "end_date", "note", "attachment", "targets", "generated_ref"):
+        for field in ("created_by", "created_at", "type", "start_date", "end_date", "note", "attachment", "targets", "generated_ref", "proposed_assignments", "proposed_before", "swap_dates", "overtime_start", "overtime_end", "submitted_by", "submitted_by_role"):
             if row.get(field) != old.get(field):
                 raise ValueError("Gönderilen talep içeriği değiştirilemez; yeni bir kayıt oluşturun.")
         if row.get("events", [])[:len(old.get("events", []))] != old.get("events", []):

@@ -12,6 +12,9 @@ def resolve_swap(state,request):
         own=next((str(e['employee_id']) for e in state.get('employees_cache',[]) if e.get('username')==request.get('created_by')),'')
     other=str(targets[0].get('employee_id') or '')
     if not own or not other or own==other:raise ValueError('Vardiya değişimindeki iki personel kimliği geçerli olmalı.')
+    people={str(e['employee_id']):e for e in state.get('employees_cache',[])}
+    if own not in people or other not in people:raise ValueError('Değişim personelleri listede bulunamadı.')
+    if any(people[own].get(k)!=people[other].get(k) for k in ('work_type','language')):raise ValueError('Farklı çalışma grupları veya diller arasında değişim yapılamaz.')
     rows={(str(r['employee_id']),str(r['date'])):r for key in ('draft_shift_plan','published_shift_plan') for r in state.get(key,[])}
     output=[]
     dates=pd.to_datetime(request.get('swap_dates') or list(pd.date_range(request['start_date'],request.get('end_date') or request['start_date'])))

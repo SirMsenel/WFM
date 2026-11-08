@@ -8,6 +8,7 @@ from ortak.calisma_alani_deposu import save_keys
 
 
 def render_hours_summary(state,people):
+    st.divider()
     st.markdown('### Seçili Dönemde Çalışma Saatleri')
     today=pd.Timestamp.today().date()
     dates=st.date_input('Çalışma saatleri için geçmiş tarih aralığı',value=(today.replace(day=1),today),key='hours_history_range')
@@ -27,7 +28,6 @@ def render_hours_summary(state,people):
     table.Grup=table.Grup.map(lambda g:WORK_LABELS.get(g,g))
     st.dataframe(table.style.format({c:'{:.1f}' for c in table if c not in {'Grup','Personel'}}),hide_index=True,use_container_width=True)
     st.bar_chart(table.set_index('Grup')[['Kişi başı dönem ortalaması']],color='#118aa1')
-    st.caption('Çalışma Süreleri bölümünden grup için kişi başına aylık veya özel dönem saat hedefi tanımlayabilirsin.')
 
 
 def render_targets(state):

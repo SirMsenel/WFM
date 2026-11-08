@@ -20,18 +20,20 @@ def render():
     year, month = month_selector_this_year("foreign")
     render_period_card(year, month)
 
-    tabs = st.tabs([LANG_LABELS["ar"], LANG_LABELS["en"]])
+    languages=sorted({e.get("language") for e in fetch_agents(limit=100000) if e.get("language") and e.get("language")!="tr"})
+    if not languages:st.info("Yabancı dil personeli yok.");return
+    tabs = st.tabs([LANG_LABELS.get(lang,lang) for lang in languages])
 
-    for tab, lang in zip(tabs, ["ar", "en"]):
+    for tab, lang in zip(tabs, languages):
         with tab:
-            q = st.text_input(f"Ara - {LANG_LABELS[lang]}", key=f"foreign_{lang}_search", placeholder="isim...")
+            q = st.text_input(f"Ara - {LANG_LABELS.get(lang,lang)}", key=f"foreign_{lang}_search", placeholder="isim...")
             agents = fetch_agents(language=lang, search=q or None)
 
             render_shift_grid(
                 employees=agents,
                 year=year,
                 month=month,
-                title=f"{LANG_LABELS[lang]} Vardiya Planı",
+                title=f"{LANG_LABELS.get(lang,lang)} Vardiya Planı",
             )
 
     render_edit_placeholder("Yabancı Dil Düzenleme")

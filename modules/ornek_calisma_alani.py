@@ -36,7 +36,9 @@ def render():
         try:
             save_keys(st.session_state)
             login=api_post('/auth/login',{'username':pick,'password':'1234'})
-            st.session_state.update(auth_token=login['access_token'],profile=login['profile'],main_page='🧪 Demo Veritabanı')
+            from ortak.erisim import enter_session
+            st.session_state.update(auth_token=login['access_token'],profile=login['profile'])
+            enter_session(st.session_state,login['profile'])
             st.rerun()
         except Exception as exc:
             st.error(f'Hesap değiştirilemedi: {exc}')

@@ -142,7 +142,7 @@ class PublicationTests(unittest.TestCase):
   self.assertIsNone(planning_problem(self.s))
   result=preview_plan(self.s);self.assertEqual(result['source_rows'][0]['shift_code'],'YILLIK_IZIN');self.assertEqual(result['coverage'].Atanan.sum(),0)
  def test_approved_swap_freezes_and_places_both_assignments(self):
-  s=self.s;s['planning_languages']={'tr':True,'en':True,'ar':True}
+  s=self.s;s['planning_languages']={'tr':True,'en':True,'ar':True};s['employees_cache'][1]['language']='tr'
   s['draft_shift_plan']=[row(start='08:00',end='17:00'),row(eid='2',start='09:00',end='18:00')]
   s['profile']={'position':'agent','username':'u1','employee_id':'1','full_name':'Person 1','team_lead':'Lead'}
   req=create_request(s,{'type':'Vardiya Değişim Talebi','start_date':str(DAY),'end_date':str(DAY),'note':'Swap','targets':[{'employee_id':'2','full_name':'Person 2','team_lead':'Other'}]})
@@ -249,7 +249,7 @@ else:st.write('Other page')
   s=state();s['profile']={'position':'tl','full_name':'Lead'};s['personnel_cache']=s['employees_cache']
   s['acad_schedules']={'u1':{'2026-Güz':{'Saat':['08:00-10:00'],'Pazartesi':['Math']}},'u2':{'2026-Güz':{'Saat':['08:00-10:00'],'Pazartesi':['Secret']}}}
   at=self.app('from modules.tracking.class_schedule import render\nrender()',s)
-  self.assertTrue(any('Math' in str(df.value) for df in at.dataframe));self.assertFalse(any('Secret' in str(df.value) for df in at.dataframe))
+  self.assertTrue(any('Math' in m.value for m in at.markdown));self.assertFalse(any('Secret' in m.value for m in at.markdown))
   at.text_input(key='academic_staff_search').set_value('Person 2').run();self.assertFalse(at.exception);self.assertTrue(at.info)
  def test_tracking_personnel_summary_has_four_time_windows(self):
   s=state();s['profile']=dict(s['employees_cache'][0]);s['published_shift_plan']=[dict(row(),language='tr')]

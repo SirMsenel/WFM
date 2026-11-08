@@ -117,7 +117,7 @@ def build_shift_grid(employees: list[dict], year: int, month: int) -> pd.DataFra
             values[date.fromisoformat(record["date"])] = label or f"{record.get('start', '')}-{record.get('end', '')}"
 
         row = {
-            "Ad Soyad": full_name,"Sicil no":emp.get("sicil_no") or str(emp["employee_id"]),"Kullanıcı adı":emp.get("username",""),
+            "Ad Soyad": full_name,
         }
 
         for d in date_cols:

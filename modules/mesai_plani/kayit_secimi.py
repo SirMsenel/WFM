@@ -119,7 +119,6 @@ def _meta_kpi(meta: dict, pick: str):
 # ----------------------------
 def render():
     st.subheader("🗂️ Kayıt Seçim (Oran Profilleri)")
-    st.caption("Kaydettiğin oran profillerini burada seçer, aktif edebilir veya silebilirsin.")
     st.markdown("---")
 
     profiles = st.session_state.get("sp_ratio_profiles", [])

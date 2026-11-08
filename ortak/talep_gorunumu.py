@@ -37,11 +37,10 @@ def rows_for_table(items):
 def render_detail(req,key):
     st.markdown('### '+TYPE_LABELS.get(req.get('type'),req.get('type','Talep')))
     st.caption('Kayıt '+str(req['id']))
-    a,b,c=st.columns(3)
-    with a.container(border=True):
-        st.caption('Durum');st.markdown(badge(req.get('status','—')),unsafe_allow_html=True)
-    with b.container(border=True):st.caption('Değerlendirme aşaması');st.write(stage(req))
-    with c.container(border=True):st.caption('Talep eden');st.write(req.get('created_by_name') or req.get('created_by'));st.caption('@'+str(req.get('created_by','')))
+    from html import escape
+    cards=[('Durum',req.get('status','—'),'#16786a'),('Değerlendirme aşaması',stage(req),'#5d56a8'),('Talep eden',req.get('created_by_name') or req.get('created_by',''),'#276a94')]
+    for col,(label,value,color) in zip(st.columns(3),cards):
+        col.markdown(f'<div style="height:124px;border:1px solid #dce6ed;border-top:4px solid {color};border-radius:16px;padding:15px;background:#f9fbfd;box-sizing:border-box"><div style="color:{color};font-weight:700;font-size:13px;margin-bottom:12px">{escape(label)}</div><div style="font-size:17px;font-weight:600;color:#203b4b;overflow-wrap:anywhere;max-height:66px;overflow:auto;line-height:1.3">{escape(str(value))}</div></div>',unsafe_allow_html=True)
     fields=[]
     if req.get('start_date'):fields.append(('Tarih',formatted(req['start_date'])+' → '+formatted(req.get('end_date') or req['start_date'])))
     if req.get('overtime_start'):fields.append(('Saat',str(req['overtime_start'])+' → '+str(req.get('overtime_end') or 'Belirtilmedi')))
@@ -78,7 +77,9 @@ def render_center(audience='all', key='requests'):
     role = profile.get('position')
     items = [r for r in refresh(state) if visible(r,profile)]
     if audience == 'planning':
-        items = [r for r in items if r.get('queue')=='WFM' or (is_terminal(r) and any(e.get('action','').startswith('Planlama') for e in r.get('events',[])))]
+        planning_scope=st.radio('Talep akışı',['Planlamaya ulaşanlar','Planlamaya iletilmeyi bekleyenler','Tüm talepler'],horizontal=True,key=key+'_flow')
+        if planning_scope=='Planlamaya ulaşanlar':items=[r for r in items if r.get('queue')=='WFM' or (is_terminal(r) and any(e.get('action','').startswith('Planlama') for e in r.get('events',[])))]
+        elif planning_scope=='Planlamaya iletilmeyi bekleyenler':items=[r for r in items if r.get('queue') in {'TL','TL_SWAP'}]
     elif audience == 'tl':
         items = [r for r in items if profile.get('full_name') in r.get('assigned_tls',[])]
     pending = [r for r in items if not is_terminal(r)]
@@ -108,7 +109,8 @@ def render_center(audience='all', key='requests'):
     if is_terminal(req):
         return
     tl_action = role=='tl' and req.get('queue') in {'TL','TL_SWAP'} and profile.get('full_name') in req.get('assigned_tls',[]) and profile.get('full_name') not in req.get('tl_approvals',[])
-    wfm_action = role in {'wfm','manager','moderator'} and req.get('queue')=='WFM'
+    final_only=req.get('type') in {'Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi','Rapor Bildirimi'}
+    wfm_action = (role=='wfm' if final_only else role in {'wfm','manager','moderator'}) and req.get('queue')=='WFM'
     own = req.get('created_by')==profile.get('username')
     if not (tl_action or wfm_action or own):
         st.caption('Talep ilgili değerlendirme aşamasında. Bu hesapta işlem beklenmiyor.')
@@ -129,7 +131,7 @@ def render_center(audience='all', key='requests'):
         try:
             act(state,req,action,note)
             from ortak.planlama import REQUEST_CODES
-            if action=='apply' and (req.get('type') in REQUEST_CODES or req.get('type')=='Vardiya Değişim Talebi'):state['request_notice']='Onaylanan vardiya/izin Vardiya Saatleri ekranına otomatik alındı. Yayınlanmış dönem için önce yayını düzenlemeye açın.'
+            if action=='apply' and (req.get('type') in REQUEST_CODES or req.get('type') in {'Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi'}):state['request_notice']='Onay kaydedildi. Yayınlanmış değişiklikler takvime uygulandı; gece ve izin kayıtları planlamanın kaynak listesine alındı.'
             elif action=='apply':state['request_notice']='Talep onaylandı. Okul kayıtları uygunluk kontrolünde kullanılır; genel talepler vardiya ataması oluşturmaz.'
             else:state['request_notice']='Talebin durumu güncellendi.'
             st.rerun()

@@ -25,15 +25,13 @@ def render(profile=None):
     profile = profile or st.session_state.get("profile") or {}
     token = st.session_state.get("auth_token")
 
-    st.subheader('Mevcut Plan')
-    part=st.segmented_control('Mevcut plan bölümü',['Personel Özeti','Mesai Kuralları','Çalışma Süreleri'],default='Personel Özeti',key='nav_current_plan_v2')
+    part=st.segmented_control('Mevcut plan bölümü',['Personel Özeti','Mesai Kuralları','Çalışma Süreleri'],default='Personel Özeti',key='nav_current_plan_v2',label_visibility='collapsed')
     if part=='Personel Özeti':
         from ortak.personel import get_people,personnel_summary
         from ortak.personel_grafikleri import render_summary
         render_summary(personnel_summary(get_people(st.session_state)))
         from ortak.calisma_sureleri_ekrani import render_hours_summary
         render_hours_summary(st.session_state,get_people(st.session_state))
-        st.caption('Personel listesi Personel Takip → Personel Listesi ekranındadır.')
 
     if part=='Çalışma Süreleri':
         from ortak.calisma_sureleri_ekrani import render_targets
@@ -182,7 +180,7 @@ def render(profile=None):
         # 3) Gece planlaması
         # ------------------------------------------------------
         with st.container(border=True):
-            st.markdown("#### Gece planlaması (00:00–08:00)")
+            st.markdown("#### Gece planlaması")
 
             night = rules["night"]
 
@@ -354,27 +352,30 @@ def render(profile=None):
                     key="rule_dk_max_days_week",
                 )
 
-        st.markdown('#### Üst üste çalışma günü sınırı')
-        columns=st.columns(3)
-        from ortak.personel import WORK_LABELS
-        for col,(group,rule) in zip(columns,rules['work_type'].items()):
-            rule['max_consecutive_days']=col.number_input(WORK_LABELS.get(group,group),min_value=1,max_value=6,value=int(rule.get('max_consecutive_days',min(6,rule.get('max_days_per_week',rule.get('max_days_per_week_default',6))))),key='rule_consecutive_'+group)
-        st.markdown('#### OFF dağılımı ve ihtiyaç halinde süre')
-        off=rules.setdefault('off_rules',{'distribution':'İhtiyaca göre dağıt'})
-        off['distribution']=st.selectbox('OFF dağıtım yaklaşımı',['İhtiyaca göre dağıt','Mevcut sıra'],index=0 if off.get('distribution')=='İhtiyaca göre dağıt' else 1,key='rule_off_distribution')
-        cols=st.columns(3)
-        for col,(group,rule) in zip(cols,rules['work_type'].items()):
-            with col:
-                st.markdown('**'+WORK_LABELS.get(group,group)+'**')
-                rule['min_off_days']=st.number_input('Tam haftada en az OFF günü',min_value=1,max_value=6,value=int(rule.get('min_off_days',2 if group=='fulltime' else 1)),key='rule_off_min_'+group)
-                if group=='fulltime':
-                    rule['allow_flexible_hours']=st.checkbox('İhtiyaç varsa üst süreye çık',value=rule.get('allow_flexible_hours',False),key='rule_extra_hours')
-                    rule['shift_total_hours_max']=st.number_input('Günlük en fazla saat',min_value=float(rule['shift_total_hours']),max_value=12.,value=float(rule.get('shift_total_hours_max',rule['shift_total_hours'])),step=.5,key='rule_fulltime_max')
-        school=rules.setdefault('school',{'holiday_priority':True,'summer_months':[6,7,8]})
-        st.markdown('#### Okul dönemi öncelikleri')
-        school['holiday_priority']=st.checkbox('Bayram günlerinde ders/sınav yerine bayram planlaması geçerli olsun',value=school.get('holiday_priority',True),key='rule_holiday_school')
-        school['summer_months']=st.multiselect('Ders programı uygulanmayacak yaz ayları',list(range(1,13)),default=school.get('summer_months',[6,7,8]),key='rule_summer_months')
-        st.caption('Yaz aylarında ders engeli kullanılmaz. Açıkça bildirilmiş sınavlar geçerlidir; bayram önceliği açıkken bayramdaki sınavlar uygulanmaz.')
+        with st.container(border=True):
+            st.markdown('#### Üst üste çalışma günü sınırı')
+            columns=st.columns(3)
+            from ortak.personel import WORK_LABELS
+            for col,(group,rule) in zip(columns,rules['work_type'].items()):
+                rule['max_consecutive_days']=col.number_input(WORK_LABELS.get(group,group),min_value=1,max_value=6,value=int(rule.get('max_consecutive_days',min(6,rule.get('max_days_per_week',rule.get('max_days_per_week_default',6))))),key='rule_consecutive_'+group)
+        with st.container(border=True):
+            st.markdown('#### Haftalık OFF ve çalışma süresi')
+            off=rules.setdefault('off_rules',{'distribution':'İhtiyaca göre dağıt'})
+            off['distribution']='İhtiyaca göre dağıt'
+            cols=st.columns(3)
+            for col,(group,rule) in zip(cols,rules['work_type'].items()):
+                with col.container(border=True):
+                    st.markdown('**'+WORK_LABELS.get(group,group)+'**')
+                    rule['min_off_days']=st.number_input('Tam haftada en az OFF günü',min_value=1,max_value=6,value=int(rule.get('min_off_days',2 if group=='fulltime' else 1)),key='rule_off_min_'+group)
+                    if group=='fulltime':
+                        rule['allow_flexible_hours']=st.checkbox('İhtiyaç varsa üst süreye çık',value=rule.get('allow_flexible_hours',False),key='rule_extra_hours')
+                        rule['shift_total_hours_max']=st.number_input('Günlük en fazla saat',min_value=float(rule['shift_total_hours']),max_value=12.,value=float(rule.get('shift_total_hours_max',rule['shift_total_hours'])),step=.5,key='rule_fulltime_max')
+        with st.container(border=True):
+            school=rules.setdefault('school',{'holiday_priority':True,'summer_months':[6,7,8]})
+            st.markdown('#### Okul dönemi öncelikleri')
+            school['holiday_priority']=st.checkbox('Bayram günlerinde ders/sınav yerine bayram planlaması geçerli olsun',value=school.get('holiday_priority',True),key='rule_holiday_school')
+            school['summer_months']=st.multiselect('Ders programı uygulanmayacak yaz ayları',list(range(1,13)),default=school.get('summer_months',[6,7,8]),key='rule_summer_months')
+            st.caption('Yaz aylarında ders engeli kullanılmaz. Açıkça bildirilmiş sınavlar geçerlidir; bayram önceliği açıkken bayramdaki sınavlar uygulanmaz.')
         st.info('Tüm personeller için vardiyalar arasında en az 11 saat dinlenme zorunludur. Değişiklikler aşağıdaki düğmeyle uygulanır.')
         st.session_state['shift_rules_draft']=rules
         sync=st.checkbox('Seçili dönemdeki gece kayıtlarını seçtiğim başlangıç/bitiş saatlerine uyarla',value=True,key='rules_sync_nights')

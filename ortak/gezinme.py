@@ -30,5 +30,5 @@ def sections(key,pages):
             history.append({'page':st.session_state['main_page'],'sections':{k:v for k,v in st.session_state.items() if k.startswith('nav_') and not k.endswith('_control')}})
             st.session_state['navigation_history']=history[-25:]
         st.session_state[key]=selected
-    selected=st.segmented_control('Alt ekran',labels,key=control,selection_mode='single',on_change=changed)
+    selected=st.segmented_control('Bölümler',labels,key=control,selection_mode='single',on_change=changed,label_visibility='collapsed')
     pages[selected or st.session_state[key]]()

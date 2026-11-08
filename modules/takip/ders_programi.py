@@ -172,7 +172,6 @@ def render():
     with col2:
         st.write("")
         st.write("")
-        st.caption("Akademi dönemsel okul planları")
 
     tab1, tab2, tab3, tab4 = st.tabs([
         "🌱 Bahar",

@@ -20,12 +20,13 @@ def _json(response):
 
 
 def normalize_person(row):
-    result={k:row[k] for k in ('team_lead','manager','location','work_type','language','employment_start','employment_end') if k in row};result['username']=str(row.get('username') or row.get('kullanici_adi') or '').strip()
+    result={k:row.get(k) for k in ('team_lead','manager','location','work_type','language','employment_start','employment_end','company')};result['username']=str(row.get('username') or row.get('kullanici_adi') or '').strip()
     result['sicil_no']=str(row.get('sicil_no') or row.get('registry_no') or row.get('employee_id') or '').strip()
     result['employee_id']=str(row.get('employee_id') or result['sicil_no'])
     result['full_name']=str(row.get('full_name') or row.get('ad_soyad') or '').strip()
     result['position']=ROLE_MAP.get(str(row.get('position') or row.get('rol') or 'agent').strip().replace('İ','i').lower())
     if not all(result.get(k) for k in ('username','sicil_no','employee_id','full_name','position')):raise ValueError('Kurumsal personelde sicil, kullanıcı adı, ad soyad ve geçerli rol gerekli.')
+    result['company']=str(row.get('company') or row.get('sirket') or '')
     result['is_active']=str(row.get('is_active',True)).strip().lower() not in {'0','false','no','pasif'}
     result['is_superuser']=result['position'] in {'moderator','wfm','manager'}
     return result

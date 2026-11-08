@@ -111,7 +111,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
 
     def issue(row, reason):
         issues.append({"source":row.get("source"),"start":row.get("start"),"end":row.get("end"),"shift_code":row.get("shift_code"),"employee_id": str(row.get("employee_id", "")),
-                       "date": str(row.get("date", "")), "Sorun": reason})
+                       "date": str(row.get("date", "")), "Sorun": reason,"severity":"warning" if str(reason).startswith("Soft kural:") else "error","override_required":bool(groups.get(staff.get(str(row.get("employee_id")),{}).get("work_type"),{}).get("override_required_if_violate",True))})
 
     def indices(interval):
         a, b = map(lambda x: np.datetime64(x, "m"), interval)
@@ -163,7 +163,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             if finish > _limit(general.get("global_latest_end", "03:00")):
                 problems.append("Genel bitiş sınırı aşılıyor")
             if rule.get("max_end_time") and finish > _limit(rule["max_end_time"]):
-                problems.append("Grup bitiş sınırı aşılıyor; otomatik esnetme yapılmaz")
+                problems.append(("" if rule.get("max_end_is_hard",True) else "Soft kural: ")+"Grup bitiş sınırı aşılıyor")
             if not rule.get('night_allowed',False):
                 ns=minutes(general.get('night_window_start','00:00'))
                 night_boundary=ns if ns>=12*60 else ns+1440
@@ -180,7 +180,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             max_days = min(5, max_days)
         if len({d for d in working_days | {day} if d.isocalendar()[:2] == week}) > max_days:
             problems.append(f"Haftalık çalışma günü sınırı aşılıyor: en fazla {max_days} gün")
-        consecutive=int(rule.get('max_consecutive_days',max_days))
+        consecutive=min(6,int(rule.get('max_consecutive_days',max_days)))
         all_work=working_days|{day};left=day;right=day
         while left-timedelta(days=1) in all_work:left-=timedelta(days=1)
         while right+timedelta(days=1) in all_work:right+=timedelta(days=1)
@@ -270,7 +270,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 continue
             problems=violations(row, by_employee[eid])
             for reason in problems:issue(row, reason)
-            if problems and row.get("source") in reject_invalid_sources:continue
+            if any(not p.startswith("Soft kural:") for p in problems) and row.get("source") in reject_invalid_sources:continue
             plan.append(row)
             occupied.add(key)
             by_employee[eid].append(row)

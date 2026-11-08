@@ -311,6 +311,8 @@ def require_login(_api_get, _api_post):
                     res = _api_post("/auth/login", {"username": username, "password": password})
                     st.session_state["auth_token"] = res["access_token"]
                     st.session_state["profile"] = res["profile"]
+                    from ortak.erisim import enter_session
+                    enter_session(st.session_state,res["profile"])
                     st.rerun()
                 except Exception as e:
                     st.error(f"Giriş başarısız: {e}")

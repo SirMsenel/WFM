@@ -77,6 +77,7 @@ class RequestFlowTests(unittest.TestCase):
         altered=deepcopy(req);altered['events']=[]
         with self.assertRaises(ValueError):store.put_request(altered,req['version'],self.db)
     def test_swap_requires_both_team_leads(self):
+        self.state['employees_cache']=[{'employee_id':str(i),'work_type':'fulltime','language':'tr'} for i in (1,2)]
         self.state['draft_shift_plan']=[{'employee_id':eid,'date':str(day.date()),'shift_code':'WORK','start':start,'end':end} for eid,start,end in [('1','08:00','17:00'),('2','09:00','18:00')] for day in pd.date_range(self.payload['start_date'],self.payload['end_date'])]
         payload={**self.payload,'type':'Vardiya Değişim Talebi','targets':[{'employee_id':'2','team_lead':'Lead Two'}]}
         req=create_request(self.state,payload)

@@ -48,10 +48,11 @@ def _manual_form(state,result,context):
             try:additions,warnings=prepare_manual(state,picked,dates[0],dates[1],kind,begin,finish,note)
             except (ValueError,TypeError,KeyError) as exc:st.error(str(exc))
         if warnings:
-            st.warning(f'{len(warnings)} gün/kural kontrolü nedeniyle bazı girişler yazılmayacak. Mevcut vardiyalar değiştirilmez.')
-            st.dataframe(pd.DataFrame(warnings).drop(columns='employee_id',errors='ignore'),hide_index=True,use_container_width=True)
+            blocked=[w for w in warnings if w.get('Tür')!='Uyarı']
+            st.warning(f'{len(blocked)} gün atlanacak · {len(warnings)-len(blocked)} esnek kural uyarısı. Esnek aşım kaydedilirse yayın sırasında ayrıca onaylanır.')
+            st.dataframe(pd.DataFrame(warnings).drop(columns='employee_id',errors='ignore').rename(columns={'Neden yazılmadı?':'Kontrol'}),hide_index=True,use_container_width=True)
             from ortak.cakisma_temizleme import propose_cleanup
-            propose_cleanup(state,[(r['employee_id'],r['Tarih']) for r in warnings],'manual')
+            propose_cleanup(state,[(r['employee_id'],r['Tarih']) for r in warnings if r.get('Tür')!='Uyarı'],'manual')
         if additions:st.caption(f'{len(additions)} boş ve uygun güne yerleştirme yapılacak.')
         if st.button('Seçili Günlere Yerleştir',disabled=not additions,type='primary',key='manual_place'):
             edit_shifts(state,additions)
@@ -113,7 +114,6 @@ def render():
         if query:grid=grid[grid.Personel.str.contains(query,case=False,regex=False)]
         dates=[c for c in grid if c not in {'Personel','Sicil no','Kullanıcı adı'}]
         st.dataframe(grid.style.map(_cell_style,subset=dates),hide_index=True,use_container_width=True,height=570)
-        st.caption('Yeşil: çalışma · Mor: gece · Pembe: izin/rapor · Sarı: sınav · —: henüz yerleştirilmedi')
     def show_night():
         rows=[r for r in result['source_rows'] if r.get('shift_code')=='GECE']
         st.markdown('### Gece Vardiyasına Yerleştirilmiş Personel')

@@ -160,7 +160,7 @@ def render():
     # ✅ Tarihsel Kapsam (cf_raw_df günceller)
     # ---------------------------------------------------------------------------------------------------
     st.markdown("---")
-    st.header("🗓️ İşlenecek Tarih Aralığı")
+    st.subheader("🗓️ İşlenecek Tarih Aralığı")
 
     # aday tarih kolonları
     candidate_cols = []
@@ -174,7 +174,7 @@ def render():
         if c not in candidate_cols:
             candidate_cols.insert(0, c)
 
-    colA, colB, colC, colD, colE = st.columns([2, 2, 2, 2, 2])
+    colA, colB, colC, colD, colE = st.columns([1.25, 1.6, 1.5, 1.5, 1], vertical_alignment='bottom')
 
     with colA:
         scope_enabled = st.toggle(
@@ -232,6 +232,8 @@ def render():
                 if default_end < default_start:
                     default_end = default_start
 
+                for state_key,default in [('cf_scope_start',default_start),('cf_scope_end',default_end)]:
+                    if st.session_state.get(state_key)!=default:st.session_state[state_key]=default
                 with colC:
                     start_date = st.date_input(
                         "Başlangıç",
@@ -257,7 +259,7 @@ def render():
                 if apply:
                     if end_date < start_date:
                         end_date = start_date
-                        st.session_state["cf_scope_end"] = end_date
+                        st.error('Bitiş tarihi başlangıçtan önce olamaz.');return
 
                     new_sig = ("RANGE", str(date_col), str(start_date), str(end_date))
                     if st.session_state.get("cf_scope_sig") != new_sig:

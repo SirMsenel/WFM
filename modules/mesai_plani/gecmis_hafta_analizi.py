@@ -16,7 +16,8 @@ def render_daily():
         return
     date_col=date_column(raw);numeric=list(raw.select_dtypes(include='number').columns)
     preferred=st.session_state.get('cf_target_name','cagri_sayisi')
-    target=st.selectbox('Çağrı sayısı sütunu',numeric,index=numeric.index(preferred) if preferred in numeric else 0,key='history_target')
+    target=preferred if preferred in numeric else ('cagri_sayisi' if 'cagri_sayisi' in numeric else numeric[0] if numeric else None)
+    if target is None:st.info('Çağrı sayısı verisi yok.');return
     try:
         history=daily_history(raw,target,date_col)
         cutoff=st.date_input('Geçmiş veri kesimi',value=history.tarih.max().date(),min_value=history.tarih.min().date(),max_value=history.tarih.max().date(),key='history_cutoff')
@@ -112,7 +113,6 @@ def render_interval_references():
 
 def render():
     st.title('📈 Geçmiş Hafta Analizi')
-    st.caption('Lag ve rolling referanslarını günlük toplamlar veya 30 dakikalık yoğunluk olarak karşılaştırın.')
     from modules.mesai_plani.guncel_takip import render_current,render_accuracy
     def interval():
         sections('nav_interval_history',{'Dağılım Başarısı':render_accuracy,'Geçmiş Referanslar':render_interval_references})

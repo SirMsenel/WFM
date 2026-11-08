@@ -23,6 +23,7 @@ def submit(state,kind,values,reason):
     if kind=='Ekleme':
         if any(not str(values.get(k,'')).strip() for k in ('full_name','sicil_no','username','work_type','language','location')):raise ValueError('Ad, sicil, kullanıcı adı, grup, dil ve lokasyon gerekli.')
         if values['work_type'] not in {'fulltime','akademi','dis_kaynak'}:raise ValueError('Çalışma grubu geçersiz.')
+        values.setdefault('company','')
         values.update(team_lead=profile['full_name'],manager=manager,position='agent')
     else:
         from ortak.personel_deposu import list_people
@@ -66,7 +67,7 @@ def decide(state,item,approve,note='',password=None):
             v=new['values']
             if new['kind']=='Ekleme':
                 if db.execute('SELECT 1 FROM kimlik.employees WHERE sicil_no=?',(str(v['sicil_no']),)).fetchone() or db.execute('SELECT 1 FROM kimlik.users WHERE username=?',(v['username'],)).fetchone():raise ValueError('Sicil veya kullanıcı adı zaten kayıtlı.')
-                eid=db.execute('INSERT INTO kimlik.employees(full_name,team_lead,manager,location,work_type,position,language,sicil_no,employment_start) VALUES(?,?,?,?,?,?,?,?,?)',tuple(v[k] for k in ['full_name','team_lead','manager','location','work_type','position','language','sicil_no','effective_date'])).lastrowid
+                eid=db.execute('INSERT INTO kimlik.employees(full_name,team_lead,manager,location,work_type,position,language,sicil_no,employment_start,company) VALUES(?,?,?,?,?,?,?,?,?,?)',tuple(v[k] for k in ['full_name','team_lead','manager','location','work_type','position','language','sicil_no','effective_date','company'])).lastrowid
                 hashed='!KURUMSAL_GIRIS_BEKLIYOR'
                 if password:
                     if len(password)<8:raise ValueError('Geçici parola en az 8 karakter olmalı.')

@@ -1,11 +1,11 @@
-WFM — GÜNCEL SÜRÜM / macOS BAŞLANGIÇ
+WFM — 8 KASIM 2026 / 6. GÜNCELLEME — macOS
 
-1. Eski Streamlit ve backend işlemlerini terminallerde Ctrl+C ile durdur.
-2. ZIP'i yeni bir klasöre çıkar, proje klasörünü VS Code ile aç.
-3. Mevcut kayıtlarını korumak istiyorsan, eski klasördeki data/wfm_demo.db ve
-   data/auth_demo.db dosyalarının KOPYALARINI yeni klasörün data dizinine aktar.
-   Kaynak dosyaları silme. Veritabanı şeması ilk girişte otomatik güncellenir.
-4. Yeni proje klasörünün terminalinde (Python 3.12 önerilir):
+1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
+2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
+3. Mevcut kayıtlarını korumak için eski data/wfm_demo.db ve data/auth_demo.db
+   dosyalarının KOPYALARINI yeni klasörün data dizinine aktar. Eski dosyaları silme.
+   Şema ilk girişte güncellenir; mevcut kayıtlar sıfırlanmaz.
+4. Proje klasörünün terminalinde (Python 3.12 önerilir):
 
    python3 -m venv .venv
    source .venv/bin/activate
@@ -14,66 +14,31 @@ WFM — GÜNCEL SÜRÜM / macOS BAŞLANGIÇ
 5. İlk terminalde:
    python -m uvicorn sunucu:app --host 127.0.0.1 --port 8001
 
-6. Aynı klasörde ikinci terminal aç, ortamı etkinleştir ve çalıştır:
+6. İkinci terminalde:
    source .venv/bin/activate
    python -m streamlit run arayuz.py --server.port 8501
 
 7. http://localhost:8501 adresini aç. Demo hesap: moderator / 1234
-   Yalnızca tarayıcıyı yenilemek eski klasörden çalışan uygulamayı güncellemez.
-   Windows ortam etkinleştirme: .venv\Scripts\activate
+   Sadece tarayıcıyı yenilemek eski klasörden çalışan kodu güncellemez.
+   Windows ortam etkinleştirmesi: .venv\Scripts\activate
 
-BU SÜRÜMDE
-- Türkçe kaynak dosyaları: arayuz.py, sunucu.py, modules/vardiya_plani vb.
-  DOSYA_HARITASI.md asıl dosyaları gösterir. Eski dosyalar uyumluluk içindir.
-- Son ödeme takviminin Mesai Planı'nda kalan eski hesabı da ortak takvime bağlandı.
-- Plan dönemi 1–93 gün; daha uzun dönem için önce tahmin ve ihtiyacı o aralıkta üret.
-- Plan dönem kartlarında minimum, ortalama ve zirve ihtiyaç; kutulu gün/tarih başlıkları.
-- Mesai Kuralları: ihtiyaca göre OFF dağılımı, grup minimum OFF, esnek üst süre,
-  yaz dönemi ve bayram önceliği. Kaydet ve Uygula ile etkinleştir.
-- Eksik listesi altından Uygun Aksiyonları Bul: uygun boş güne mesai veya süre uzatma.
-- Sicil no ve kullanıcı adı; personel ekleme/ayrılma TL → Yönetici → Planlama.
-- Tüm Vardiyalar → Değişim Alanı: gerekçe zorunlu; OFF/saat koruyan değişimler.
-  Erken/geç giriş ve izinler ayrı işlem türleri. Rapor girişi yalnızca Takım Lideri.
-- Yayındaki vardiya değişim talebi onaylanınca tablo ve denetim kaydı birlikte güncellenir.
-- Veri ve Kayıt Merkezi: Planlama, Yönetici, Müdür. Ayarlar yetkilerini Planlama yönetir.
-- Sentetik alanda bir geçmiş haftanın tahmin/dağılım örneği otomatik hazırlanır;
-  geriye dönük örnek olduğu açıkça belirtilir. Gerçek operasyon başarısı sayılmaz.
-- Kurum bağlantıları hazırlığı ve henüz gereken sözleşmeler KURUMSAL_BAGLANTI.md'de.
-- Geçmiş Hafta Analizi > Güncel Takip: 48 yarım saatte tahmin, gerçekleşen, fark ve hata.
-  Ekran 30 saniyede bir yenilenir. Gerçekleşenler CSV/Excel veya servisle beslenebilir.
-- Kullanılan tahminler ve dağılımlar SQLite'ta sürümlü, geçmişi silinmeden saklanır.
-  Eski sürümler yeni tahminlerle ezilmez. Eksik gerçekleşme 0 sayılmaz.
-- 30 Dakikalık > Dağılım Başarısı: seçilmiş dağılım ile gerçekleşen payların karşılaştırması.
-  Eski kayıtların ilk seçim zamanı bilinmiyorsa bu durum gösterilir; geçmiş tahmin uydurulmaz.
-- İnterval > Yarım saat paylarını elle düzenle: hücre değiştir, Payları Dengele ve Uygula.
-  Sabitlediğin hücreler korunur; artış önce 03:00–08:00'dan, yetmezse diğer serbest
-  dilimlerden düşülür. Gün toplamı %100'e tamamlanır. Sonra dağılımı kaydet ve aktif et.
-- Hareketli ortalama: her gün kendi içinde son 7/30 aynı hafta günü üzerinden hesaplanır.
-- Seçili dönemin bekleyen talepleri bitmeden atama/otomatik planlama başlamaz.
-- Aynı tarih/dil kapsamına ikinci yayın yapılamaz. Yayın Yönetimi'nden önce geri al
-  veya düzenlemek için taslağa taşı. Diğer dillerin yayınları korunur, eski sürüm arşivlenir.
-- Onaylı vardiya/izin talepleri otomatik alınır; iki taraflı değişimler onay anında sabitlenir.
-  Genel talepler vardiya oluşturmaz. Yayındaki dengeli değişim onayla ve denetim kaydıyla uygulanır.
-- Talep araması düzeltildi; içerik ve işlem geçmişi daha sade gösterilir.
-- Takım lideri ders/sınav ekranında kendi ekibini; WFM/yönetici bütün personelleri görür.
-- Önceki Ekrana Dön düğmesi ve alt ekran seçiminin korunması eklendi.
-- Sınav saati seçeneği açılırsa başlangıç/bitişi bilinen sınavların diğer saatlerine
-  vardiya yazılabilir. Bitiş bilinmiyorsa gün tamamen kapatılır.
-- Gece kuralları kaydedilince eksik tarih/dil sayıları popup'ta gösterilir.
-- Takip ekranında kompakt tarih seçimi, çalışma/izin özetleri, Sabah/İkindi/Akşam/Gece
-  saatleri ve gece adedi vardır. Saat ve statüler ayrı renklerle gösterilir.
-- Kesim/son ödeme takvimi FE ve tahminde aynı kaynağa alındı; kısa ayların tarih kayması düzeltildi.
+YENİ AKIŞLAR
+- Mesai Planı > Tahmin Kaynağı > Kayıtlı tahmin seç: yıllık/dönemsel günlük tahmini
+  tekrar kullan. Personel Hesap'ta intervalin uygulanacağı tarihleri seç.
+- Tüm Vardiyalar > Değişim Alanı: personel/karşı personel/günleri seç, önizlemeyi
+  kontrol et, gerekçeyi yaz ve gönder. Erken/geç girişte saat hücresini düzenle.
+- Planlama > aynı ekran > Talep ve Onay Takibi: incele, Onayla ve Takvime Uygula.
+  MT talepleri önce ilgili TL'ye, sonra Planlama'ya gider. Son uygulama Planlama'dadır.
+- İzleme: tarih filtresiyle erken/geç giriş, rapor, yıllık izin ve değişim sayılarını gör.
+- Veri ve Kayıt Merkezi: günlük tahminler, interval, açıklanan vardiyalar ve geçmiş.
+  Tahmin/profil/yayın başlığını ilgili kayıttan düzenleyebilirsin.
+- Mesai Kuralları: haftalık OFF hakkını gruplara göre seç. Soft uyarıları yayın
+  öncesinde incele; Hard ihlaller düzeltilmeden yayınlanamaz.
 
-MEVCUT KURALLAR
-- Dış kaynak 10 saat. Her personelde vardiyalar arası en az 11 saat dinlenme.
-- Üst üste gün sınırı hafta değişiminde sıfırlanmaz.
-- Elle giriş dolu günün üzerine yazmaz; süre/okul/dinlenme ihlalleri kaydedilmez.
-- 03:00–08:00 ihtiyaç sayacından çıkarılabilir; gerçek çalışma saati/dinlenme değişmez.
-- Eksikler açıkça kabul edilerek yayınlanabilir; gerçek çalışma kuralı ihlalleri önce düzeltilir.
-
-İÇERİK
-- Kod, testler ve README.md.
-- data/auth_demo.db: demo personel/kullanıcılar.
-- data/wfm_demo.db: yoksa ilk girişte sentetik çağrı, talep ve okul verileriyle oluşturulur.
-  Var olan kullanıcı veritabanı sıfırlanmaz.
-- Servis kullanım ayrıntıları README.md'de.
+DOSYALAR
+GUNCELLEME_NOTLARI.md: yapılan düzenlemeler ve değişim kuralları.
+DOSYA_HARITASI.md: Türkçe asıl kaynak dosyaları. Eski yollar uyumluluk içindir.
+KURUMSAL_BAGLANTI.md: API/veritabanı hazırlığı ve beklenen alanlar.
+Şirket/kıdem kartları personelin company ve employment_start alanlarından beslenir.
+Örnek çalışma veritabanı yoksa ilk girişte oluşturulur. Gerçek kurum bağlantısı
+henüz yapılmamıştır; kurumsal modda sentetik veri üretimi kapatılır.

@@ -1,5 +1,7 @@
 # WFM
 
+**6. güncelleme:** günlük tahmin arşivi, Planlama onaylı vardiya değişimleri, personel/kıdem kartları ve İzleme ekranı. Güncel davranış ve kurallar için [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
+
 Güncel kurulum: [ILK-OKU.txt](ILK-OKU.txt). Türkçe kaynaklar: [DOSYA_HARITASI.md](DOSYA_HARITASI.md). Kurum API/veritabanı hazırlığı ve sınırları: [KURUMSAL_BAGLANTI.md](KURUMSAL_BAGLANTI.md). Eski İngilizce Python dosyaları geriye uyumluluk yönlendirmeleridir.
 
 Python 3.10+ gerekir. Proje kökünde:

@@ -89,6 +89,8 @@ def forecast_candidates(state, start, end):
                         "metrics": bundle["metrics"], "meta": {"model_name": bundle["name"], "start": str(start.date()),
                         "end": str(end.date()), "horizon": f"{len(out)} gün", "created_at": datetime.now().isoformat(timespec="seconds"),
                         "ranking_metric": "RMSE", "training_context": bundle["context"], "date_col_used": used_date}})
+    from ortak.gunluk_tahmin_deposu import capture_daily
+    for option in options:option["daily_record_id"]=capture_daily(state,option["frame"],option["meta"])
     state["cf_forecast_options"] = options
     state["cf_forecast_df"] = options[0]["frame"].copy()  # Legacy report compatibility.
     state["cf_forecast_meta"] = options[0]["meta"].copy()
@@ -120,7 +122,9 @@ def activate_forecast(state, frame, meta):
         state["sp_staffing_result_df"] = None
         state["plan_ctx_confirmed"] = False
     state["sp_forecast_df"] = frame
-    state["sp_forecast_meta"] = dict(meta)
+    from ortak.gunluk_tahmin_deposu import capture_daily
+    record_id=capture_daily(state,frame,meta)
+    state["sp_forecast_meta"] = dict(meta,daily_record_id=record_id)
     from ortak.calisma_alani_deposu import save_keys
     save_keys(state)
 

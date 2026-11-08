@@ -48,9 +48,10 @@ def render():
     current_start,current_end=_clamp_range(pd.Timestamp(ctx['start']).date(),pd.Timestamp(ctx['end']).date(),minimum,maximum)
     with st.container(border=True):
         st.markdown('#### Planlayacağın aralığı seç')
-        picked=st.date_input('Başlangıç – bitiş (1–93 gün)',value=(current_start,current_end),min_value=minimum,max_value=maximum,key=f'vp_dates_{minimum}_{maximum}')
-        if len(picked)!=2:st.info('Başlangıç ve bitişi seçin.');return
-        start,end=picked
+        a,b=st.columns(2)
+        with a.container(border=True):start=st.date_input('Başlangıç',value=current_start,min_value=minimum,max_value=maximum,key=f'vp_start_{minimum}_{maximum}',format='DD.MM.YYYY')
+        with b.container(border=True):end=st.date_input('Bitiş',value=current_end,min_value=minimum,max_value=maximum,key=f'vp_end_{minimum}_{maximum}',format='DD.MM.YYYY')
+        if end<start:st.error('Bitiş tarihi başlangıçtan önce olamaz.');return
         if (end-start).days>92:st.error('Tek plan dönemi en fazla 93 gün olabilir.');return
         if (ctx['start'],ctx['end'])!=(start,end):
             st.session_state['plan_ctx_confirmed']=False
@@ -94,6 +95,6 @@ def render():
             for col,day in zip(columns,days[offset:offset+3]):
                 with col:
                     with st.container(border=True):
-                        st.markdown(f"**{DAY_NAMES[day.weekday()]}**");st.markdown(f"**{day:%d.%m.%Y}**")
+                        st.markdown(f"**{day:%d.%m.%Y} {DAY_NAMES[day.weekday()]}**")
                     view=base[base.Tarih==day].copy().sort_values('Slot');view['Saat aralığı']=view.Slot.map(slot_label)
                     st.dataframe(view[['Saat aralığı']+[c for c in ['Planlanan Agent','Net Agent','Tahmin Çağrı'] if c in view]],hide_index=True,use_container_width=True,height=400)

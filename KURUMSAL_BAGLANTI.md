@@ -27,7 +27,7 @@ GET yanıtı tüm personellerin listesi veya `{items: [...]}` olmalıdır. Sayfa
 
 `employee_id` yoksa sicil numarası iç kimlik olarak kullanılır. Bundan sonra aynı personelin kimliğini değiştirmeyin; sicil numarası değişebiliyorsa ayrıca sabit `employee_id` sağlayın. `kullanici_adi`, `ad_soyad`, `registry_no`, `rol` eşdeğer alanları da okunur.
 
-Planlamada ayrıca `team_lead`, `manager`, `location`, `work_type`, `language`, `is_active`, `employment_start`, `employment_end` gerekir. Tarihler ISO `YYYY-MM-DD`; ayrılma tarihinden itibaren çalışma/giriş kapatılır. Rol kodları `agent`, `tl`, `manager`, `wfm`, `moderator`; ekrandaki karşılıkları Müşteri Temsilcisi, Takım Lideri, Yönetici, Planlama, Müdür. Çalışma grupları `fulltime`, `akademi`, `dis_kaynak`; diller `tr`, `en`, `ar`. İlişkiler bu sürümde lider/yönetici adıyla eşleşir; kurumdan sabit lider/yönetici kimlikleri gelirse adaptörde eşleştirme yapılmalıdır.
+Planlamada ayrıca `team_lead`, `manager`, `location`, `work_type`, `language`, `is_active`, `employment_start`, `employment_end`, `company` gerekir. `company` için `sirket` eşdeğeri de okunur; işe giriş tarihi kıdem kartını besler. Tarihler ISO `YYYY-MM-DD`; ayrılma tarihinden itibaren çalışma/giriş kapatılır. Rol kodları `agent`, `tl`, `manager`, `wfm`, `moderator`; ekrandaki karşılıkları Müşteri Temsilcisi, Takım Lideri, Yönetici, Planlama, Müdür. Çalışma grupları `fulltime`, `akademi`, `dis_kaynak`; diller `tr`, `en`, `ar`. İlişkiler bu sürümde lider/yönetici adıyla eşleşir; kurumdan sabit lider/yönetici kimlikleri gelirse adaptörde eşleştirme yapılmalıdır.
 
 Personel ekleme/ayrılma iş akışı TL → ilgili Yönetici → Planlama şeklinde yerelde tamamlanır. Kurumsal modda talepler ve onay geçmişi saklanır, ancak son HR yazma işlemi kurum yazma servisi tanımlanana kadar engellenir. Böylece yalnızca yerel bir değişiklik yapıp kurumda tamamlanmış gibi görünmez. Ayrılan personelin geçmişi silinmez.
 
@@ -41,7 +41,7 @@ Personel ekleme/ayrılma iş akışı TL → ilgili Yönetici → Planlama şekl
 
 `slot` 1–48; 1=00:00–00:30, 17=08:00–08:30. `tarih` yarım saat başlangıcı da olabilir; saat varsa slotla tutarlı olmalıdır. Bir dilim tekrar gönderilirse gerçekleşen güncellenir, diğer dilimler korunur. Tamamlanmamış günün günlük toplamı tam gün sayılmaz. Günlük toplamı yeniden hesaplamak için 48 dilimi gönderin. Yalnızca günlük çağrı geçmişi ayrı kurumsal kaynaktaysa günlük okuma adaptörü ayrıca bağlanacaktır; günlük toplamları uydurma 30 dk veriye çevirmeyin.
 
-Kullanılmış tahmin ve dağılımlar `forecast_runs`, `forecast_slots`, `profile_versions` tablolarında sürümlüdür. Gerçekleşenlerin değişmesi eski tahminleri ezmez. `GET /forecast-ledger/runs`, `/forecast-ledger/runs/{id}/slots` servisleri geçmişi okur. Ayrıntılı şema: `ortak/tahmin_kayit_servisi.py`.
+Üretilen/seçilen günlük tahminler interval hesabından bağımsız `daily_forecasts` tablosunda saklanır. Kullanılmış tahmin ve dağılımlar `forecast_runs`, `forecast_slots`, `profile_versions` tablolarında sürümlüdür. Gerçekleşenlerin değişmesi eski tahminleri ezmez. `GET /forecast-ledger/runs`, `/forecast-ledger/runs/{id}/slots` servisleri geçmişi okur. Ayrıntılı şema: `ortak/tahmin_kayit_servisi.py`.
 
 ## Dosyalar ve geçiş sınırı
 
