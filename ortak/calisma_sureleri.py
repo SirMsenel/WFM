@@ -16,6 +16,8 @@ def overlap_hours(row,start,end):
 def personnel_hours(state,people,start,end,published_only=False):
     from modules.vardiya_plani.planlama_verileri import collect_inputs
     records={(str(r['employee_id']),str(r['date'])):r for key in (('published_shift_plan',) if published_only else ('published_shift_plan','draft_shift_plan')) for r in state.get(key,[])}
+    from ortak.sabit_demo import history_rows
+    for r in history_rows(state,pd.Timestamp(start).date()-timedelta(days=1),end):records.setdefault((str(r['employee_id']),str(r['date'])),r)
     if not published_only and state.get('employees_cache') and state.get('plan_ctx'):
         source=dict(state);source['plan_ctx']={'start':start,'end':end};source['planning_languages']={'en':True,'ar':True}
         for r in collect_inputs(source)[1]:records[(str(r['employee_id']),str(r['date']))]=r

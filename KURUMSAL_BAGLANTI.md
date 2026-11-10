@@ -52,3 +52,10 @@ Personel ekleme/ayrılma iş akışı TL → ilgili Yönetici → Planlama şekl
 - `sunucu.py`: uygulama servisleri ve giriş doğrulaması.
 
 Bu, yerel prototipten kurum sistemine geçiş hazırlığıdır. Mevcut dosya yükleme/personel uçları dahil tüm servislerin kurum ağına açılması öncesinde kurumun erişim, SSO ve veri saklama politikalarıyla birlikte servis yetkilendirmesi tamamlanmalıdır. PostgreSQL/SQL Server bağlantısı ve kurum HR yazma servisi bu sürümde kurulmuş değildir. SQLite dosyaları aynı makinedeki iki uygulama sürecinin ortak deposudur; çok sunuculu kullanım için ortak sunucu veritabanı adaptörü gerekir.
+
+## 7. faz ek alanlar
+Personelde `gender` alanı (örnek değerler Kadın/Erkek) Cuma erkek filtresi için isteğe bağlıdır. `employment_start`, `employment_end`, `company`, `sicil_no`, `username` alanları korunur. Yeni rol `planning_manager` = Planlama Yöneticisi.
+
+`POST /actuals/intervals` satırları `tarih`, `slot` (1–48), `cagri_sayisi`, isteğe bağlı `aht_sec`, `answered`, `answered_target`, `staffed` alır. Sayımlar negatif olamaz; `answered_target <= answered <= cagri_sayisi`. `staffed` o dilimdeki gerçek etkin personel sayısıdır. SL hedef sürede karşılanan/gelen üzerinden hesaplanır. Yetkili Planlama hesabı gerekir. Kurumsal akış bu uç noktaya henüz bağlanmış değildir.
+
+Yemekler `planned_breaks`, kişisel molalar `break_requests`, yayın onayları `plan_approvals`, sabit örnek vardiyalar `roster_history`, gerçek operasyon metrikleri `interval_operations` tablolarında tutulur. Kullanıcı geçişi yalnızca asıl moderatör tokenı ile yapılır; imzalı token gerçek aktör bilgisini taşır.

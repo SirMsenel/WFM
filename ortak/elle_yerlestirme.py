@@ -29,8 +29,8 @@ def prepare_manual(state,employee_ids,start,end,kind,begin=None,finish=None,note
                 warnings.append({'Personel':person['full_name'],'employee_id':eid,'Sicil no':people[eid].get('sicil_no',eid),'Kullanıcı adı':people[eid].get('username',''),'Tarih':key[1],'Vardiya':label,'Neden yazılmadı?':'Bu gün zaten dolu; mevcut kayıt korundu.','Tür':'Engel'});continue
             a,b=None,None
             if kind in {'WORK','GECE','MESAI'}:
-                if begin is None:raise ValueError('Başlangıç saati gerekli.')
-                a=begin.strftime('%H:%M') if hasattr(begin,'strftime') else str(begin)
+                if begin is None:a=state['shift_rules']['general'].get('night_window_start','00:00') if kind=='GECE' else state['shift_rules']['general'].get('weekend_general_start' if day.weekday()>=5 else 'weekday_general_start','08:00')
+                else:a=begin.strftime('%H:%M') if hasattr(begin,'strftime') else str(begin)
                 if finish is not None:b=finish.strftime('%H:%M') if hasattr(finish,'strftime') else str(finish)
                 elif kind=='GECE':b=state['shift_rules']['general']['night_window_end']
                 else:

@@ -4,7 +4,7 @@ import os
 from urllib.parse import urlparse
 import requests
 
-ROLE_MAP={'agent':'agent','müşteri temsilcisi':'agent','mt':'agent','tl':'tl','takım lideri':'tl','manager':'manager','yönetici':'manager','wfm':'wfm','planlama':'wfm','moderator':'moderator','director':'moderator','müdür':'moderator'}
+ROLE_MAP={'agent':'agent','müşteri temsilcisi':'agent','mt':'agent','tl':'tl','takım lideri':'tl','manager':'manager','yönetici':'manager','wfm':'wfm','planlama':'wfm','moderator':'moderator','director':'moderator','müdür':'moderator','planning_manager':'planning_manager','planlama yöneticisi':'planning_manager'}
 
 
 def _url(name):
@@ -20,7 +20,7 @@ def _json(response):
 
 
 def normalize_person(row):
-    result={k:row.get(k) for k in ('team_lead','manager','location','work_type','language','employment_start','employment_end','company')};result['username']=str(row.get('username') or row.get('kullanici_adi') or '').strip()
+    result={k:row.get(k) for k in ('team_lead','manager','location','work_type','language','employment_start','employment_end','company','gender')};result['username']=str(row.get('username') or row.get('kullanici_adi') or '').strip()
     result['sicil_no']=str(row.get('sicil_no') or row.get('registry_no') or row.get('employee_id') or '').strip()
     result['employee_id']=str(row.get('employee_id') or result['sicil_no'])
     result['full_name']=str(row.get('full_name') or row.get('ad_soyad') or '').strip()

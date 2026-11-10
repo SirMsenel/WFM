@@ -129,6 +129,8 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         problems = []
         duration = (interval[1] - interval[0]).total_seconds() / 3600
         max_hours = float(rule.get("shift_total_hours_max", rule.get("shift_total_hours", 24)))
+        if group=='fulltime' and row.get('shift_code')=='MESAI' and rules.get('capacity'):
+            max_hours=max(max_hours,float(rule.get('shift_total_hours',9))+float(rules['capacity'].get('max_extension_hours',3)))
         if row.get('shift_code')=='GECE':
             ns=minutes(general.get('night_window_start','00:00'));ne=minutes(general.get('night_window_end','08:00'))
             max_hours=((ne-ns)%1440 or 1440)/60
@@ -280,12 +282,35 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             issue(row, f"Geçersiz sabit kayıt: {exc}")
 
     days = [start + timedelta(days=i) for i in range((end-start).days+1)]
+    # Explicit 07:00 quota is placed before ordinary group filling. Otherwise an
+    # earlier-priority group can consume every day slot before Full Time is tried.
+    if auto_fill and 'fulltime' in group_order and boost.get('weekday_0700_fulltime_extra_enabled'):
+        from ortak.off_dagilimi import plan_off_days
+        early_members=[eid for eid,e in staff.items() if e['work_type']=='fulltime']
+        early_off=plan_off_days(early_members,staff,days,df,plan,rules)
+        duration=round(float(groups['fulltime'].get('shift_total_hours',9))*60)
+        for day in days:
+            if day.weekday()>=5:continue
+            quota=int(boost.get('weekday_0700_fulltime_extra_count',0))
+            used=sum(r['date']==str(day) and r.get('group')=='fulltime' and r.get('start')=='07:00' for r in plan)
+            for eid in sorted(early_members,key=lambda e:(sum((b[1]-b[0]).total_seconds() for r in by_employee[e] if (b:=bounds(r))),e)):
+                if used>=quota:break
+                if (eid,day) in occupied or (eid,day) in early_off:continue
+                finish=420+duration
+                row={'employee_id':eid,'date':str(day),'group':'fulltime','shift_code':'WORK','start':'07:00','end':f'{finish//60%24:02d}:{finish%60:02d}','source':'auto','note':'07:00 takviye kotası'}
+                span=bounds(row);ix=indices(span);active=ix[effective[ix]]
+                expected=sum(not exclude_early_hours or not 180<=((420+offset)%1440)<480 for offset in range(0,duration,30))
+                caps=np.full(len(active),int(rules.get('capacity',{}).get('max_overstaff',0)),dtype=int)
+                caps[np.asarray([pd.Timestamp(stamp[j]).hour==7 for j in active])]=max(int(rules.get('capacity',{}).get('max_overstaff',0)),quota)
+                if strict_capacity and (len(active)!=expected or (covered[active]+1>required[active]+caps).any()):continue
+                if violations(row,by_employee[eid]):continue
+                plan.append(row);occupied.add((eid,day));by_employee[eid].append(row);covered[ix]+=1;used+=1
     for group in (group_order if auto_fill else []):
         rule = groups[group]
         max_hours = float(rule.get("shift_total_hours_max", rule.get("shift_total_hours", 0)))
         if not 0 < max_hours <= 24:
             raise ValueError(f"{group}: geçersiz vardiya süresi")
-        durations = (list(range(round(float(rule['shift_total_hours'])*60),round(max_hours*60)+1,30)) if rule.get('allow_flexible_hours') and 'shift_total_hours' in rule else [round(max_hours*60)]) if 'shift_total_hours' in rule else list(range(30,round(max_hours*60)+1,30))
+        durations = (list(range(round(float(rule['shift_total_hours'])*60),round(max_hours*60)+1,30)) if rule.get('allow_flexible_hours') and 'shift_total_hours' in rule else [round(max_hours*60)]) if 'shift_total_hours' in rule else list(range(max(30,round(float(rule.get('min_shift_hours',.5))*60)),round(max_hours*60)+1,30))
         members = [eid for eid, emp in staff.items() if emp["work_type"] == group]
         from ortak.off_dagilimi import plan_off_days
         off_days=plan_off_days(members,staff,days,df,plan,rules)
@@ -322,14 +347,19 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                         expected=duration//30
                         if exclude_early_hours:
                             expected=sum(not 180<=((begin+offset)%1440)<480 for offset in range(0,duration,30))
-                        if strict_capacity and (len(active_ix)!=expected or (covered[active_ix]>=required[active_ix]).any()):
+                        allowance=int(rules.get('capacity',{}).get('max_overstaff',0))
+                        early_quota=group=='fulltime' and day.weekday()<5 and begin==420 and boost.get('weekday_0700_fulltime_extra_enabled')
+                        caps=np.full(len(active_ix),allowance,dtype=int)
+                        if early_quota:caps[np.asarray([pd.Timestamp(stamp[j]).hour==7 for j in active_ix])]=max(allowance,int(boost.get('weekday_0700_fulltime_extra_count',0)))
+                        if strict_capacity and (len(active_ix)!=expected or (covered[active_ix]+1>required[active_ix]+caps).any()):
                             continue
                         # Count all shift slots, including those outside the demand table.
                         excess = duration//30 - gain
                         daytime = (not rule.get("prefer_daytime") or
                                    (begin >= minutes(rule.get("daytime_window_start", "07:00"))
                                     and finish <= minutes(rule.get("daytime_window_end", "19:00"))))
-                        score = (gain, -excess, int(daytime), -begin)
+                        early_needed=group=='fulltime' and day.weekday()<5 and begin==420 and boost.get('weekday_0700_fulltime_extra_enabled') and sum(r['date']==day.isoformat() and r.get('group')=='fulltime' and r.get('start')=='07:00' for r in plan)<int(boost.get('weekday_0700_fulltime_extra_count',0))
+                        score = (gain+len(stamp) if early_needed else gain, -excess, int(daytime), -begin)
                         if score <= best_score or violations(row, by_employee[eid]):
                             continue
                         best, best_score = (row, interval, ix), score
@@ -345,6 +375,12 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             if (eid, day) not in occupied:
                 plan.append({"employee_id": eid, "date": day.isoformat(), "group": staff[eid]["work_type"],
                              "shift_code": "OFF", "start": None, "end": None, "source": "auto", "note": ""})
+    if auto_fill and boost.get('weekday_0700_fulltime_extra_enabled'):
+        for day in days:
+            if day.weekday()>=5:continue
+            count=sum(r['date']==str(day) and r.get('group')=='fulltime' and r.get('start')=='07:00' for r in plan)
+            target=int(boost.get('weekday_0700_fulltime_extra_count',0))
+            if count<target:issue({'date':str(day)},f'Soft kural: 07:00 Full Time takviyesi {target} kişi; uygun yerleştirilen {count}.')
     night_rules=rules.get('night',{})
     targets=night_rules.get(night_rules.get('mode','normal'),{}) if night_rules.get('enabled') else {}
     if targets:

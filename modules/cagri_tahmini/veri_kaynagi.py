@@ -110,8 +110,7 @@ def render():
             st.rerun()
     else:
         if not _backend_health_ok():
-            st.warning("Dosya yüklemek için API bağlantısı gerekli.")
-            return
+            st.warning("Yeni dosya yüklemek için API bağlantısı gerekli. Daha önce yüklenen veriyi kullanabilirsiniz.")
         uploaded=st.file_uploader("CSV veya Excel yükle",type=["csv","xlsx","xls"],key="cf_history_upload")
 
     # Dosya seçilince otomatik yükle

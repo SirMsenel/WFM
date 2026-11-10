@@ -58,6 +58,9 @@ def preview_plan(state,include_auto=False):
                     if start<=str(day.date())<=end:exam_keys.add((users[user],str(day.date())))
     result['exam_hours']=state.get('planning_exam_hours',False)
     result.update(source_rows=source_rows,exam_keys=exam_keys,staff=staff,unavailable=unavailable)
+    from ortak.statuler import meal_plan
+    meals,coverage,meal_issues=meal_plan(state,result['plan'],result['coverage'],staff)
+    result['breaks']=meals;result['coverage']=coverage;result['issues']+=meal_issues
     return result
 
 

@@ -14,7 +14,7 @@ def auth_path(state=None):return str((state or {}).get('auth_db_path') or os.env
 def ensure_identity(path):
     with sqlite3.connect(path) as db:
         cols={r[1] for r in db.execute('PRAGMA table_info(employees)')}
-        for name in ('sicil_no','employment_start','employment_end','company'):
+        for name in ('sicil_no','employment_start','employment_end','company','gender'):
             if name not in cols:db.execute('ALTER TABLE employees ADD COLUMN '+name+' TEXT')
         db.execute("UPDATE employees SET sicil_no=CAST(employee_id AS TEXT) WHERE sicil_no IS NULL OR trim(sicil_no)=''")
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS employees_sicil_unique ON employees(sicil_no)')

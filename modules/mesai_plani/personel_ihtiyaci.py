@@ -38,6 +38,7 @@ def erlang_c_metrics_for_m(
     if m <= 0:
         return (a, 0.0, 1.0)
 
+    if m<=a:return (a,0.0,1.0)
     pw = erlang_c_probability(a, m)
 
     if aht_sec > 0:
@@ -85,7 +86,7 @@ def erlang_c_required_agents(
 # ==========================================================
 
 def calculate_staffing(forecast_df, ratio_df, aht=300, target_sl=.8,
-                       target_time=20, shrinkage=.3, occ_target=.85):
+                       target_time=20, shrinkage=.3, occ_target=.85, slot_shrinkage=None):
     from ortak.cagri_tahmin_servisi import validate_forecast, DAY_NAMES
     forecast=validate_forecast(forecast_df)
     if not (0 < aht <= 3600 and 0 < target_sl < 1 and 0 <= shrinkage < 1 and 0 < occ_target < 1 and target_time>0):
@@ -107,13 +108,15 @@ def calculate_staffing(forecast_df, ratio_df, aht=300, target_sl=.8,
             raise ValueError(f"{day} oranlarının toplamı %100 olmalı.")
         for (_,r),percent in zip(profile.iterrows(),ratios):
             calls=float(row.y_pred)*float(percent)/100
+            from ortak.statuler import shrinkage_for
+            loss=shrinkage_for({"slot_shrinkage":slot_shrinkage or []},row.tarih,int(r["Slot"]),shrinkage)
             met=erlang_c_required_agents(calls,aht,1800,target_sl,target_time,occ_target)
             slot=int(r['Slot'])
             label=r.get('Aralık',f'{(slot-1)//2:02d}:{((slot-1)%2)*30:02d}')
             rows.append({'Tarih':row.tarih.date(),'Gün':day,'Slot':slot,'Aralık':label,
                          'Tahmin Çağrı':round(calls,2),'Trafik (Erlang)':round(met['traffic_a'],3),
                          'Doluluk (%)':round(met['occupancy']*100,1),'SL (model) (%)':round(met['sl']*100,1),
-                         'Net Agent':met['m'],'Planlanan Agent':math.ceil(met['m']/(1-shrinkage))})
+                         'Net Agent':met['m'],'Shrinkage (%)':loss*100,'AHT (sn)':aht,'Hedef SL (%)':target_sl*100,'Hedef süre (sn)':target_time,'Planlanan Agent':math.ceil(met['m']/(1-loss))})
     return pd.DataFrame(rows)
 
 def render():
@@ -159,6 +162,24 @@ def render():
     with c4:
         shrinkage_percent = st.slider("Shrinkage (%)", 0, 50, 30, 5)
 
+    with st.expander('30 dakikalık shrinkage kuralları'):
+        st.caption('Çakışan kurallarda son satır uygulanır. Örn. 12:00–14:00 %35. Yemek/mola hariç diğer kayıplar.')
+        existing=st.session_state.get('slot_shrinkage',[])
+        clock=lambda n:f'{n//2:02d}:{30*(n%2):02d}'
+        starts=[clock(i) for i in range(48)];ends=[clock(i) for i in range(1,49)]
+        table=pd.DataFrame([{'Başlangıç':clock(r['start_slot']-1),'Bitiş':clock(r['end_slot']),'Kayıp (%)':r['rate']*100} for r in existing],columns=['Başlangıç','Bitiş','Kayıp (%)'])
+        edited=st.data_editor(table,num_rows='dynamic',hide_index=True,key='slot_loss_editor_clock',column_config={'Başlangıç':st.column_config.SelectboxColumn(options=starts,required=True),'Bitiş':st.column_config.SelectboxColumn(options=ends,required=True),'Kayıp (%)':st.column_config.NumberColumn(min_value=0,max_value=99,step=5,required=True)})
+        if st.button('Dilim Oranlarını Kaydet',key='save_slot_loss'):
+            try:
+                rows=[]
+                for r in edited.dropna().to_dict('records'):
+                    a,b=starts.index(r['Başlangıç'])+1,ends.index(r['Bitiş'])+1;rate=float(r['Kayıp (%)'])/100
+                    if not 1<=a<=b<=48 or not 0<=rate<1:raise ValueError('Bitiş başlangıçtan sonra, kayıp %0–99 arasında olmalı.')
+                    rows.append({'start_slot':a,'end_slot':b,'rate':rate})
+                st.session_state['slot_shrinkage']=rows
+                from ortak.calisma_alani_deposu import save_keys
+                save_keys(st.session_state);st.success('Dilim kayıpları kaydedildi.')
+            except ValueError as e:st.error(str(e))
     occ_percent = st.slider("Doluluk / Occupancy Hedefi (%)", 50, 95, 85, 5)
     st.caption("Doluluk = Trafik (Erlang) / Agent. Hedef %85 ise, sistem doluluk %85’i aşmayacak şekilde agent artırır.")
 
@@ -190,7 +211,8 @@ def render():
         try:
             with st.spinner("Personel ihtiyacı hesaplanıyor..."):
                 result_df=calculate_staffing(forecast_df,ratio_df,aht=float(aht),target_sl=target_sl,
-                                            target_time=float(target_time),shrinkage=shrinkage,occ_target=occ_target)
+                                            target_time=float(target_time),shrinkage=shrinkage,occ_target=occ_target,slot_shrinkage=st.session_state.get("slot_shrinkage",[]))
+            st.session_state["staffing_parameters"]={"aht":float(aht),"target_sl":target_sl,"target_time":float(target_time),"shrinkage":shrinkage,"occ_target":occ_target}
             st.session_state["sp_staffing_result_df"] = result_df
             from ortak.interval_servisi import record_used_profile
             record_used_profile(st.session_state,forecast_df,ratio_df)

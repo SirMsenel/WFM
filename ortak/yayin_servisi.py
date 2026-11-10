@@ -9,10 +9,14 @@ from modules.vardiya_plani.planlama_verileri import fingerprint
 
 def init_publications(path):
     init_db(path)
+    from ortak.sabit_demo import init_history
+    init_history(path)
     with connect(path) as db:db.execute('CREATE TABLE IF NOT EXISTS publication_batches(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL)')
 
 
-def publish_plan(state,result):
+def publish_plan(state,result,approval_ticket=None):
+    gated=state.get("shift_rules",{}).get("publication_approvals",{}).get("enabled",False)
+    if gated and not approval_ticket:raise ValueError("Önce iki Planlama onayı; eksik %5 üzerindeyse Planlama Yöneticisi onayı gerekli.")
     from ortak.donem_kilitleri import assert_can_plan
     if state.get("workspace_db_path"):
         from ortak.talep_servisi import refresh
@@ -30,6 +34,12 @@ def publish_plan(state,result):
         init_publications(path)
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
+            if gated:
+                from ortak.yayin_onaylari import ready
+                approval=db.execute('SELECT * FROM plan_approvals WHERE id=?',(approval_ticket,)).fetchone()
+                if not approval or approval['status']!='Bekliyor':raise ValueError('Yayın onayı güncel değil.')
+                item=loads(approval['payload'])
+                if not ready(item) or item['fingerprint']!=state['planning_result_fingerprint'] or dumps(item['result']['plan'])!=dumps(result['plan']):raise ValueError('Onaylar bu taslağa ait değil.')
             stored=db.execute("SELECT payload FROM work_state WHERE key='published_shift_plan'").fetchone()
             current=loads(stored[0]) if stored else previous
             latest_requests=[loads(r[0]) for r in db.execute('SELECT payload FROM requests')]
@@ -39,6 +49,14 @@ def publish_plan(state,result):
             published=[r for r in current if not start<=str(r.get('date'))<=end or str(r['employee_id']) not in included]+rows
             db.execute('INSERT INTO publication_batches VALUES(?,?,?,?)',(payload['id'],datetime.now(ZoneInfo('Europe/Istanbul')).isoformat(),'active',dumps(payload)))
             db.execute("INSERT INTO work_state VALUES('published_shift_plan',?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",(dumps(published),))
+            if gated:db.execute("UPDATE plan_approvals SET status='Yayınlandı' WHERE id=?",(approval_ticket,))
+            from ortak.talep_simulasyonu import finalize
+            finalize(db,rows,start,end,(state.get('profile') or {}).get('username'))
+            if result.get('breaks'):
+                db.execute('CREATE TABLE IF NOT EXISTS planned_breaks(id TEXT PRIMARY KEY,publication_id TEXT,payload TEXT)')
+                for i,r in enumerate(result['breaks']):db.execute('INSERT INTO planned_breaks VALUES(?,?,?)',(batch_id+'-'+str(i),batch_id,dumps(r)))
+        from ortak.talep_servisi import refresh
+        refresh(state)
         state['published_shift_plan']=published
     else:
         assert_can_plan(state,result['staff'])
@@ -89,6 +107,7 @@ def withdraw(state,batch,reopen=False):
             if batch['id'].startswith('LEGACY-'):db.execute('INSERT INTO publication_batches VALUES(?,?,?,?)',(batch['id']+'-'+uuid4().hex[:6],datetime.now(ZoneInfo('Europe/Istanbul')).isoformat(),'withdrawn',dumps(batch)))
             else:db.execute("UPDATE publication_batches SET status='withdrawn' WHERE id=? AND status='active'",(batch['id'],))
             db.execute("INSERT INTO work_state VALUES('published_shift_plan',?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",(dumps(published),))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='planned_breaks'").fetchone():db.execute('DELETE FROM planned_breaks WHERE publication_id=?',(batch['id'],))
         state['published_shift_plan']=published
     else:
         state['published_shift_plan']=change(state.get('published_shift_plan',[]))

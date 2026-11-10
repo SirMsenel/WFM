@@ -11,7 +11,7 @@ def title_for(path,ident,fallback):
 
 
 def set_title(state,ident,title):
-    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator'}:raise ValueError('Kayıt başlığını yönetim rolleri değiştirebilir.')
+    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator','planning_manager'}:raise ValueError('Kayıt başlığını yönetim rolleri değiştirebilir.')
     if not title.strip() or len(title.strip())>120:raise ValueError('1–120 karakterlik bir başlık girin.')
     path=state['workspace_db_path'];title_for(path,ident,'')
     with connect(path) as db:db.execute('INSERT INTO record_titles VALUES(?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title',(ident,title.strip()))

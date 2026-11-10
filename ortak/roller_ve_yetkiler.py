@@ -2,10 +2,10 @@
 """Roller ve Yetkiler — bütün değişiklik servislerinin ortak yetki kaynağı."""
 from ortak.calisma_alani_deposu import connect,init_db,dumps,loads
 
-ROLE_LABELS={'agent':'Müşteri Temsilcisi','tl':'Takım Lideri','manager':'Yönetici','wfm':'Planlama','moderator':'Müdür'}
+ROLE_LABELS={'agent':'Müşteri Temsilcisi','tl':'Takım Lideri','manager':'Yönetici','wfm':'Planlama','moderator':'Müdür','planning_manager':'Planlama Yöneticisi'}
 DEFAULTS={'agent':{'talep_ilet'},'tl':{'talep_ilet','personel_talebi','vardiya_degistir','rapor_gir'},
  'manager':{'personel_incele','vardiya_degistir','kayit_merkezi'},'wfm':{'personel_onayla','vardiya_degistir','kayit_merkezi','yetki_yonet'},
- 'moderator':{'personel_incele','vardiya_degistir','kayit_merkezi'}}
+ 'planning_manager':{'kayit_merkezi','personel_incele'},'moderator':{'personel_incele','vardiya_degistir','kayit_merkezi'}}
 CAPTIONS={'talep_ilet':'Talep iletme','personel_talebi':'Personel ekleme/çıkarma önerme','personel_incele':'Personel talebi yönetici onayı',
  'personel_onayla':'Personel talebi planlama onayı','vardiya_degistir':'Yayınlanmış vardiya düzenleme','rapor_gir':'Rapor girişi (yalnızca Takım Lideri)',
  'kayit_merkezi':'Veri ve Kayıt Merkezi','yetki_yonet':'Yetkilendirme (yalnızca Planlama)'}
@@ -34,13 +34,15 @@ def permissions(state,role=None):
 
 
 def require(state,capability):
-    if capability=='kayit_merkezi' and (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator'}:raise ValueError('Kayıt Merkezi yalnızca Planlama, Yönetici ve Müdür içindir.')
+    if capability=='kayit_merkezi' and (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator','planning_manager'}:raise ValueError('Kayıt Merkezi yalnızca Planlama, Yönetici ve Müdür içindir.')
     if capability not in permissions(state):raise ValueError('Bu işlem için yetkiniz yok: '+CAPTIONS.get(capability,capability))
 
 
 def append_audit(db,category,profile,payload):
     from ortak.talep_servisi import now
-    db.execute('INSERT INTO audit_events(created_at,category,actor,payload) VALUES(?,?,?,?)',(now(),category,profile.get('username') or profile.get('full_name') or 'sistem',dumps(payload)))
+    actor=profile.get('_actor_username') or profile.get('username') or profile.get('full_name') or 'sistem'
+    if profile.get('_actor_username'):payload={**payload,'kullanilan_hesap':profile.get('username')}
+    db.execute('INSERT INTO audit_events(created_at,category,actor,payload) VALUES(?,?,?,?)',(now(),category,actor,dumps(payload)))
 
 
 def save_permissions(state,role,selected,reason):

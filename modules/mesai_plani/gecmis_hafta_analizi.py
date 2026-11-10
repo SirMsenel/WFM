@@ -112,8 +112,8 @@ def render_interval_references():
 
 
 def render():
-    st.title('📈 Geçmiş Hafta Analizi')
+    st.title('📈 GÜNCEL TAKİP ANALİZİ')
     from modules.mesai_plani.guncel_takip import render_current,render_accuracy
     def interval():
         sections('nav_interval_history',{'Dağılım Başarısı':render_accuracy,'Geçmiş Referanslar':render_interval_references})
-    sections('nav_history',{'Güncel Takip':render_current,'Günlük':render_daily,'30 Dakikalık':interval})
+    sections('nav_history',{'Canlı İzleme':render_current,'Günlük':render_daily,'30 Dakikalık':interval})

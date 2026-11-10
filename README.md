@@ -1,6 +1,6 @@
 # WFM
 
-**6. güncelleme:** günlük tahmin arşivi, Planlama onaylı vardiya değişimleri, personel/kıdem kartları ve İzleme ekranı. Güncel davranış ve kurallar için [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
+**7. güncelleme:** sabit 2026 örnek geçmişi, saat bazlı shrinkage/yemek, kapasiteye göre mola, iki Planlama onaylı yayın, Similasyon ve moderatör kullanıcı geçişi. Güncel davranış ve kurallar için [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
 
 Güncel kurulum: [ILK-OKU.txt](ILK-OKU.txt). Türkçe kaynaklar: [DOSYA_HARITASI.md](DOSYA_HARITASI.md). Kurum API/veritabanı hazırlığı ve sınırları: [KURUMSAL_BAGLANTI.md](KURUMSAL_BAGLANTI.md). Eski İngilizce Python dosyaları geriye uyumluluk yönlendirmeleridir.
 
@@ -28,7 +28,7 @@ Planlama, Yönetici ve Müdür rolleri içindir.
 1. Çağrı Tahmini bölümünden tahmin üret, Mesai Planı → Personel Hesap bölümünde
    30 dakikalık personel ihtiyacını hesapla.
 2. Vardiya Planı → Plan Dönem Seçimi ekranında dönemi onayla.
-3. Mevcut Plan → Mesai Kuralları bölümündeki grup kurallarını ayarla.
+3. Vardiya Kuralları → Mesai Kuralları bölümündeki grup kurallarını ayarla.
 4. Personeller yerel personel deposundan veya yapılandırılmış kurum personel adaptöründen alınır. Sicil, kullanıcı adı ve sabit iç kimlik eşleşmesi gereklidir. Çalışma tipleri `fulltime`, `akademi`, `dis_kaynak`.
 5. Tüm Vardiyalar → Gece / Yıllık İzin ekranlarında kesin kayıtları gir.
    Talepler bölümünden son kararları ver; WFM/TL kuyruğunda bekleyen talepler
@@ -38,7 +38,7 @@ Planlama, Yönetici ve Müdür rolleri içindir.
 7. 30 dakikalık ihtiyaç/atama/eksik/fazla tablosunu ve çakışmaları incele.
    Taslak Vardiya Saatleri ekranına aktarılır. Elle değiştirdikten sonra yeniden
    oluştur; elle kayıtlar korunur, otomatik kayıtlar yeniden hesaplanır.
-8. Çakışmasız planı yayınla. Personel açığı varsa ekranda açıkla yayınlama seçimi
+8. Çakışmasız planı Yayın Onayları ekranına gönder; iki farklı Planlama hesabı onaylar. Açık %5 üzerinde ise ayrıca Planlama Yöneticisi onaylar. Personel açığı varsa ekranda açıkla yayınlama seçimi
    gerekir. Yayınlanan plan Tüm Vardiyalar ve Benim Vardiyam ekranlarına bağlanır.
 
 ### Hesaplama davranışı ve sınırlar

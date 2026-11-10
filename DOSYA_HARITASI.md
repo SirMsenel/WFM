@@ -111,3 +111,14 @@ Eski İngilizce yollar yalnızca uyumluluk dosyalarıdır; değişiklik yaparken
 | Rol ve başlangıç ekranı | `ortak/erisim.py` |
 | İzleme | `modules/izleme.py` |
 
+
+## 7. faz
+- `ortak/sabit_demo.py`: sabit tarihli örnek personel, çağrı metrikleri, ayrı vardiya geçmişi.
+- `ortak/statuler.py`, `modules/statu_kurallari.py`: yemek/statü ve dilim shrinkage.
+- `modules/vardiya_kurallari.py`: kompakt Mesai Kuralları.
+- `ortak/yayin_onaylari.py`, `modules/yayin_onay_ekrani.py`: iki planlamacı ve yönetici onayı.
+- `ortak/talep_simulasyonu.py`: üstlenme, simüle etme, yayın anında kesinleşme.
+- `ortak/mola_servisi.py`, `modules/mola_izleme.py`: atomik mola kapasitesi ve kişisel ekran.
+- `ortak/canli_metrikler.py`: gerçekleşen SL/AHT ve Erlang ihtiyaçları.
+- `ortak/moderator_gecis.py`, `sunucu.py /auth/switch-*`: denetimli kullanıcı görünümü.
+- `ortak/gorusler.py`, `modules/similasyon.py`, `ortak/dagilim_adetleri.py`: geri bildirim, kapasite senaryoları, adet matrisi.

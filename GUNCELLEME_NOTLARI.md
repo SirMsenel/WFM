@@ -1,3 +1,40 @@
+# WFM — 10 Kasım 2026 / 7. güncelleme
+
+## Örnek veri ve kayıtlar
+- Demo personeli 264 hesaba genişler; 60 ek dış kaynak, 14 ayrılmış personel, şirket, işe giriş/çıkış ve örnek cinsiyet bilgisi bulunur. Yeni kayıtlar mevcut veriyi silmeden bir defa eklenir.
+- Günlük/30 dakikalık sentetik çağrı geçmişi 9 Kasım 2026 dahil biter. AHT, karşılanan çağrı, hedef sürede karşılanan çağrı, personel ve SL verileri eklenir. 1 Ocak–9 Kasım 2026 örnek vardiyaları ayrı geçmiş tablosunda tutulur; takvim ve çalışma süresi hesapları buradan okunur. Kullanıcının yayınladığı vardiyalar korunur. Bilerek geçmişe/farklı geleceğe açılmış tahmin kayıtları silinmez.
+- Veri ve Kayıt Merkezi → Açıklanan Vardiyalar içinde geçmiş örnek vardiya tarayıcısı bulunur. Interval ve Kayıt Seçim ekranlarında yüzdelerin çağrı adedi karşılığı gösterilebilir; yuvarlanan adetler günlük toplamı korur.
+
+## Planlama, statüler ve talepler
+- Vardiya Kuralları altında Personel Özeti, Mesai Kuralları, Statü Kuralları ve Çalışma Süreleri bulunur. Kurallar iki sütunlu kartlardadır. Günlük maksimum alanı yerine normal vardiya, gerektiğinde akademi üst sınırı, en az vardiya, OFF tercihleri, dinlenme ve ardışık gün sınırları kullanılır.
+- 07:00 Full Time kişi kotası düzeltilmiştir; ihtiyaç sıfır olsa da seçili takviye kotasına kadar erken giriş sağlanabilir. Uygun personel yoksa açıklayıcı uyarı oluşur; dinlenme/okul kuralı aşılmaz.
+- Yemek süreleri ve mola talep süreleri grup bazlıdır. Yemek penceresi vardiya başlangıcına göre veya sabit saatle seçilir; kapasite açığını en az artıran saat seçilir. Gece vardiyası da kapsanır. Cuma arası tüm personele veya yalnızca örnek cinsiyeti Erkek olan personele uygulanabilir.
+- Personel Hesap'ta saat aralığına göre shrinkage oranı girilebilir. Son eşleşen aralık önceliklidir; diğer saatler genel oranı kullanır. Buradaki oran diğer kayıplar içindir: planlı yemek/statüler ayrıca kapasiteden düşülür; aynı kaybı iki kez tanımlamayın.
+- Grup ataması dil bazında filtrelenebilir. Başlangıç/bitiş otomatik kurallardan alınabilir veya elle seçilir. Seçili dönem küçük bir bilgi kutusunda görünür; dönem başlangıcı ve bitişi ayrı kartlardadır.
+- Belirli miktar fazla kapasiteye izin veren sınır ve en az yeni ek mesai bloğu tanımlanabilir. Açık önerileri aradaki sıfır ihtiyacı geçerek blok oluşturabilir; mevcut vardiyası olanlara da ek mesai önerisi isteğe bağlıdır. Diğer hard kurallar korunur.
+- Planlama, liderde bekleyen talebi gerekçeyle üstlenebilir veya gerekçeyle es geçebilir. İzin/gece/OFF benzeri talepler Simüle Et ile taslağa alınır; bu işlem kesin onay sayılmaz. Talep, yayınlanan dönemle karşılanınca kesinleşir; çok dönemli talepler kısmen planlandı olarak izlenir. Planlama gerekçeyle simülasyonu iptal edebilir. Önceden yayınlanan izin değişikliği için yayınlanmış vardiya değişim akışı kullanılmalıdır.
+- Ders/sınav sonrası varsayılan ulaşım payı 30 dakikadır. Personel ulaşım sorunu seçerse en az 60 dakika ve belirttiği en erken giriş saati uygulanır. Sınav bitişi bilinmiyorsa gün kapalı kalır. Bayram/yaz öncelikleri korunur.
+
+## Yayın onayları
+- Planı oluşturan kişi taslağı onaya gönderir; bu işlem tek başına yayınlamaz. Yayın Onayları ekranında **iki farklı gerçek Planlama hesabı** onay verir. Eksik ihtiyaç **%5 üzerinde** ise ayrıca farklı bir Planlama Yöneticisi onayı gerekir.
+- Eksik yüzdesi: sayaca dahil dilimlerde kalan personel-yarım saat toplamı / ihtiyaç personel-yarım saat toplamı. Yemek/statü sonrası açık kullanılır. %5 tam sınırında ek yönetici onayı gerekmez.
+- Onaylar aynı taslağa aittir. Talepler, personel revizyonu, kurallar veya ihtiyaç değişirse eski onaylı taslak yayınlanmaz. Hard ihlal yayınlanamaz; soft aşım varsa ayrıca kabul edilir.
+- Yayınlanan vardiyalar ve yemekler kayıt merkezine yazılır. Mevcut yayın düzenleme/geri alma, gerekçeli eski/yeni değer kaydı ve vardiya değişim kuralları korunur.
+
+## Canlı izleme, kişisel mola ve simülasyon
+- Geçmiş Hafta Analizi ana ekranı **📈 GÜNCEL TAKİP ANALİZİ**, Güncel Takip sekmesi **Canlı İzleme** oldu. Gerçek çağrı/tahmin farklarına ek olarak gerçek SL, AHT, Erlang ihtiyacı ve personel bilgisi varsa model SL gösterilir. Gerçek SL = hedef sürede karşılanan / gelen çağrı. Sonuçlar veri/API güncellendiğinde anlamlıdır; kurum bağlantısı bu pakette kurulmuş değildir.
+- Eski İzleme içeriği Takip → İşlem Özeti altında. Yeni İzleme kişisel vardiya, yemek ve kapasiteye göre mola talebi sunar. Talep yalnızca kendi yayınlanmış vardiyası içinde, grup süresiyle ve yeterli boş kapasitede alınabilir. Aynı kapasitenin eşzamanlı iki talebe verilmesi engellenir. İhtiyaç verisi yoksa onay verilmez.
+- Similasyon sayfası aylık büyüme/ayrılma senaryosu ve ters Erlang kapasitesiyle personel alım önerisi üretir; aksiyonlar kaydedilir. Bu ortalama kapasite hesabıdır, gerçek çizelge optimizasyonu veya otomatik İK emri değildir. Fatura Mutabakat yalnızca ayrılmış boş sayfadır.
+- Vardiya takvimleri modern renkli hücreler, sabit ad/tarih başlığı ve sayfalama kullanır.
+
+## Moderatör ve ayarlar
+- Moderatör girişinden sol panelde **Kullanıcı Görünümü · Moderatör** açılır; rol ve gerçek kullanıcı seçilip **Bu Kullanıcı Görünümüne Geç** tıklanır. Müşteri Temsilcisi/Takım Lideri/diğer rollerin gerçek görünümü kullanılır; **Moderatör Hesabına Dön** ile çıkılır.
+- Görünüm sadece ekran önizlemesi değildir: hedef hesabın yetkileriyle yapılan işlemler kalıcıdır. Gerçek moderatör aktörü denetim kaydına eklenir. Aynı moderatör farklı hesap görünümleriyle iki bağımsız yayın onayı veremez.
+- Ayarlar içinde Planlama'nın Yetkilendirme ekranı ve kullanıcıların Görüş/Talep alanı bulunur. Şikâyette kimlik gizlenebilir; inceleme listesinde isim görünmez, kullanıcı kendi kayıtlarını takip edebilir.
+- Yeni demo hesaplar: `planlama2`, `planlama3`, `planlama_yoneticisi`; şifreleri `1234`. Mevcut `moderator / 1234` korunur. Yalnızca sentetik demo modunda üretilirler.
+
+---
+
 # WFM — 8 Kasım 2026 / 6. güncelleme
 
 ## Çağrı tahmini ve mesai planı

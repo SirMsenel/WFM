@@ -23,7 +23,8 @@ def plan_off_days(members,staff,days,demand,existing,rules):
             for _ in range(max(0,minimum-len(chosen))):
                 candidates=[d for d in week if d not in chosen and d.isoformat() not in fixed_work]
                 if not candidates:break
-                day=min(candidates,key=lambda d:(load[d]/max(1,count-reserved[d]),reserved[d],(d.weekday()-int(eid) if eid.isdigit() else d.weekday())%7))
+                preferred=set(rule.get('preferred_off_days',[]))
+                day=min(candidates,key=lambda d:(0 if d.weekday() in preferred else 1,load[d]/max(1,count-reserved[d]),reserved[d],(d.weekday()-int(eid) if eid.isdigit() else d.weekday())%7))
                 chosen.add(day);reserved[day]+=1
             result.update((eid,d) for d in chosen)
     return result

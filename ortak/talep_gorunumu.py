@@ -35,13 +35,12 @@ def rows_for_table(items):
 
 
 def render_detail(req,key):
-    st.markdown('### '+TYPE_LABELS.get(req.get('type'),req.get('type','Talep')))
-    st.caption('Kayıt '+str(req['id']))
+    st.markdown('### Talep Türü · '+TYPE_LABELS.get(req.get('type'),req.get('type','Talep')))
     from html import escape
     cards=[('Durum',req.get('status','—'),'#16786a'),('Değerlendirme aşaması',stage(req),'#5d56a8'),('Talep eden',req.get('created_by_name') or req.get('created_by',''),'#276a94')]
     for col,(label,value,color) in zip(st.columns(3),cards):
         col.markdown(f'<div style="height:124px;border:1px solid #dce6ed;border-top:4px solid {color};border-radius:16px;padding:15px;background:#f9fbfd;box-sizing:border-box"><div style="color:{color};font-weight:700;font-size:13px;margin-bottom:12px">{escape(label)}</div><div style="font-size:17px;font-weight:600;color:#203b4b;overflow-wrap:anywhere;max-height:66px;overflow:auto;line-height:1.3">{escape(str(value))}</div></div>',unsafe_allow_html=True)
-    fields=[]
+    fields=[('Kayıt numarası',req['id'])]
     if req.get('start_date'):fields.append(('Tarih',formatted(req['start_date'])+' → '+formatted(req.get('end_date') or req['start_date'])))
     if req.get('overtime_start'):fields.append(('Saat',str(req['overtime_start'])+' → '+str(req.get('overtime_end') or 'Belirtilmedi')))
     fields.append(('Onay beklenen',stage(req)))
@@ -106,11 +105,27 @@ def render_center(audience='all', key='requests'):
     req=filtered[index]
     st.divider()
     render_detail(req,key)
+    if role=='wfm':
+        from ortak.planlama import REQUEST_CODES
+        if req.get('type') in REQUEST_CODES:
+            note=st.text_input('Planlama işlem gerekçesi',key=key+'_planning_reason_'+req['id'])
+            a,b,c=st.columns(3)
+            for col,label,action in [(a,'Üstlen','takeover'),(b,'Simüle Et','simulate'),(c,'Talebi İptal Et','cancel_planning')]:
+                if col.button(label,key=key+'_'+action+'_'+req['id']):
+                    try:act(state,req,action,note);st.rerun()
+                    except ValueError as e:st.error(str(e))
+            st.caption('Simülasyon kesin onay değildir. Talep, yayınlanan vardiyada karşılanınca personele onay bilgisi ulaşır.')
+            return
+    if role=='wfm' and req.get('queue') in {'TL','TL_SWAP'}:
+        claim=st.text_input('Üstlenme gerekçesi',key=key+'_takeover_reason_'+req['id'])
+        if st.button('Talebi Planlama Olarak Üstlen',key=key+'_takeover_other_'+req['id']):
+            try:act(state,req,'takeover',claim);st.rerun()
+            except ValueError as e:st.error(str(e))
     if is_terminal(req):
         return
     tl_action = role=='tl' and req.get('queue') in {'TL','TL_SWAP'} and profile.get('full_name') in req.get('assigned_tls',[]) and profile.get('full_name') not in req.get('tl_approvals',[])
     final_only=req.get('type') in {'Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi','Rapor Bildirimi'}
-    wfm_action = (role=='wfm' if final_only else role in {'wfm','manager','moderator'}) and req.get('queue')=='WFM'
+    wfm_action = (role=='wfm' if final_only else role in {'wfm','manager','moderator','planning_manager'}) and req.get('queue')=='WFM'
     own = req.get('created_by')==profile.get('username')
     if not (tl_action or wfm_action or own):
         st.caption('Talep ilgili değerlendirme aşamasında. Bu hesapta işlem beklenmiyor.')

@@ -50,6 +50,15 @@ def render_publications(state):
     from ortak.yayin_servisi import publications
     from ortak.takvim_gorunumu import render_calendar
     from ortak.personel_deposu import list_people
+    with st.expander('2026 Örnek Vardiya Geçmişi'):
+        from ortak.sabit_demo import history_rows
+        from datetime import date
+        day=st.date_input('Geçmiş dönemin başlangıcı',date(2026,11,1),key='registry_history_day');finish=min(day+pd.Timedelta(days=13),date(2026,11,9))
+        if day<=finish:
+            history=history_rows(state,day,finish)
+            if history:render_calendar(history,list_people(state,True),day,finish,key='registry_history')
+            else:st.info('Seçilen dönemde geçmiş vardiya kaydı yok.')
+        else:st.info('Sabit örnek geçmiş 9 Kasım 2026 tarihinde biter.')
     records=publications(state)
     if not records:st.info('Henüz açıklanmış vardiya yok.');return
     byid={r['id']:r for r in records};path=state['workspace_db_path']

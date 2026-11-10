@@ -22,7 +22,7 @@ def ensure_demo(path=DEFAULT_DB, today=None):
     with connect(path) as con:
         if con.execute("SELECT 1 FROM metadata WHERE key='demo_version'").fetchone():
             return
-    today=today or datetime.now(ZoneInfo('Europe/Istanbul')).date()
+    today=today or datetime(2026,11,10).date()
     end=today-timedelta(days=1)
     dates=pd.date_range(end-timedelta(days=729),end)
     rng=np.random.default_rng(20261107)
@@ -42,7 +42,7 @@ def ensure_demo(path=DEFAULT_DB, today=None):
     all_staff=employees()
     agents=[e for e in all_staff if e['position']=='agent']
     academy=[e for e in agents if e['work_type']=='akademi']
-    next_week=today+timedelta(days=7-today.weekday())
+    next_week=datetime(2026,11,10).date()
     term=f"{today.year}-{'Güz' if today.month>=8 else 'Bahar'}"
     schedules,exams={},{}
     for i,e in enumerate(academy[:12]):
@@ -149,7 +149,10 @@ def load_demo_history(state, interval=False, path=DEFAULT_DB):
 def bootstrap(state, path=DEFAULT_DB):
     from ortak.calisma_modu import demo_enabled
     demo=demo_enabled();state['production_mode']=not demo
-    if demo:ensure_demo(path)
+    if demo:
+        from ortak.sabit_demo import directory
+        directory(state)
+        ensure_demo(path)
     else:init_db(path)
     # Preserve a pre-database user session when adopting the new workbench.
     if not state.get('workspace_hydrated_path') and state.get('cf_all_df') is not None:
@@ -161,12 +164,19 @@ def bootstrap(state, path=DEFAULT_DB):
         state['workspace_db_path']=str(path)
         save_keys(state)
     hydrate(state,path)
+    if demo:
+        from ortak.sabit_demo import prepare
+        prepare(state,path)
     from ortak.varsayilan_kurallar import enforce_current_rules
     if not state.get('shift_rules'):state['shift_rules']=default_shift_rules()
     if not state.get('plan_ctx'):
-        today=datetime.now(ZoneInfo('Europe/Istanbul')).date();start=today+timedelta(days=7-today.weekday())
+        start=datetime(2026,11,10).date()
         state.update(plan_ctx={'start':start,'end':start+timedelta(days=6)},plan_ctx_confirmed=False)
+    from ortak.statuler import defaults
+    state.setdefault("status_rules",dict(defaults(),enabled=True))
     enforce_current_rules(state)
+    state["shift_rules"].setdefault("publication_approvals",{"enabled":True})
+    state["shift_rules"].setdefault("capacity",{"max_overstaff":2,"min_overtime_hours":4})
     from ortak.gunluk_tahmin_deposu import capture_daily
     for option in state.get('cf_forecast_options',[]):
         if not option.get('daily_record_id'):option['daily_record_id']=capture_daily(state,option['frame'],option['meta'])

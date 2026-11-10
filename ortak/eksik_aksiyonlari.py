@@ -6,47 +6,39 @@ from modules.vardiya_plani.planlama_verileri import collect_inputs,fingerprint
 from modules.vardiya_plani.vardiya_motoru import generate_plan,bounds
 
 
-def suggestions(state,day,start_slot,end_slot):
+def suggestions(state,day,start_slot,end_slot,include_existing=True):
     from ortak.donem_kilitleri import assert_can_plan
     assert_can_plan(state);current=preview_plan(state,True)
-    staff,fixed,history,unavailable,_=collect_inputs(state);people={str(e['employee_id']):e for e in staff}
+    staff,fixed,history,unavailable,_=collect_inputs(state)
     existing={(str(r['employee_id']),str(r['date'])):r for r in current['source_rows'] if not(r.get('source')=='auto' and r.get('shift_code')=='OFF')}
-    protected={'fixed_external','approved_request','published_fixed'}
-    a=(int(start_slot)-1)*30;b=int(end_slot)*30;proposals=[]
-    for eid,person in people.items():
-        old=existing.get((eid,str(day)));rule=state['shift_rules']['work_type'][person['work_type']]
+    capacity=state.get('shift_rules',{}).get('capacity',{});allow=int(capacity.get('max_overstaff',0));minimum=float(capacity.get('min_overtime_hours',.5));a=(int(start_slot)-1)*30;b=int(end_slot)*30;accepted=[];rejected=[]
+    for person in staff:
+        eid=str(person['employee_id']);old=existing.get((eid,str(day)));rule=state['shift_rules']['work_type'][person['work_type']]
         maximum=int(float(rule.get('shift_total_hours_max',rule.get('shift_total_hours',7)))*60)
-        begin,finish=a,min(b,a+maximum);kind='Boş güne ek mesai'
+        if old and not include_existing:continue
+        begin,finish=a,max(b,a+round(minimum*60));kind='Boş güne blok mesai'
         if old:
-            if old.get('source') in protected or not bounds(old):continue
-            interval=bounds(old);old_a=int((interval[0]-pd.Timestamp(day).to_pydatetime()).total_seconds()/60);old_b=old_a+int((interval[1]-interval[0]).total_seconds()/60)
-            room=maximum-(old_b-old_a)
-            if room<30:continue
-            if a==old_b:begin,finish=old_a,min(b,old_b+room)
-            elif b==old_a:begin,finish=max(a,old_a-room),old_b
-            else:continue
-            kind='Vardiyayı üst süreye uzat'
-        if finish<=begin:continue
-        row={'employee_id':eid,'date':str(day),'shift_code':'MESAI' if not old else old['shift_code'],'start':f'{begin//60:02d}:{begin%60:02d}','end':f'{finish//60%24:02d}:{finish%60:02d}','source':'capacity_candidate','note':'Eksik ihtiyaç aksiyonu'}
-        old_interval=bounds(old) if old else None;new_interval=bounds(row)
-        cover=current['coverage'];blocked=False;gain=0
-        for _,slot in cover.iterrows():
-            stamp=pd.Timestamp(slot.Tarih)+pd.Timedelta(minutes=(int(slot.Slot)-1)*30)
-            included=slot.get('Sayaca Dahil',True)
-            was=bool(old_interval and old_interval[0]<=stamp and stamp+pd.Timedelta(minutes=30)<=old_interval[1])
-            added=new_interval[0]<=stamp and stamp+pd.Timedelta(minutes=30)<=new_interval[1] and not was
-            if added and included:
-                if slot.Eksik<=0:blocked=True;break
-                gain+=1
-        if blocked or not gain:continue
-        proposals.append({'row':row,'before':old,'person':person,'kind':kind,'gain':gain/2})
-    keys={(p['row']['employee_id'],p['row']['date']) for p in proposals}
-    base=[r for r in existing.values() if (str(r['employee_id']),r['date']) not in keys]
-    context=state['plan_ctx']
-    result=generate_plan(staff,state['sp_staffing_result_df'],state['shift_rules'],list(state['shift_rules']['work_type']),context['start'],context['end'],fixed=base+[p['row'] for p in proposals],history=history,unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),reject_invalid_sources=('capacity_candidate',))
-    valid={(r['employee_id'],r['date']) for r in result['plan'] if r.get('source')=='capacity_candidate'}
-    accepted=[p for p in proposals if (p['row']['employee_id'],p['row']['date']) in valid]
-    rejected=[r for r in result['issues'] if r.get('source')=='capacity_candidate']
+            if old.get('source') in {'fixed_external','approved_request','published_fixed'} or not bounds(old):continue
+            interval=bounds(old);oa=int((pd.Timestamp(interval[0])-pd.Timestamp(day)).total_seconds()/60);ob=int((pd.Timestamp(interval[1])-pd.Timestamp(day)).total_seconds()/60)
+            if a>ob+60 or b<oa-60:continue
+            begin=min(a,oa);finish=max(ob,finish);kind='Mevcut vardiyaya ek mesai'
+            if person['work_type']=='fulltime' and capacity:maximum=max(maximum,round((float(rule.get('shift_total_hours',9))+float(capacity.get('max_extension_hours',3)))*60))
+        if finish-begin>maximum:finish=begin+maximum
+        if finish<b or finish<=begin:continue
+        row={'employee_id':eid,'date':str(day),'shift_code':'MESAI','start':f'{begin//60:02d}:{begin%60:02d}','end':f'{finish//60%24:02d}:{finish%60:02d}','source':'capacity_candidate','note':'Eksik ihtiyaç için blok mesai'}
+        span=bounds(row);oldspan=bounds(old) if old else None;gain=0;bad=False
+        for r in current['coverage'].itertuples():
+            t=pd.Timestamp(r.Tarih)+pd.Timedelta(minutes=(int(r.Slot)-1)*30)
+            was=oldspan and pd.Timestamp(oldspan[0])<=t and t+pd.Timedelta(minutes=30)<=pd.Timestamp(oldspan[1])
+            added=pd.Timestamp(span[0])<=t and t+pd.Timedelta(minutes=30)<=pd.Timestamp(span[1]) and not was
+            if added:
+                if r.Atanan+1>r.İhtiyaç+allow:bad=True;break
+                if r.Eksik>0:gain+=1
+        if bad or not gain:continue
+        base=[r for (i,d),r in existing.items() if i==eid and d!=str(day)]
+        ctx=state['plan_ctx'];result=generate_plan([person],state['sp_staffing_result_df'],state['shift_rules'],list(state['shift_rules']['work_type']),ctx['start'],ctx['end'],fixed=base+[row],history=[r for r in history if str(r['employee_id'])==eid],unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),reject_invalid_sources=('capacity_candidate',))
+        errors=[r for r in result['issues'] if r.get('source')=='capacity_candidate' and r.get('severity')!='warning'];rejected.extend(errors)
+        if not errors:accepted.append({'row':row,'before':old,'person':person,'kind':kind,'gain':gain/2})
     return sorted(accepted,key=lambda p:-p['gain']),rejected
 
 
@@ -68,10 +60,14 @@ def render_actions(state,result,key):
         if previous is not None:groups.append((begin,previous))
         from ortak.saat_etiketleri import slot_label
         gap=st.selectbox('Eksik saat bloğu',groups,format_func=lambda g:slot_label(g[0]).split('–')[0]+'–'+slot_label(g[1]).split('–')[1],key=key+'_action_gap')
-        signature=fingerprint(state)+str((day,gap));cachekey=key+'_action_result'
+        include=st.checkbox('Mevcut vardiyası olanlara da ek mesai öner',value=False,key=key+'_include_existing')
+        custom=st.checkbox('Saat bloğunu ben seçeceğim',key=key+'_custom_gap')
+        if custom:
+            first,last=st.slider('Atanacak saat bloğu (yarım saat dilimi)',1,48,(gap[0],gap[1]),key=key+'_custom_slots');gap=(first,last)
+        signature=fingerprint(state)+str((day,gap,include));cachekey=key+'_action_result'
         if st.button('Uygun Aksiyonları Bul',key=key+'_find_actions'):
             try:
-                with st.spinner('Uygunluklar kontrol ediliyor…'):options,rejected=suggestions(state,day,*gap)
+                with st.spinner('Uygunluklar kontrol ediliyor…'):options,rejected=suggestions(state,day,*gap,include_existing=include)
                 state[cachekey]={'signature':signature,'options':options,'rejected':rejected}
             except ValueError as exc:st.error(str(exc))
         data=state.get(cachekey)

@@ -9,7 +9,7 @@ def period_banner(state):
     if not ctx.get('start') or not ctx.get('end'):
         st.info('Plan Dönem Seçimi ekranında tarih aralığını belirleyin.');return None
     start,end=pd.Timestamp(ctx['start']),pd.Timestamp(ctx['end'])
-    st.caption(f'Seçili dönem · {start:%d.%m.%Y} – {end:%d.%m.%Y} · {(end-start).days+1} gün')
+    st.markdown(f'<div style="display:inline-block;background:#edf6f9;border:1px solid #cbdfe9;border-radius:12px;padding:10px 18px;font-weight:650;color:#244b60;margin:4px 0 16px">{start:%d.%m.%Y} → {end:%d.%m.%Y} · {(end-start).days+1} gün</div>',unsafe_allow_html=True)
     if not state.get('plan_ctx_confirmed'):
         st.warning('Bu dönem henüz onaylı değil. Plan Dönem Seçimi ekranından onaylayın.')
     return ctx
@@ -46,7 +46,6 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
     _ring(c,'Eksik olan yarım saat',str(slots),slots/total if total else 0,'#dc7760')
     _ring(d,'Fazla personel-saat',f'{excess/2:,.1f}',excess/(needed+excess) if needed+excess else 0,'#8574bf')
     if excess:st.warning('Kesin veya elle girilmiş kayıtlar bazı saatlerde ihtiyacı aşıyor. Otomatik atama bu saatlere personel eklemez.')
-    st.caption('Halkalar sırasıyla karşılanan ihtiyacın, kalan saatlerin, eksik dilimlerin ve fazla saatlerin payını gösterir. Personel-saat = kişi sayısı × 0,5 saat.')
 
 
 def shortage_matrix(coverage,start):
@@ -90,9 +89,7 @@ def render_shortages(result,key='gap'):
         missing['Aralık']=missing.Slot.map(lambda s:f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}–{s//2:02d}:{(s%2)*30:02d}')
     cols=[c for c in ['Tarih','Gün','Aralık','İhtiyaç','Atanan','Eksik'] if c in missing]
     view=missing[cols].rename(columns={'İhtiyaç':'Gereken personel','Atanan':'Yerleştirilen','Eksik':'Eksik personel'})
-    with st.expander('Eksiklerin ayrıntılı listesi'):
-        st.dataframe(view,hide_index=True,use_container_width=True)
-    if (st.session_state.get('profile') or {}).get('position') in {'wfm','manager','moderator'}:
+    if (st.session_state.get('profile') or {}).get('position') in {'wfm','manager','moderator','planning_manager'}:
         from ortak.eksik_aksiyonlari import render_actions
         render_actions(st.session_state,result,key)
     st.download_button('Eksik Dilimleri CSV İndir',view.to_csv(index=False).encode('utf-8-sig'),'eksik_dilimler.csv','text/csv',key=key+'_csv')

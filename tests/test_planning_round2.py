@@ -100,7 +100,7 @@ class Round2UITests(unittest.TestCase):
   at=self.app('from modules.shift_planing.current_plan import render\nrender()')
   at.session_state['shift_rules']=default_shift_rules();at.session_state['nav_current_plan_v2']='Mesai Kuralları';at.run()
   self.assertFalse(at.exception)
-  at.time_input(key='rule_night_window_end').set_value(time(9)).run()
+  at.time_input(key='p7_night_window_end').set_value(time(9)).run()
   self.assertEqual(at.session_state['shift_rules']['general']['night_window_end'],'08:00')
   at.button(key='rules_apply').click().run();self.assertFalse(at.exception)
   self.assertEqual(at.session_state['shift_rules']['general']['night_window_end'],'09:00')

@@ -331,6 +331,8 @@ def render():
         special=[{'Gün':DAY_NAMES[d.weekday()],'Tarih':d.strftime('%d.%m.%Y'),'Etkiler':', '.join(labels[k] for k in flags if flags.loc[d,k]) or 'Standart gün'} for d in flags.index]
         st.dataframe(special,hide_index=True,use_container_width=True)
         st.caption(f"{meta['used_history_days']} geçmiş tam gün değerlendirildi. {quality['Eksik veya sıfır gün']} eksik/sıfır gün değerlendirmeye alınmadı.")
+    from ortak.dagilim_adetleri import render as render_counts
+    render_counts(profile,st.session_state,'interval_counts')
     st.markdown('### Planlamada Kullan')
     st.caption('Kaydettiğin dağılım aktif olur. Sonraki adım: Personel Hesap ekranında bu haftanın ihtiyacını hesapla.')
     with st.form('interval_save_form'):

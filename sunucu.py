@@ -497,6 +497,8 @@ def _startup_auth():
     if demo_enabled():_seed_200_if_empty()
     from ortak.personel_deposu import ensure_identity
     ensure_identity(AUTH_DB_PATH)
+    from ortak.sabit_demo import directory
+    directory({"auth_db_path":str(AUTH_DB_PATH)})
 
 def _get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     with _conn() as con:
@@ -536,6 +538,7 @@ def _auth_required(authorization: Optional[str] = Header(None)) -> Dict[str, Any
         if str(user["employment_end"])<=datetime.now(ZoneInfo("Europe/Istanbul")).date().isoformat():raise HTTPException(status_code=401,detail="Personelin ayrılma tarihi geçmiş.")
     if not user or not int(user.get("is_active", 1)) == 1:
         raise HTTPException(status_code=401, detail="User inactive or not found")
+    if payload.get('actor_sub'):user['_actor_username']=payload['actor_sub']
     return user
 
 @app.post("/auth/login")
@@ -632,6 +635,7 @@ def auth_me(user: Dict[str, Any] = Depends(_auth_required)):
             "language": user.get("language"),
         })
 
+    if user.get('_actor_username'):base['_actor_username']=user['_actor_username']
     return base
 
 @app.get("/auth/demo_users")
@@ -680,3 +684,21 @@ def actual_intervals(body: Dict[str,Any],user: Dict[str,Any] = Depends(_auth_req
     from ortak.tahmin_kayit_servisi import ingest_actuals
     try:return {'updated':ingest_actuals(pd.DataFrame(body.get('rows',[])))}
     except (ValueError,TypeError) as exc:raise HTTPException(status_code=400,detail=str(exc))
+
+@app.get('/auth/switch-users')
+def switch_users(user=Depends(_auth_required)):
+    if user.get('position')!='moderator' or user.get('_actor_username'):raise HTTPException(403,'Asıl moderatör oturumu gerekli.')
+    from ortak.personel_deposu import list_people
+    return {'items':[{k:p.get(k) for k in ('username','full_name','position')} for p in list_people({'auth_db_path':str(AUTH_DB_PATH)}) if p['position']!='moderator']}
+
+@app.post('/auth/switch-user')
+def switch_user(body:Dict[str,Any],user=Depends(_auth_required)):
+    if user.get('position')!='moderator' or user.get('_actor_username'):raise HTTPException(403,'Asıl moderatör oturumu gerekli.')
+    target=_get_user_by_username(str(body.get('username','')))
+    if not target or not target.get('is_active'):raise HTTPException(400,'Aktif kullanıcı seçin.')
+    profile=auth_me(target);profile['_actor_username']=user['username']
+    from ortak.roller_ve_yetkiler import init_governance,append_audit
+    from ortak.calisma_alani_deposu import DEFAULT_DB,connect
+    init_governance(DEFAULT_DB)
+    with connect(DEFAULT_DB) as db:append_audit(db,'Moderatör kullanıcı görünümü',user,{'target':target['username']})
+    return {'access_token':_create_token({'sub':target['username'],'actor_sub':user['username']}),'profile':profile}

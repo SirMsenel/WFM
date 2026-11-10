@@ -39,6 +39,8 @@ SHIFT_RULES = {'general': {'weekday_general_start': '08:00',
 def default_shift_rules():
     rules=deepcopy(SHIFT_RULES)
     rules['off_rules']={'distribution':'İhtiyaca göre dağıt'}
+    rules['capacity']={'max_overstaff':2,'min_overtime_hours':4}
+    rules['publication_approvals']={'enabled':True}
     rules['school']={'holiday_priority':True,'summer_months':[6,7,8]}
     return rules
 

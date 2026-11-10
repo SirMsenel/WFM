@@ -178,7 +178,7 @@ class ForecastAndUITests(Base):
   hard=generate_plan([person],demand(),r,list(r['work_type']),DAY,DAY,fixed=[candidate],auto_fill=False);self.assertTrue(blocking_issues(hard))
  def test_role_landings_and_monitor_access(self):
   from ortak.erisim import landing_page,allowed_pages
-  self.assertEqual(landing_page({'position':'wfm'}),'🗓️ Vardiya Planı');self.assertEqual(landing_page({'position':'tl'}),'📊 İzleme');self.assertEqual(landing_page({'position':'agent'}),'📌 Takip');self.assertIn('📊 İzleme',allowed_pages({'position':'agent'},[]));self.assertNotIn('⚙️ Ayarlar',allowed_pages({'position':'manager'},['⚙️ Ayarlar']))
+  self.assertEqual(landing_page({'position':'wfm'}),'🗓️ Vardiya Planı');self.assertEqual(landing_page({'position':'tl'}),'📌 Takip');self.assertEqual(landing_page({'position':'agent'}),'📌 Takip');self.assertIn('📊 İzleme',allowed_pages({'position':'agent'},[]));self.assertIn('⚙️ Ayarlar',allowed_pages({'position':'manager'},['⚙️ Ayarlar']))
  def test_company_survives_personnel_creation_and_identity_migration(self):
   from ortak.personel_is_akisi import submit,decide
   from ortak.personel_deposu import list_people

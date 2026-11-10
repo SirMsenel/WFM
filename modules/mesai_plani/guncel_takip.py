@@ -26,7 +26,7 @@ def profile_label(version):
 
 @st.fragment(run_every=30)
 def render_current():
-    st.subheader('Güncel Takip · Tahmin ve Gerçekleşen Çağrı')
+    st.subheader('Canlı İzleme · Çağrı ve Servis Seviyesi')
     versions=runs(path())
     if not versions:st.info('Henüz kullanılan bir tahmin kaydı yok. Mesai Planı → Personel Hesap ile hesapladığın 48 dilim burada sürümlü saklanır. Eski gerçekleşmelerden geriye dönük tahmin üretilmez.');return
     ident=st.selectbox('Kullanılan tahmin kaydı',[r['id'] for r in versions],format_func=lambda i:next(run_label(r) for r in versions if r['id']==i),key='tracking_forecast_run')
@@ -34,6 +34,14 @@ def render_current():
     frame=compare(ident,path(),exclude)
     days=sorted(frame.tarih.unique());day=st.selectbox('İzlenecek gün',days,key='tracking_day')
     selected=frame[frame.tarih==day].copy();metrics=performance(selected)
+    from ortak.canli_metrikler import actual_metrics
+    live=actual_metrics(st.session_state,selected)
+    a,b,c=st.columns(3)
+    answered=live.loc[live.answered_target.notna(),'actual'].sum(min_count=1);within=live.answered_target.sum(min_count=1)
+    a.metric('Gerçek servis seviyesi',f'%{100*within/answered:.1f}' if pd.notna(answered) and answered>0 else 'Veri yok')
+    b.metric('AHT (sn)',f'{(live.aht_sec*live.actual).sum()/live.actual.sum():.1f}' if live.actual.sum()>0 else '—')
+    c.metric('Hedef SL',f"%{100*st.session_state.get('staffing_parameters',{}).get('target_sl',.8):.0f}")
+    st.dataframe(live[['slot','Gerçek SL (%)','Gerçekleşene göre net ihtiyaç','Erlang model SL (%)']].rename(columns={'slot':'Dilim'}),hide_index=True,use_container_width=True)
     record=next(r for r in versions if r['id']==ident)
     if pd.Timestamp(record['created_at']).date()>=pd.Timestamp(day).date():st.caption('Bu sürüm seçilen gün başladıktan sonra kaydedilmiş. Sonuç, önceden yapılmış tahmin başarısı olarak yorumlanmamalı; kayıt zamanı korunur.')
     columns=st.columns(4)

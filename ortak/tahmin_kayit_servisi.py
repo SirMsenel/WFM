@@ -68,8 +68,19 @@ def ingest_actuals(raw,path=DEFAULT_DB):
     if aht.isna().any() or not np.isfinite(aht).all() or (aht<=0).any():raise ValueError('AHT pozitif olmalı.')
     frame=pd.DataFrame({'tarih':dates.dt.strftime('%Y-%m-%d'),'slot':slot.astype(int),'calls':calls.astype(int),'aht':aht})
     if frame.duplicated(['tarih','slot']).any():raise ValueError('Dosyada aynı tarih/yarım saat birden fazla kez var; önce çağrıları birleştirin.')
+    metrics=[]
+    if any(c in raw for c in ('answered','answered_target','staffed')):
+        from ortak.sabit_demo import init_history
+        init_history(path)
+        for i,r in raw.reset_index(drop=True).iterrows():
+            answer=r.get('answered');within=r.get('answered_target');staff=r.get('staffed')
+            if pd.notna(answer) and (float(answer)<0 or float(answer)>calls.iloc[i] or float(answer)%1):raise ValueError('Yanıtlanan çağrı toplam çağrıyı aşamaz.')
+            if pd.notna(within) and (pd.isna(answer) or float(within)<0 or float(within)>float(answer) or float(within)%1):raise ValueError('Hedef süredeki yanıt sayısı geçersiz.')
+            if pd.notna(staff) and (not np.isfinite(float(staff)) or float(staff)<0):raise ValueError('Aktif personel geçersiz.')
+            metrics.append((frame.iloc[i].tarih,int(frame.iloc[i].slot),int(answer) if pd.notna(answer) else None,int(within) if pd.notna(within) else None,float(staff) if pd.notna(staff) else None))
     init_ledger(path)
     with connect(path) as db:
+        if metrics:db.executemany('INSERT INTO interval_operations VALUES(?,?,?,?,?) ON CONFLICT(tarih,slot) DO UPDATE SET answered=excluded.answered,answered_target=excluded.answered_target,staffed=excluded.staffed',metrics)
         db.executemany('INSERT INTO calls_interval VALUES(?,?,?,?) ON CONFLICT(tarih,slot) DO UPDATE SET cagri_sayisi=excluded.cagri_sayisi,aht_sec=excluded.aht_sec',frame.itertuples(index=False,name=None))
         for day in frame.tarih.unique():
             totals=db.execute('SELECT SUM(cagri_sayisi),SUM(cagri_sayisi*aht_sec)/NULLIF(SUM(cagri_sayisi),0) FROM calls_interval WHERE tarih=?',(day,)).fetchone()

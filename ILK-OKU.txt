@@ -1,4 +1,4 @@
-WFM — 8 KASIM 2026 / 6. GÜNCELLEME — macOS
+WFM — 10 KASIM 2026 / 7. GÜNCELLEME — macOS
 
 1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
 2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
@@ -42,3 +42,18 @@ KURUMSAL_BAGLANTI.md: API/veritabanı hazırlığı ve beklenen alanlar.
 Şirket/kıdem kartları personelin company ve employment_start alanlarından beslenir.
 Örnek çalışma veritabanı yoksa ilk girişte oluşturulur. Gerçek kurum bağlantısı
 henüz yapılmamıştır; kurumsal modda sentetik veri üretimi kapatılır.
+
+7. GÜNCELLEME
+- İlk açılışta sabit örnek geçmiş eklenir: 1 Ocak–9 Kasım 2026 vardiyaları,
+  9 Kasım dahil çağrı/AHT/SL verileri. Mevcut yayınlarını ve taleplerini korur.
+- Moderatör hesabında sol panel > Kullanıcı Görünümü · Moderatör > rol/kullanıcı
+  seç > Bu Kullanıcı Görünümüne Geç. İşlemler gerçek veriye yazılır. Geri dönüş
+  düğmesi aynı alandadır. Hesap geçişi bağımsız ikinci planlamacı onayı sayılmaz.
+- Demo onay hesapları: planlama2 / 1234, planlama3 / 1234,
+  planlama_yoneticisi / 1234. İki ayrı Planlama onayı gerekir; açık %5 üstünde
+  ayrıca Planlama Yöneticisi onayı gerekir. Yayın Onayları sekmesini kullan.
+- Yemek/mola: Vardiya Planı > Vardiya Kuralları > Statü Kuralları.
+  Saat bazlı shrinkage: Mesai Planı > Personel Hesap.
+- Kişisel vardiya/mola: İzleme. Eski işlem özeti: Takip > İşlem Özeti.
+- Kurum bağlantısı henüz bağlanmış değildir; ayrıntılar KURUMSAL_BAGLANTI.md.
+- Tüm yeni akışlar ve varsayımlar GUNCELLEME_NOTLARI.md içindedir.

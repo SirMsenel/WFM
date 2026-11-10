@@ -250,9 +250,11 @@ st.markdown("""
 PAGES = [
     "📞 Çağrı Tahmini",
     "📅 Mesai Planı",
-    "📈 Geçmiş Hafta Analizi",
+    "📈 GÜNCEL TAKİP ANALİZİ",
     "🗓️ Vardiya Planı",
     "📊 İzleme",
+    "🔮 Similasyon",
+    "🧾 Fatura Mutabakat",
     "👥 Personel Takip",
     "📌 Takip",
     "🗓️ Tüm Vardiyalar",
@@ -304,11 +306,14 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    from ortak.moderator_gecis import render as render_switch
+    render_switch(st.session_state,_api_get,_api_post)
     if st.button("Çıkış Yap", use_container_width=True):
         from ortak.calisma_alani_deposu import save_keys
         save_keys(st.session_state)
         st.session_state["auth_token"] = None
         st.session_state["profile"] = None
+        st.session_state.pop("_moderator_origin",None)
         st.rerun()
 
     st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
@@ -355,10 +360,10 @@ elif main == "📅 Mesai Planı":
                             'Kayıt Seçim':render_profile_select,'Personel Hesap':render_staffing_forecast})
 elif main == "🗓️ Vardiya Planı":
     st.title(main)
-    sections('nav_roster',{'Plan Dönem Seçimi':render_plan_period,'Mevcut Plan':render_current_plan,
+    sections('nav_roster',{'Plan Dönem Seçimi':render_plan_period,'Vardiya Kuralları':render_current_plan,
                           'Talepler':render_requests_tab,'Vardiya Saatleri':render_shift_hours,
-                          'Oluştur & Kontrol & Yayınla':render_publish,'Yayın Yönetimi':render_publication_management})
-elif main == "📈 Geçmiş Hafta Analizi":
+                          'Oluştur & Kontrol & Yayınla':render_publish,'Yayın Yönetimi':render_publication_management,'Yayın Onayları':__import__('modules.yayin_onay_ekrani',fromlist=['render']).render})
+elif main == "📈 GÜNCEL TAKİP ANALİZİ":
     render_history_comparison()
 elif main == "🧪 Demo Veritabanı":
     render_demo_workspace()
@@ -368,7 +373,7 @@ elif main == "👥 Personel Takip":
 elif main == "📌 Takip":
     st.title(main)
     sections('nav_tracking',{'Benim Vardiyam':render_my_shift,'Ders Programı':render_class_schedule,
-                            'Talep İlet':render_requests_submit,'Talep Sonuç':render_requests_inbox})
+                            'Talep İlet':render_requests_submit,'Talep Sonuç':render_requests_inbox,'İşlem Özeti':__import__('modules.izleme',fromlist=['render']).render})
 elif main == "🗓️ Tüm Vardiyalar":
     st.title(main)
     if profile.get("position")!="agent":st.toggle("Ayrılan personellerin eski vardiyalarını da göster",value=False,key="all_include_inactive")
@@ -377,9 +382,14 @@ elif main == "🗓️ Tüm Vardiyalar":
                               'Gece':render_all_night,'Yıllık İzin':render_all_annual_leave,
                               'Hafta Sonu Sorumlu':render_all_weekend_owner,'Değişim Alanı':__import__('modules.tum_vardiyalar.vardiya_duzenleme',fromlist=['render']).render})
 elif main == "📊 İzleme":
-    from modules.izleme import render as render_monitor
+    from modules.mola_izleme import render as render_monitor
     render_monitor()
 
+elif main == "🔮 Similasyon":
+    from modules.similasyon import render
+    render()
+elif main == "🧾 Fatura Mutabakat":
+    st.title(main);st.info("Bu alan sonraki faz için ayrıldı.")
 elif main == "🗃️ Veri ve Kayıt Merkezi":
     from modules.kayit_merkezi import render as render_registry
     render_registry()

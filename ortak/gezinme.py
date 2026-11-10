@@ -24,8 +24,9 @@ def sections(key,pages):
     control=key+'_control'
     if st.session_state.get(control)!=st.session_state[key]:st.session_state[control]=st.session_state[key]
     def changed():
-        selected=st.session_state[control] or labels[0]
-        if st.session_state.get('main_page') and selected!=st.session_state[key]:
+        selected=st.session_state.get(control) or labels[0]
+        if control not in st.session_state:return
+        if st.session_state.get('main_page') and selected!=st.session_state.get(key):
             history=list(st.session_state.get('navigation_history',[]))
             history.append({'page':st.session_state['main_page'],'sections':{k:v for k,v in st.session_state.items() if k.startswith('nav_') and not k.endswith('_control')}})
             st.session_state['navigation_history']=history[-25:]

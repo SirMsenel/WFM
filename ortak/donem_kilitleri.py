@@ -25,12 +25,14 @@ def planning_problem(state,context=None,employees=None):
     terms={school_term(d) for d in pd.date_range(start,end)}
     requests=[]
     for r in state.get('trk_requests',[]):
-        if is_terminal(r):continue
+        if is_terminal(r) or r.get('queue')=='SIMULATION':continue
         if str(r.get('employee_id')) not in ids and str(r.get('created_by')) not in users and not any(str(t.get('employee_id')) in ids for t in r.get('targets',[])):continue
         a,b=r.get('start_date'),r.get('end_date') or r.get('start_date')
         relevant=bool(a and b and str(a)<=end and start<=str(b))
         if not a and r.get('type')=='Ders Programı':relevant=any(t in str(r.get('generated_ref','')) for t in terms)
         if relevant:requests.append({'Kayıt':r['id'],'Personel':r.get('created_by_name',r.get('created_by')),'Talep':r.get('type'),'Başlangıç':a or 'Dönemlik','Bitiş':b or 'Dönemlik','Durum':r.get('status'),'Onay beklenen':(', '.join(t for t in r.get('assigned_tls',[]) if t not in r.get('tl_approvals',[])) if r.get('queue') in {'TL','TL_SWAP'} else 'Planlama')})
+    bypass=state.get('planning_bypass',{}).get(start+'|'+end)
+    if requests and bypass and (state.get('profile') or {}).get('position') in {'wfm','planning_manager'}:return None
     if requests:return {'kind':'requests','message':'Seçili döneme ait sonuçlanmamış talepler var. Talepler karara bağlanmadan vardiya atamasına veya otomatik planlamaya başlanamaz.','rows':requests}
     return None
 
@@ -47,6 +49,12 @@ def render_guard(state):
     problem=planning_problem(state)
     if not problem:return True
     st.warning(problem['message']);st.dataframe(problem['rows'],hide_index=True,use_container_width=True)
+    if problem['kind']=='requests' and (state.get('profile') or {}).get('position')=='wfm':
+        reason=st.text_input('Bekleyen talepleri es geçme gerekçesi',key='guard_bypass_reason')
+        if st.button('Talepleri Şimdilik Es Geç ve Planla',disabled=not reason.strip(),key='guard_bypass'):
+            from ortak.calisma_alani_deposu import save_keys
+            ctx=state['plan_ctx'];state.setdefault('planning_bypass',{})[str(ctx['start'])+'|'+str(ctx['end'])]={'actor':state['profile']['username'],'reason':reason}
+            save_keys(state);st.rerun()
     destination='Yayın Yönetimi' if problem['kind']=='published' else 'Talepler'
     def open_page():
         from ortak.gezinme import navigate

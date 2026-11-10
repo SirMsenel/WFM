@@ -11,7 +11,7 @@ from modules.vardiya_plani.vardiya_motoru import minutes
 from ortak.planlama import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
@@ -19,6 +19,12 @@ SOURCE_KEYS = ("planning_exam_hours", "planning_exclude_early_hours", "planning_
 
 def fingerprint(state):
     data = {key: state.get(key) for key in SOURCE_KEYS}
+    if state.get('workspace_db_path'):
+        from ortak.calisma_alani_deposu import connect
+        with connect(state['workspace_db_path']) as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone():
+                revision=db.execute("SELECT value FROM metadata WHERE key='directory_revision'").fetchone()
+                data['directory_revision']=revision[0] if revision else None
     for key in ('employees_cache','fixed_shift_records','trk_requests','plan_overrides','shift_overrides','published_shift_plan','draft_shift_plan','plan_removed_assignments','group_hour_targets'):
         data[key]=state.get(key) or []
     for key in ('acad_schedules','acad_exam_calendar'):data[key]=state.get(key) or {}
@@ -124,7 +130,9 @@ def collect_inputs(state):
     suppressed={tuple(map(str,k)) for k in state.get('plan_removed_assignments',[])}
     draft_manual_keys={(str(r.get('employee_id')),str(r.get('date'))) for r in state.get('draft_shift_plan',[])
                        if r.get('source','manual') in {'manual','manual_single','manual_template'}}
-    for row in state.get('published_shift_plan',[]):
+    from ortak.sabit_demo import history_rows
+    published_history=history_rows(state,history_start,history_end)
+    for row in published_history:
         # Registry/request snapshots are refreshed from their original source;
         # legacy/manual published night and leave records are also imported.
         if (row.get('shift_code') in ({'GECE'}|set(LEAVE_LABELS)) and row.get('source') not in {'fixed_external','approved_request'}
@@ -147,7 +155,7 @@ def collect_inputs(state):
         requests[key] = raw
     codes=REQUEST_CODES
     for req in requests.values():
-        if req.get("status") not in {"Uygulandı", "Onaylandı"} or req.get("queue") in {"TL", "TL_SWAP", "WFM"}:
+        if req.get("status") not in {"Uygulandı", "Onaylandı","Simülasyonda","Kısmen planlandı"} or req.get("queue") in {"TL", "TL_SWAP", "WFM"}:
             continue
         typ = req.get("type")
         if typ in {"Ders Programı", "Sınav Takvimi", "Genel Talep"}:
@@ -174,7 +182,7 @@ def collect_inputs(state):
             expand(row, row.get("shift_code"), row.get("source", "manual"))
 
     day_names=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar']
-    exam_days={}
+    exam_days={};last_school_end={}
     school=state.get('shift_rules',{}).get('school',{})
     from ortak.interval_servisi import calendar_flags
     calendar=calendar_flags(pd.date_range(start,end+timedelta(days=1)))
@@ -210,6 +218,7 @@ def collect_inputs(state):
                     except ValueError:
                         problem({'employee':user,'date':str(exam.date())},'Sınav saati okunamadı; gün tamamen kapalı tutuldu')
                 unavailable.setdefault(eid,[]).append((begin,finish))
+                if finish.date()==exam.date():last_school_end[(eid,exam.date(),"exam",user)]=max(last_school_end.get((eid,exam.date(),"exam",user),finish),finish)
     for user,terms in (state.get('acad_schedules') or {}).items():
         if user in excluded:continue
         if user not in lookup:
@@ -232,8 +241,18 @@ def collect_inputs(state):
                         raise ValueError('Ders bitişi başlangıçtan sonra olmalı')
                     base=datetime.combine(day.date(),time())
                     unavailable.setdefault(eid,[]).append((base+timedelta(minutes=begin),base+timedelta(minutes=finish)))
+                    last_school_end[(eid,day.date(),'class',user)]=max(last_school_end.get((eid,day.date(),'class',user),base),base+timedelta(minutes=finish))
                 except (ValueError,KeyError) as exc:
                     problem({'employee':user},f'Ders saati okunamadı: {exc}')
+
+    for (eid,day,kind,user),finish in last_school_end.items():
+        cfg=state.get('academic_transport',{}).get(user,{}).get(kind,{})
+        delay=max(60,int(cfg.get('minutes',60))) if cfg.get('enabled') else 30
+        until=finish+timedelta(minutes=delay)
+        if cfg.get('enabled') and cfg.get('available_after'):
+            selected=datetime.combine(day,time.fromisoformat(cfg['available_after']))
+            until=max(until,selected)
+        unavailable.setdefault(eid,[]).append((finish,until))
 
     changed={}
     for name in ('published_shift_plan','draft_shift_plan'):
@@ -250,7 +269,7 @@ def collect_inputs(state):
 
     # Prefer manual draft over published history for the same employee/day.
     hist = {(str(r.get("employee_id")), str(r.get("date"))): dict(r)
-            for r in state.get("published_shift_plan", [])}
+            for r in published_history}
     hist.update({(str(r.get("employee_id")), str(r.get("date"))): dict(r)
                  for r in state.get("draft_shift_plan", [])})
     return employees, fixed, list(hist.values()), unavailable, issues

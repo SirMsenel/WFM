@@ -49,8 +49,10 @@ def render():
     with st.container(border=True):
         st.markdown('#### Planlayacağın aralığı seç')
         a,b=st.columns(2)
-        with a.container(border=True):start=st.date_input('Başlangıç',value=current_start,min_value=minimum,max_value=maximum,key=f'vp_start_{minimum}_{maximum}',format='DD.MM.YYYY')
-        with b.container(border=True):end=st.date_input('Bitiş',value=current_end,min_value=minimum,max_value=maximum,key=f'vp_end_{minimum}_{maximum}',format='DD.MM.YYYY')
+        with a.container(border=True):
+            st.markdown('**BAŞLANGIÇ TARİHİ**');start=st.date_input('Başlangıç',value=current_start,min_value=minimum,max_value=maximum,key=f'vp_start_{minimum}_{maximum}',format='DD.MM.YYYY',label_visibility='collapsed')
+        with b.container(border=True):
+            st.markdown('**BİTİŞ TARİHİ**');end=st.date_input('Bitiş',value=current_end,min_value=minimum,max_value=maximum,key=f'vp_end_{minimum}_{maximum}',format='DD.MM.YYYY',label_visibility='collapsed')
         if end<start:st.error('Bitiş tarihi başlangıçtan önce olamaz.');return
         if (end-start).days>92:st.error('Tek plan dönemi en fazla 93 gün olabilir.');return
         if (ctx['start'],ctx['end'])!=(start,end):

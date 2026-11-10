@@ -172,3 +172,6 @@ def render():
     from ortak.gezinme import sections
     sections('nav_ratio_registry',{'Gün Dağılımı':lambda:_render_day_line(df,key_prefix='sp_registry'),
                                   'Isı Haritası':lambda:_render_heatmap(df),'Gün Tabloları':lambda:_render_day_tables(df)})
+
+    from ortak.dagilim_adetleri import render as render_counts
+    render_counts(df,st.session_state,'profile_counts')

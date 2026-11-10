@@ -516,7 +516,8 @@ def render():
     selected=_compact_period()
     if not selected:return
     start,end=selected
-    records=[r for r in st.session_state.get('published_shift_plan',[]) if str(r.get('employee_id'))==str(target.get('employee_id')) and str(start-timedelta(days=1))<=str(r.get('date'))<=str(end)]
+    from ortak.sabit_demo import history_rows
+    records=[r for r in history_rows(st.session_state,start-timedelta(days=1),end) if str(r.get('employee_id'))==str(target.get('employee_id')) and str(start-timedelta(days=1))<=str(r.get('date'))<=str(end)]
     if not records:st.info('Bu personel ve tarih aralığı için yayınlanmış vardiya yok.');return
     summary=shift_stats(records,start,end);counts=summary['status_counts']
     cards=[('Toplam saat',f"{summary['total_hours']:.1f}"),('Çalıştığı gün',summary['work_days']),('OFF',summary['off_days']),('Rapor',counts.get('RAPOR',0)),('Yıllık izin',counts.get('YILLIK_IZIN',0)),('Diğer izin',sum(v for k,v in counts.items() if k not in {'OFF','RAPOR','YILLIK_IZIN'}))]

@@ -114,7 +114,7 @@ def render():
     st.markdown("##### 2️⃣ Bağımsız Değişkenler (Features)")
     feature_candidates = [c for c in df.columns if c != target]
 
-    default_feats = [c for c in _default_feature_selection(feature_candidates) if c != date_column(df)]
+    default_feats = [c for c in _default_feature_selection(feature_candidates) if c != date_column(df) and c not in {'answered','answered_target','sl_pct','staffed'}]
 
     features = st.multiselect(
         "Modele dahil edilecek kolonlar",

@@ -35,7 +35,7 @@ def refresh(state):
 
 def visible(request, profile):
     role = profile.get("position")
-    if role in {"wfm","manager","moderator"}:
+    if role in {"wfm","manager","moderator","planning_manager"}:
         return True
     if request.get("created_by") == profile.get("username"):
         return True
@@ -45,6 +45,8 @@ def visible(request, profile):
 
 
 def _store(state, request, expected=None):
+    actor=(state.get("profile") or {}).get("_actor_username")
+    if actor and request.get("events"):request["events"][-1]["real_actor"]=actor
     if state.get("workspace_db_path"):
         request = put_request(request, expected, state["workspace_db_path"])
     else:
@@ -123,6 +125,9 @@ def create_request(state, payload, attachment=None):
 
 
 def act(state, request, action, note=""):
+    if action in {"takeover","simulate","cancel_planning"}:
+        from ortak.talep_simulasyonu import decide
+        return decide(state,request,action,note)
     profile = state.get("profile") or {}
     if not visible(request,profile):
         raise ValueError("Bu talepte işlem yetkiniz yok.")
@@ -130,6 +135,10 @@ def act(state, request, action, note=""):
         raise ValueError("Sonuçlanan talep tekrar işlenemez.")
     role = profile.get("position")
     queue = request.get("queue")
+    from ortak.planlama import REQUEST_CODES
+    if action=="apply" and request.get("type") in REQUEST_CODES and (state.get("shift_rules") or {}).get("publication_approvals",{}).get("enabled"):
+        from ortak.talep_simulasyonu import decide
+        return decide(state,request,"simulate",note)
     if action=="apply" and request.get("type") in {"Vardiya Değişim Talebi","Erken Çıkış Talebi","Geç Giriş Talebi","Rapor Bildirimi"} and role!="wfm":raise ValueError("Vardiya değişimleri için son onayı yalnızca Planlama verir.")
     if action=='apply' and request.get('proposed_before'):
         sources={(str(r['employee_id']),str(r['date'])):r for key in ('draft_shift_plan','published_shift_plan') for r in state.get(key,[])}
@@ -154,7 +163,7 @@ def act(state, request, action, note=""):
             complete = set(request.get("assigned_tls",[])) <= set(approvals)
             status,new_queue,label = (("Planlamaya İletildi","WFM","Takım lideri onayladı ve planlamaya iletti") if complete
                                        else ("Diğer TL Onayı Bekliyor","TL_SWAP","Takım lideri onayladı; diğer lider bekleniyor"))
-    elif action in {"apply","reject"} and role in {"wfm","manager","moderator"} and queue=="WFM":
+    elif action in {"apply","reject"} and role in {"wfm","manager","moderator","planning_manager"} and queue=="WFM":
         if action == "reject" and not note.strip():
             raise ValueError("Ret gerekçesi yazın.")
         if action=="apply" and request.get("type")=="Vardiya Değişim Talebi":

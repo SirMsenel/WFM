@@ -96,7 +96,7 @@ class Round3UITests(unittest.TestCase):
   at=self.app('from modules.shift_planing.shift_hours import render\nrender()')
   at.radio(key='manual_pick_mode').set_value('Grup seç').run()
   at.multiselect(key='manual_groups').select('akademi').run()
-  at.checkbox(key='manual_custom_end_v2').check().run()
+  at.radio(key='manual_timing').set_value('Başlangıç ve bitişi seç').run()
   self.assertTrue(at.button(key='manual_place').disabled)
   at.time_input(key='manual_finish_WORK').set_value(time(15)).run()
   self.assertFalse(at.button(key='manual_place').disabled)

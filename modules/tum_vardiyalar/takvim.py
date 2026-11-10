@@ -99,13 +99,15 @@ def build_shift_grid(employees: list[dict], year: int, month: int) -> pd.DataFra
     _, last_day = calendar.monthrange(year, month)
     date_cols = [date(year, month, d) for d in range(1, last_day + 1)]
 
+    from ortak.sabit_demo import history_rows
+    records=history_rows(st.session_state,date(year,month,1),date(year,month,last_day))
     rows = []
     for emp in employees:
         emp_key = str(emp.get("employee_id"))
         full_name = emp.get("full_name", "-")
         work_type = emp.get("work_type", "fulltime")
 
-        published = [r for r in st.session_state.get("published_shift_plan", [])
+        published = [r for r in records
                      if str(r.get("employee_id")) == emp_key
                      and str(r.get("date", "")).startswith(f"{year}-{month:02d}")]
         values = {}
@@ -169,4 +171,5 @@ def render_shift_grid(employees: list[dict], year: int, month: int, title: str =
         })
     )
 
-    st.dataframe(styler, use_container_width=True, hide_index=True)
+    from ortak.takvim_gorunumu import modern_grid
+    modern_grid(grid,'roster_'+str(year)+'_'+str(month)+'_'+title)

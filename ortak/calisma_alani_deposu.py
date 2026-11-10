@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 DEFAULT_DB = Path(os.environ.get("WFM_WORKSPACE_DB_PATH",str(Path(__file__).resolve().parents[1] / "data" / "wfm_demo.db")))
-STATE_KEYS = ("planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "acad_schedules", "acad_exam_calendar", "acad_bayram_requests",
+STATE_KEYS = ("slot_shrinkage","staffing_parameters","status_rules","planning_bypass","academic_transport","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "acad_schedules", "acad_exam_calendar", "acad_bayram_requests",
               "fixed_shift_records", "shift_overrides", "draft_shift_plan", "published_shift_plan",
               "shift_rules", "plan_group_priority", "cf_forecast_options", "sp_forecast_df", "sp_forecast_meta",
               "sp_ratio_profiles", "sp_active_ratio_profile_df", "sp_active_ratio_profile_name",
@@ -162,4 +162,14 @@ def load_calls(interval=False, path=DEFAULT_DB):
         else:
             df = pd.read_sql_query("SELECT * FROM calls_daily ORDER BY tarih", con)
             df["tarih"] = pd.to_datetime(df["tarih"])
+    with connect(path) as con:
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='interval_operations'").fetchone():
+            if interval:
+                ops=pd.read_sql_query('SELECT tarih,slot,answered,answered_target,staffed FROM interval_operations',con)
+                if not ops.empty:
+                    ops['tarih']=pd.to_datetime(ops.tarih)+pd.to_timedelta((ops.slot-1)*30,unit='m');df=df.merge(ops,on=['tarih','slot'],how='left');df['sl_pct']=100*df.answered_target/df.cagri_sayisi.replace(0,np.nan)
+            else:
+                ops=pd.read_sql_query('SELECT o.tarih,SUM(o.answered) AS answered,SUM(o.answered_target) AS answered_target,SUM(c.cagri_sayisi) AS offered FROM interval_operations o JOIN calls_interval c ON c.tarih=o.tarih AND c.slot=o.slot GROUP BY o.tarih',con)
+                if not ops.empty:
+                    ops['tarih']=pd.to_datetime(ops.tarih);ops['sl_pct']=100*ops.answered_target/ops.offered.replace(0,np.nan);df=df.merge(ops[['tarih','answered','answered_target','sl_pct']],on='tarih',how='left')
     return df

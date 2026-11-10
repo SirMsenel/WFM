@@ -23,6 +23,8 @@ def _cell_style(value):
 def _manual_form(state,result,context):
     from ortak.elle_yerlestirme import prepare_manual
     people={str(e['employee_id']):e for e in result['staff']}
+    languages=st.multiselect('Yerleştirme dili',sorted({e.get('language') or 'tr' for e in people.values()}),default=sorted({e.get('language') or 'tr' for e in people.values()}),key='manual_language_filter')
+    people={i:e for i,e in people.items() if (e.get('language') or 'tr') in languages}
     with st.expander('Elle Vardiya veya İzin Ekle',expanded=True):
         mode=st.radio('Kimlere yazılacak?',['Personel seç','Grup seç'],horizontal=True,key='manual_pick_mode')
         if mode=='Grup seç':
@@ -33,11 +35,12 @@ def _manual_form(state,result,context):
             picked=st.multiselect('Yerleştirilecek personeller',list(people),format_func=lambda eid:f"{people[eid].get('full_name',eid)} · {WORK_LABELS.get(people[eid].get('work_type'),'')}",key='manual_people_v2')
         kind=st.selectbox('Kayıt türü',['WORK','OFF',*LEAVE_LABELS,'GECE','MESAI'],format_func=lambda k:SHIFT_LABELS[k],key='manual_kind_v2')
         working=kind in {'WORK','GECE','MESAI'}
-        custom=st.checkbox('Bitiş saatini kendim belirleyeceğim',value=kind=='MESAI',key='manual_custom_end_v2') if working else False
+        timing=st.radio('Saat seçimi',['Kurallardan otomatik başlangıç ve bitiş','Başlangıç ve bitişi seç'],horizontal=True,key='manual_timing') if working else ''
+        custom=working and timing=='Başlangıç ve bitişi seç'
         start,end=pd.Timestamp(context['start']).date(),pd.Timestamp(context['end']).date()
         dates=st.date_input('Uygulanacak gün aralığı',value=(start,end),min_value=start,max_value=end,key=f'manual_dates_{start}_{end}')
         begin,finish=None,None
-        if working:
+        if working and custom:
             a,b=st.columns(2)
             begin=a.time_input('Başlangıç saati',value=time.fromisoformat(state['shift_rules']['general']['night_window_start']) if kind=='GECE' else time(8),key=f'manual_begin_{kind}')
             if custom:finish=b.time_input('Bitiş saati',value=time(18),key=f'manual_finish_{kind}')

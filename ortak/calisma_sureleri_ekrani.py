@@ -18,7 +18,8 @@ def render_hours_summary(state,people):
     agents=[e for e in people if e.get('position','agent')=='agent']
     if not agents:st.info('Personel bulunamadı.');return
     ids={str(e['employee_id']) for e in agents}
-    published=[r for r in state.get('published_shift_plan',[]) if str(r['employee_id']) in ids and str(dates[0])<=str(r['date'])<=str(dates[1])]
+    from ortak.sabit_demo import history_rows
+    published=[r for r in history_rows(state,dates[0],dates[1]) if str(r['employee_id']) in ids and str(dates[0])<=str(r['date'])<=str(dates[1])]
     if not published:
         from ortak.calisma_sureleri import overlap_hours
         if not any(str(r['employee_id']) in ids and overlap_hours(r,dates[0],dates[1])>0 for r in state.get('published_shift_plan',[])):

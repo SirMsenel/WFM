@@ -9,7 +9,7 @@ from ortak.vardiya_gorunumu import cell_style
 
 def render():
     state=st.session_state;st.subheader('Yayın Yönetimi · Düzenle veya Geri Al')
-    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator'}:st.info('Yayın yönetimi planlama rollerine açıktır.');return
+    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator','planning_manager'}:st.info('Yayın yönetimi planlama rollerine açıktır.');return
     batches=publications(state);active=[b for b in batches if b['status']=='active']
     if not active:st.info('Yayında bir dönem yok.');return
     ident=st.selectbox('Yayınlanmış dönem',[b['id'] for b in active],format_func=lambda i:next(f"{b['start']} – {b['end']} · {', '.join(LANG_LABELS.get(l,l) for l in b['languages'])} · {i}" for b in active if b['id']==i),key='published_batch_pick')

@@ -4,6 +4,7 @@ import pandas as pd
 
 def fixed_calendar_rows(state,start,end):
     from ortak.planlama import REQUEST_CODES
+    from ortak.sabit_demo import history_rows
     rows={};start=pd.Timestamp(start).date();end=pd.Timestamp(end).date()
     def add(record,code,source):
         a=record.get('date') or record.get('start_date');b=record.get('date') or record.get('end_date') or a
@@ -14,7 +15,7 @@ def fixed_calendar_rows(state,start,end):
             row={'employee_id':str(eid),'date':str(d.date()),'shift_code':code,'start':record.get('start') or record.get('overtime_start'),'end':record.get('end') or record.get('overtime_end'),'source':source,'request_id':record.get('id')}
             rows[(str(eid),row['date'])]=row
     # Published records are supplemented by newly approved requests and fixed records.
-    for r in state.get("published_shift_plan",[]):add(r,r.get("shift_code"),"published")
+    for r in history_rows(state,start,end):add(r,r.get("shift_code"),"published")
     for req in state.get('trk_requests',[]):
         if req.get('status') not in {'Onaylandı','Uygulandı'} or req.get('queue') in {'TL','TL_SWAP','WFM'}:continue
         code=REQUEST_CODES.get(req.get('type'))

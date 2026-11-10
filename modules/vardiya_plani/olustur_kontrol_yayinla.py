@@ -42,7 +42,7 @@ def render_group_priority():
 def render():
     state=st.session_state
     st.subheader('Oluştur, Kontrol Et ve Yayınla')
-    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator'}:
+    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator','planning_manager'}:
         st.info('Plan oluşturma ve yayınlama yönetim rolleri içindir.');return
     context=period_banner(state)
     if not context:return
@@ -77,7 +77,10 @@ def render():
                 result=generate_plan(staff,state['sp_staffing_result_df'],state['shift_rules'],state['plan_group_priority'],
                                      context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
                                      strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False))
-                result['issues']=source_issues+result['issues'];result['staff']=staff
+                from ortak.statuler import meal_plan
+                meals,coverage,meal_issues=meal_plan(state,result['plan'],result['coverage'],staff)
+                result['breaks']=meals;result['coverage']=coverage
+                result['issues']=source_issues+result['issues']+meal_issues;result['staff']=staff
                 start,end=str(context['start']),str(context['end'])
                 included={str(e['employee_id']) for e in staff}
                 outside=[r for r in state.get('draft_shift_plan',[]) if not start<=str(r.get('date'))<=end or str(r['employee_id']) not in included]
@@ -118,11 +121,14 @@ def render():
     if stale:reasons.append('Kayıtlar değişti: Otomatik Vardiya Taslağı Oluştur düğmesine tekrar basın.')
     if hard:reasons.append(f'{len(hard)} kayıt/kural ihlali var. Yukarıdaki tabloda Mevcut vardiya ve Olması gereken sütunlarını karşılaştırarak düzeltin, sonra yeniden oluşturun.')
     if reasons:st.info('Yayınlamak için kalan adımlar:\n\n'+'\n\n'.join(reasons))
-    if has_gaps or warnings:st.caption('Aşağıdaki düğme kalan personel ihtiyacını ve gece kişi sayısı uyarılarını kabul ederek vardiya tablosunu doğrudan yayınlar.')
-    label='Eksikleri Kabul Et ve Planı Yayınla' if has_gaps or warnings else 'Kontrol Edilen Planı Yayınla'
+    if has_gaps or warnings:st.caption('Plan, kalan ihtiyaç ve uyarılarla birlikte yayın onayına gönderilir. İki ayrı planlamacının onayı gerekir; eksik %5 üzerindeyse Planlama Yöneticisi de onaylar.')
+    label='Taslağı Yayın Onayına Gönder' if state.get('shift_rules',{}).get('publication_approvals',{}).get('enabled') else ('Eksikleri Kabul Et ve Planı Yayınla' if has_gaps or warnings else 'Kontrol Edilen Planı Yayınla')
     if st.button(label,disabled=bool(reasons),key='planning_publish',type='primary'):
         try:
             from ortak.yayin_servisi import publish_plan
+            if state.get('shift_rules',{}).get('publication_approvals',{}).get('enabled'):
+                from ortak.yayin_onaylari import submit
+                ident=submit(state,result);st.success('Taslak onaya gönderildi: '+ident+' · Yayın Onayları ekranında iki bağımsız Planlama onayı bekleniyor.');return
             publish_plan(state,result)
             st.success('Vardiya tablosu yayınlandı ve veritabanına kaydedildi. Personeller Benim Vardiyam ekranından görebilir.')
         except (ValueError,OSError) as exc:st.error(str(exc))

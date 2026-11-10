@@ -165,6 +165,18 @@ def render():
         return
 
     user = _username()
+    with st.expander('Ulaşım bilgisi'):
+        transport=st.session_state.setdefault('academic_transport',{}).setdefault(user,{})
+        for kind,label in [('class','Ders sonrası'),('exam','Sınav sonrası')]:
+            config=transport.setdefault(kind,{})
+            config['enabled']=st.checkbox(label+' ulaşım sorunum var',value=config.get('enabled',False),key='travel_'+kind)
+            if config['enabled']:
+                config['minutes']=st.number_input(label+' ulaşım süresi (dk)',60,300,int(config.get('minutes',60)),15,key='travel_minutes_'+kind)
+                config['available_after']=st.time_input(label+' mesaiye başlayabileceğim en erken saat',key='travel_after_'+kind).strftime('%H:%M')
+        st.caption('Ulaşım sorunu seçilmezse son ders/sınav bitişinden 30 dakika sonra; seçilirse en az 1 saat ve belirttiğin saate göre uygunluk hesaplanır.')
+        if st.button('Ulaşım Bilgisini Kaydet'):
+            from ortak.calisma_alani_deposu import save_keys
+            save_keys(st.session_state);st.success('Ulaşım kısıtı kaydedildi.')
 
     col1, col2 = st.columns([1, 1])
     with col1:
