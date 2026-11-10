@@ -1,4 +1,5 @@
 import copy,json,tempfile,unittest
+from unittest.mock import patch
 from pathlib import Path
 from datetime import timedelta,time
 import pandas as pd
@@ -120,7 +121,8 @@ class PublicationTests(unittest.TestCase):
   self.s['planning_languages']={'tr':False,'en':True,'ar':False}
   self.assertIsNone(planning_problem(self.s));second=draft(self.s);publish_plan(self.s,second)
   self.assertEqual({r['language'] for r in self.s['published_shift_plan']},{'tr','en'})
- def test_undo_preserves_other_language_and_archive_then_reopens_editable_draft(self):
+ @patch('ortak.yayin_servisi.publication_today',return_value=DAY)
+ def test_undo_preserves_other_language_and_archive_then_reopens_editable_draft(self,_today):
   publish_plan(self.s,draft(self.s));turkish=publications(self.s)[0]
   self.s['planning_languages']={'tr':False,'en':True,'ar':False};publish_plan(self.s,draft(self.s))
   withdraw(self.s,turkish,True)
@@ -156,7 +158,8 @@ class PublicationTests(unittest.TestCase):
   s['draft_shift_plan'][1]['start']='10:00'
   self.assertEqual(next(r for r in collect_inputs(s)[1] if r['source']=='approved_request' and r['employee_id']=='1')['start'],'09:00')
 
- def test_stale_withdraw_cannot_remove_a_new_publication_with_same_times(self):
+ @patch('ortak.yayin_servisi.publication_today',return_value=DAY)
+ def test_stale_withdraw_cannot_remove_a_new_publication_with_same_times(self,_today):
   s=self.s;publish_plan(s,draft(s));old=publications(s)[0]
   withdraw(s,old,False);publish_plan(s,draft(s))
   current=copy.deepcopy(s['published_shift_plan'])
@@ -255,6 +258,6 @@ else:st.write('Other page')
   s=state();s['profile']=dict(s['employees_cache'][0]);s['published_shift_plan']=[dict(row(),language='tr')]
   at=self.app('from modules.tracking.my_shift import render\nrender()',s)
   at.date_input(key='my_shift_range_v2').set_value((DAY,DAY)).run();self.assertFalse(at.exception)
-  self.assertTrue(any('Gece adedi' in m.value for m in at.markdown));self.assertTrue(at.dataframe)
+  self.assertTrue(any('Gece adedi' in m.value for m in at.markdown));self.assertTrue(any('modern-roster' in m.value for m in at.markdown))
 
 if __name__=='__main__':unittest.main()

@@ -18,8 +18,11 @@ def render():
     grid=calendar_grid({'staff':people,'source_rows':batch['rows'],'exam_keys':set()},batch)
     st.dataframe(grid.style.map(cell_style,subset=[c for c in grid if c not in {'Personel','Sicil no','Kullanıcı adı'}]),hide_index=True,use_container_width=True,height=500)
     st.caption('Taslağa taşıma yayını kaldırır, mevcut atamaları elle düzenlenebilir taslak olarak korur. Geri alma ise yayını kaldırır. Her iki işlem de bu yayının dil/personel kapsamıyla sınırlıdır; eski yayın sürümü arşivde kalır.')
+    from ortak.yayin_servisi import publication_today
+    past=str(batch['start'])<publication_today().isoformat()
+    if past:st.info('Geçmiş günleri içeren bu yayın korunur; geri alınamaz veya taslağa taşınamaz.')
     a,b=st.columns(2)
     for col,label,reopen,key in [(a,'Yayını Geri Al ve Düzenlemek İçin Taslağa Taşı',True,'publication_reopen'),(b,'Yayını Geri Al',False,'publication_withdraw')]:
-        if col.button(label,key=key):
+        if col.button(label,key=key,disabled=past):
             try:withdraw(state,batch,reopen);state['publication_notice']='Yayın geri alındı. '+('Vardiya Saatleri ekranında elle girişleri silip yeniden düzenleyebilirsin.' if reopen else 'Bu dönem yeniden planlanabilir.');st.rerun()
             except ValueError as exc:st.error(str(exc))

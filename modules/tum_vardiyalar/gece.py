@@ -5,7 +5,8 @@ from modules.tum_vardiyalar.kesin_kayitlar import render_fixed_records
 
 
 def render():
-    st.subheader("🌙 Gece Vardiyası")
+    from modules.tum_vardiyalar.ortak import roster_heading
+    roster_heading('Gece Vardiya Planı','🌙')
     year, month = month_selector_this_year("night")
     render_period_card(year, month)
 

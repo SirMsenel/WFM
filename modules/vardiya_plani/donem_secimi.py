@@ -47,24 +47,21 @@ def render():
     ctx=st.session_state['plan_ctx']
     current_start,current_end=_clamp_range(pd.Timestamp(ctx['start']).date(),pd.Timestamp(ctx['end']).date(),minimum,maximum)
     with st.container(border=True):
-        st.markdown('#### Planlayacağın aralığı seç')
+
         a,b=st.columns(2)
         with a.container(border=True):
             st.markdown('**BAŞLANGIÇ TARİHİ**');start=st.date_input('Başlangıç',value=current_start,min_value=minimum,max_value=maximum,key=f'vp_start_{minimum}_{maximum}',format='DD.MM.YYYY',label_visibility='collapsed')
         with b.container(border=True):
             st.markdown('**BİTİŞ TARİHİ**');end=st.date_input('Bitiş',value=current_end,min_value=minimum,max_value=maximum,key=f'vp_end_{minimum}_{maximum}',format='DD.MM.YYYY',label_visibility='collapsed')
+        if start is None or end is None:st.warning('Başlangıç ve bitiş tarihleri boş kalamaz. Lütfen iki tarihi de seçin.');return
         if end<start:st.error('Bitiş tarihi başlangıçtan önce olamaz.');return
         if (end-start).days>92:st.error('Tek plan dönemi en fazla 93 gün olabilir.');return
         if (ctx['start'],ctx['end'])!=(start,end):
             st.session_state['plan_ctx_confirmed']=False
         st.session_state['plan_ctx']={'start':start,'end':end}
         confirmed=st.session_state.get('plan_ctx_confirmed',False)
-        st.markdown(f"### {start:%d.%m.%Y} → {end:%d.%m.%Y}")
-        st.caption(f'{(end-start).days+1} gün · İhtiyaç verisi {minimum:%d.%m.%Y} – {maximum:%d.%m.%Y} aralığında hazır.')
-        if confirmed:
-            st.success('Dönem onaylı · Vardiya Saatleri ve Oluştur ekranları bu aralığı kullanır.')
-        else:
-            st.info('Bu dönemi onaylayarak planlamaya devam et.')
+        color='#14816e' if confirmed else '#7760a6';status='ONAYLANDI' if confirmed else 'ONAY BEKLİYOR'
+        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-radius:16px;padding:19px 23px;background:linear-gradient(110deg,#eaf5f7,#f5f0fb);color:#24465b;margin:12px 0"><div><small style="letter-spacing:1.5px;font-weight:700">PLAN DÖNEMİ</small><div style="font-size:23px;font-weight:750;margin:8px 0">{start:%d.%m.%Y} → {end:%d.%m.%Y}</div><span>{(end-start).days+1} gün · İhtiyaç verisi hazır</span></div><span style="color:{color};background:white;border:1px solid {color}55;padding:9px 13px;border-radius:30px;font-size:12px;font-weight:750">{status}</span></div>',unsafe_allow_html=True)
         c1,c2,_=st.columns([1,1,2])
         def confirm(value):
             st.session_state['plan_ctx_confirmed']=value;save_keys(st.session_state)

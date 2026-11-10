@@ -33,7 +33,7 @@ def planning_problem(state,context=None,employees=None):
         if relevant:requests.append({'Kayıt':r['id'],'Personel':r.get('created_by_name',r.get('created_by')),'Talep':r.get('type'),'Başlangıç':a or 'Dönemlik','Bitiş':b or 'Dönemlik','Durum':r.get('status'),'Onay beklenen':(', '.join(t for t in r.get('assigned_tls',[]) if t not in r.get('tl_approvals',[])) if r.get('queue') in {'TL','TL_SWAP'} else 'Planlama')})
     bypass=state.get('planning_bypass',{}).get(start+'|'+end)
     if requests and bypass and (state.get('profile') or {}).get('position') in {'wfm','planning_manager'}:return None
-    if requests:return {'kind':'requests','message':'Seçili döneme ait sonuçlanmamış talepler var. Talepler karara bağlanmadan vardiya atamasına veya otomatik planlamaya başlanamaz.','rows':requests}
+    if requests:return {'kind':'requests','message':'Bu dönemde bekleyen talepler var. Planlama bunları değerlendirebilir veya gerekçeyle es geçebilir.','rows':requests}
     return None
 
 
@@ -66,6 +66,13 @@ def render_guard(state):
         @st.dialog('Vardiya planlaması durduruldu')
         def warning():
             st.warning(problem['message']);st.dataframe(problem['rows'][:15],hide_index=True,use_container_width=True)
+            if problem['kind']=='requests' and state.get('profile',{}).get('position')=='wfm':
+                reason=st.text_input('Es geçme gerekçesi',key='guard_modal_reason')
+                if st.button('Talepleri Es Geç ve Devam Et',key='guard_modal_bypass'):
+                    if not reason.strip():st.warning('Es geçme gerekçesini doldurun.')
+                    else:
+                        from ortak.calisma_alani_deposu import save_keys
+                        ctx=state['plan_ctx'];state.setdefault('planning_bypass',{})[str(pd.Timestamp(ctx['start']).date())+'|'+str(pd.Timestamp(ctx['end']).date())]={'actor':state['profile']['username'],'reason':reason.strip()};save_keys(state);st.rerun()
             if st.button('Anladım',key='guard_ack'):st.rerun()
         warning()
     return False

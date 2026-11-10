@@ -23,4 +23,5 @@ def enter_session(state,profile):
     for key in list(state):
         if key.startswith(('nav_','my_shift_','all_change_','personal_change_','new_request_','report_','monitor_','academic_staff_','school_cards_','travel_','break_','feedback_' )):
             state.pop(key,None)
+    state.pop('status_rules_edit',None)
     state['main_page']=landing_page(profile);state['navigation_history']=[]

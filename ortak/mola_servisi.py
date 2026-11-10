@@ -14,7 +14,9 @@ def init(path):
 
 
 def records(state,db=None):
-    path=state['workspace_db_path'];init(path) if db is None else None
+    path=state.get('workspace_db_path')
+    if not path:return []
+    init(path) if db is None else None
     def read(c):
         planned=[dict(loads(r[0]),id=r[1],status='Planlı') for r in c.execute('SELECT payload,id FROM planned_breaks')]
         requested=[dict(loads(r['payload']),id=r['id'],status=r['status']) for r in c.execute('SELECT * FROM break_requests')]
@@ -41,7 +43,13 @@ def availability(state,eid,start,minutes,db=None):
         if demand.empty:raise ValueError('Seçilen saat için ihtiyaç verisi yok; kapasite teyit edilemiyor.')
         workers={str(r['employee_id']) for r in roster if (span:=bounds(r)) and pd.Timestamp(span[0])<=t<pd.Timestamp(span[1])}
         on_break={str(r['employee_id']) for r in existing if pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end'])}
-        spare.append(len(workers-on_break)-float(demand['Planlanan Agent'].max()))
+        if state.get('status_rules',{}).get('shrinkage_included'):
+            from ortak.statuler import shrinkage_for
+            rate=float(demand['Shrinkage (%)'].iloc[0])/100 if 'Shrinkage (%)' in demand else shrinkage_for(state,t,slot,float(state.get('staffing_parameters',{}).get('shrinkage',.3)))
+            net=float(demand['Net Agent'].max()) if 'Net Agent' in demand else float(demand['Planlanan Agent'].max())*(1-rate)
+            # Extra simultaneous statuses may use the already-funded shrinkage budget.
+            spare.append(max(0,len(workers)-len(on_break)-net) if len(workers)*(1-rate)>=net else 0)
+        else:spare.append(len(workers-on_break)-float(demand['Planlanan Agent'].max()))
     return min(spare)
 
 
@@ -62,6 +70,20 @@ def request(state,start,minutes):
             if raw:check[key]=loads(raw[0])
         maximum=check.get('status_rules',{}).get('groups',{}).get(person['work_type'],{}).get('break_minutes',15)
         if minutes>maximum:raise ValueError('Mola hakkı değişti; ekranı yenileyin.')
+        rule=check.get('status_rules',{}).get('groups',{}).get(person['work_type'],{})
+        if check.get('status_rules',{}).get('automatic'):
+            from ortak.statu_planlayici import allowance
+            a=pd.Timestamp(start);own=[r for r in history_rows(check,a.date(),a.date()) if str(r['employee_id'])==eid and bounds(r)]
+            hours=sum((bounds(r)[1]-bounds(r)[0]).total_seconds()/3600 for r in own)
+            planned=[r for r in records(check,db) if str(r['employee_id'])==eid and r['kind']=='Mola' and r['status']!='İptal' and pd.Timestamp(r['start']).date()==a.date()]
+            used=sum((pd.Timestamp(r['end'])-pd.Timestamp(r['start'])).total_seconds()/60 for r in planned)
+            if used+minutes>allowance(rule,hours):raise ValueError('Bu vardiyanın mola hakkı planlanmış/kullanılmış; kalan süre yetersiz.')
+            end=a+pd.Timedelta(minutes=minutes);maximum_hour=int(rule.get('break_per_hour_max',15))
+            for bucket in pd.date_range(a.floor('h'),(end-pd.Timedelta(seconds=1)).floor('h'),freq='h'):
+                upper=bucket+pd.Timedelta(hours=1)
+                booked=sum(max(0,(min(pd.Timestamp(r['end']),upper)-max(pd.Timestamp(r['start']),bucket)).total_seconds()/60) for r in planned)
+                requested=max(0,(min(end,upper)-max(a,bucket)).total_seconds()/60)
+                if booked+requested>maximum_hour:raise ValueError('Bir saat içindeki mola süresi grup sınırını aşıyor; başka saat seçin.')
         if availability(check,eid,start,minutes,db)<1:raise ValueError('Bu aralıkta yeterli kapasite yok; farklı saat seç.')
         item={'employee_id':eid,'start':str(pd.Timestamp(start)),'end':str(pd.Timestamp(start)+pd.Timedelta(minutes=minutes)),'kind':'Mola','created_at':now(),'actor':profile['username']};ident='BRK-'+uuid4().hex[:12]
         db.execute('INSERT INTO break_requests VALUES(?,?,?,?)',(ident,eid,'Onaylı',dumps(item)))

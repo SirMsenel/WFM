@@ -174,6 +174,12 @@ def bootstrap(state, path=DEFAULT_DB):
         state.update(plan_ctx={'start':start,'end':start+timedelta(days=6)},plan_ctx_confirmed=False)
     from ortak.statuler import defaults
     state.setdefault("status_rules",dict(defaults(),enabled=True))
+    state["status_rules"]["shrinkage_included"]=True
+    state["status_rules"].setdefault("automatic",True)
+    from copy import deepcopy
+    for group,settings in defaults()["groups"].items():
+        target=state["status_rules"].setdefault("groups",{}).setdefault(group,{})
+        for field,value in settings.items():target.setdefault(field,deepcopy(value))
     enforce_current_rules(state)
     state["shift_rules"].setdefault("publication_approvals",{"enabled":True})
     state["shift_rules"].setdefault("capacity",{"max_overstaff":2,"min_overtime_hours":4})

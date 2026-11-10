@@ -17,7 +17,7 @@ def render():
     render_calendar(rows,[person],day,day,height=150,key='personal_break_calendar')
     reserved=[r for r in records(s) if str(r['employee_id'])==eid and pd.Timestamp(r['start']).date()==day]
     if reserved:
-        st.markdown('#### Planlı yemek ve molalar')
+        st.markdown('#### Planlı Statülerim')
         for r in reserved:
             color='#6c71bc' if r['kind']=='Yemek' else '#238b86'
             st.markdown(f'<div style="border-left:5px solid {color};padding:12px;margin:7px 0;background:#f1f7fa;border-radius:10px"><b>{r["kind"]}</b> · {pd.Timestamp(r["start"]):%H:%M}–{pd.Timestamp(r["end"]):%H:%M} · {r["status"]}</div>',unsafe_allow_html=True)
@@ -30,7 +30,7 @@ def render():
         options.append({'Saat':t.strftime('%H:%M'),'Uygun mola sayısı':value})
     st.bar_chart(pd.DataFrame(options).set_index('Saat'),color='#279b91')
     if profile.get('position')!='agent':st.info('Mola talebi personelin kendi hesabından yapılır.');return
-    a,b=st.columns(2);clock=a.time_input('Mola başlangıcı',value=time(12),step=900,key='break_start');b.metric('Grup mola hakkı',str(duration)+' dk')
+    a,b=st.columns(2);clock=a.time_input('Mola başlangıcı',value=time(12),step=900,key='break_start');b.metric('Tek mola üst sınırı',str(duration)+' dk')
     if st.button('Mola Talep Et',key='request_break'):
         try:request(s,datetime.combine(day,clock),duration);st.success('Kapasite uygun; mola ayrıldı.');st.rerun()
         except ValueError as e:st.warning(str(e))

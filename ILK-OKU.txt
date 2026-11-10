@@ -1,4 +1,4 @@
-WFM — 10 KASIM 2026 / 7. GÜNCELLEME — macOS
+WFM — 10 KASIM 2026 / FAZ 2 (8. GÜNCELLEME) — macOS
 
 1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
 2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
@@ -57,3 +57,15 @@ henüz yapılmamıştır; kurumsal modda sentetik veri üretimi kapatılır.
 - Kişisel vardiya/mola: İzleme. Eski işlem özeti: Takip > İşlem Özeti.
 - Kurum bağlantısı henüz bağlanmış değildir; ayrıntılar KURUMSAL_BAGLANTI.md.
 - Tüm yeni akışlar ve varsayımlar GUNCELLEME_NOTLARI.md içindedir.
+
+FAZ 2 KULLANIMI
+- Statü Kuralları: Yemek/Mola/Koçluk/Cuma sekmelerinde grup haklarını belirle.
+  Saatleri sistem seçer. Yemek ve mola artık toplam shrinkage oranına dahildir.
+- Mola çalışma saati aralıklarında alt sınır dahil, üst sınır hariçtir.
+- Yayın Onayları: onaylayanlar ve son durum listelenir. Son gerekli onayda
+  vardiya otomatik yayınlanır. Aynı dönem/dilde ikinci bekleyen plan açılamaz.
+- Eski bekleyen taslak yeni hesapla güncelliğini kaybetmişse reddedip yeniden
+  oluştur. Geçmiş günleri içeren yayın geri alınamaz.
+- Güncel Takip Analizi > Canlı İzleme: Servis Seviyesi İzleme/Tahmin İzleme.
+  Kabul edilen farkı üstten belirle; renkler bu eşiğe göre değişir.
+- Bildirim kutusu sol menüde ve Ayarlar > Bildirimler altında.

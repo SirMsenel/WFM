@@ -27,3 +27,14 @@ def records(state):
     path=state['workspace_db_path'];init(path);admin=state['profile'].get('position') in {'wfm','planning_manager','moderator'}
     with connect(path) as db:
         own=owner(db,state['profile']['username']);return [dict(loads(r['payload']),id=r['id']) for r in db.execute('SELECT * FROM feedback') if admin or r['owner']==own]
+
+
+def reply(state,ident,message):
+    if state['profile'].get('position') not in {'wfm','planning_manager','moderator'}:raise ValueError('Yanıtı Planlama veya yönetici verir.')
+    if not message.strip():raise ValueError('Yanıt boş kalamaz.')
+    from ortak.talep_servisi import now
+    path=state['workspace_db_path'];init(path)
+    with connect(path) as db:
+        db.execute('BEGIN IMMEDIATE');row=db.execute('SELECT payload FROM feedback WHERE id=?',(ident,)).fetchone()
+        if not row:raise ValueError('Görüş kaydı bulunamadı.')
+        p=loads(row[0]);p.update(reply=message.strip(),status='Yanıtlandı',updated_at=now());db.execute('UPDATE feedback SET payload=? WHERE id=?',(dumps(p),ident))

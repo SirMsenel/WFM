@@ -16,7 +16,8 @@ LANG_LABELS = {
 
 
 def render():
-    st.subheader("🌍 Yabancı Dil")
+    from modules.tum_vardiyalar.ortak import roster_heading
+    roster_heading('Yabancı Dil Vardiya Planı','🌍')
     year, month = month_selector_this_year("foreign")
     render_period_card(year, month)
 
@@ -26,7 +27,7 @@ def render():
 
     for tab, lang in zip(tabs, languages):
         with tab:
-            q = st.text_input(f"Ara - {LANG_LABELS.get(lang,lang)}", key=f"foreign_{lang}_search", placeholder="isim...")
+            q = st.session_state.get('all_compact_search','')
             agents = fetch_agents(language=lang, search=q or None)
 
             render_shift_grid(

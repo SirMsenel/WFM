@@ -1,3 +1,41 @@
+# WFM — Faz 2 / 10 Kasım 2026 / 8. güncelleme
+
+## Çağrı verisi ve analiz
+- Veri Kaynağı'nda işlenecek sütunlar seçilir; tarih ve sayısal çağrı sütunu zorunludur. Kaynak veri korunur, kaldırılmış sütunlar yeniden seçilebilir. Tarih kapsamı seçimiyle birlikte çalışır.
+- Grafik İzleme: seçilen dönem, önceki dönem günlük ortalama değişimi, veri bulunan gün oranı, günlük eğilim, 7 günlük ortalama, geçmiş 4 aynı hafta günü referansı, yoğun 5 gün, interval verisinde gün×saat ısı haritası ve eşik dışı sapmalar. 30 dakikalık kaynakta slotlar gerçek saatlere çevrilir. Eksik günler 0 sayılmaz.
+- Kayıt Seçim'de Çağrı Adetleri, Gün Tabloları'nın yanındaki alt sekmedir; sayfa altında tekrar edilmez. Interval ekranına geri dönme maddesi kullanıcının açıklamasıyla kapsam dışıdır.
+- Ana başlık 📈 Güncel Takip Analizi oldu. Canlı İzleme altında Servis Seviyesi İzleme ve Tahmin İzleme ayrıldı; diğer analizler korunur. AHT ekranda gösterilmez.
+- İki takip görünümü aynı düzendedir. Kullanıcı kabul edilen farkı belirler: tahminde mutlak yüzde farkı, SL'de hedefe göre mutlak yüzde puan farkı. Sınır dahilindekiler yeşil, dışındakiler fark arttıkça koyu kırmızı; ölçüm dışı ve eksik veri gridir. Genel başarı yalnızca ölçülen, yüzdesi hesaplanabilen dilimlerden gelir. SL = hedef sürede karşılanan / gelen çağrı.
+
+## Vardiya ve statü kuralları
+- Plan dönemindeki alt bölüm yeniden tasarlandı: ayrı başlangıç/bitiş, renkli dönem özeti ve onay rozeti. Uzun açıklama ve tekrarlanan başlık kaldırıldı.
+- Mesai Kuralları'nda üst iki kutu aynı boyda; Dış Kaynak, Akademi, Full Time aynı satırdaki eş boy kartlardır. Full Time ve Dış Kaynak süreleri düzenlenebilir; kaydedilen süre eski 10 saat migrasyonu tarafından ezilmez. 11 saat dinlenme ve en fazla 6 ardışık gün korunur.
+- Statü Kuralları ayrı Yemek, Mola, Koçluk, Cuma pencereleridir. Grupların süre hakları girilir; kullanıcı yemek başlangıç/bitiş penceresi seçmez. Sistem vardiya içinde hattın durumuna göre saatleri seçer. Eski teknik shrinkage açıklaması kaldırıldı.
+- Mola hakkı çalışılan saat aralığına göre tanımlanır (alt sınır dahil, üst sınır hariç); toplam süre, bir mola üst süresi ve bir saatlik mola üst sınırı ayrı kontrol edilir. Otomatik yerleşen molalar kişisel mola hakkından düşer.
+- Aylık koçluk varsayılan 60 dakika, parça varsayılan 15 dakikadır. Önceki yayınlarda planlanan koçluklar düşülür; kişi başına günde en fazla bir parça atanır. Uygun kapasite yoksa mola/koçluk ertelenir ve uyarı oluşur. Kısa dönemde hedef tamamlanmazsa sonraki dönemlerde kalan hedef devam eder.
+- Yemek çalışma vardiyası içinde zorunlu süre olarak yerleştirilir; uygun pencere yoksa yayın engeli doğar. Mola/koçluk yeni kapasite açığı oluşturmadan yerleşir. Yemek/mola/koçluk yayın onayları tamamlandığında personelin İzleme ve Takip ekranlarında görünür; taslak henüz personele açıklanmaz.
+- **Bu sürümde shrinkage yemek, mola ve koçluk dahil toplam kayıptır.** Planlı statü kaybı shrinkage bütçesi içindeyse ikinci kez düşülmez. Bütçeyi aşan kısmı ek açık olarak görünür. Net kapasite = brüt atanan − max(brüt atanan × shrinkage, planlı statü kaybı). Karşılaştırma tabloları önceki brüt ihtiyaç birimini korur. Önceki sürümün “diğer kayıplar + ayrıca yemek” yaklaşımının yerini bu alır; oranları buna göre gözden geçirin.
+- Boş statü/mola/shrinkage hücrelerinde alanı belirten uyarı gösterilir; eksik satır sessizce silinmez. Boş saat/tarih alanlarında kod hatası yerine doldurma mesajı gösterilir.
+
+## Talepler ve yayın
+- Bekleyen talebi es geçme işlemi uyarı penceresinin içinde de kullanılabilir. Planlamacı gerekçe yazarak devam eder; talepler kendiliğinden onaylanmaz. Yayınlanmış dönem kilidi es geçilemez.
+- Geçmiş bir günü içeren yayın geri alınamaz veya taslağa taşınamaz. Bugün/future başlangıçlı yayında önceki geri alma kontrolleri korunur.
+- Aynı dönemle kesişen aynı dil için onay bekleyen plan varsa ikinci taslak gönderilemez. Kontrol veritabanında eşzamanlı gönderimlere karşı da yapılır; reddedilen ikinci gönderim ilk taslağın kaynaklarını kaydetmez.
+- Onaylayanların adı, kullanıcı adı, rolü ve onay zamanı tüm yetkili oturumlarda veritabanından okunur. Planlama Yöneticisi onayı da listede görünür. Son gerekli onaydan sonra plan **otomatik yayınlanır**; ekranda açık başarı mesajı çıkar. Tüm Vardiyalar ve kişisel Takip ekranlarından görülür.
+- İki farklı gerçek Planlama hesabı, açık %5 üzerindeyse ayrıca Planlama Yöneticisi gerekir. Moderatörün hesap görünümünü değiştirmesi bağımsız ikinci kişi sayılmaz.
+
+## Takip, takvim ve bildirimler
+- Benim Vardiyam sayfa içi başlığı kaldırıldı. Toplam saat/çalışma/OFF/rapor/izin kartları renkli modern tasarıma geçti. Kişisel vardiya tablosu ortak shift takvimini kullanır; ayrı Durum sütunu yoktur.
+- Tüm Vardiyalar başlıkları modern Vardiya Planı formatına geçti; yıl, ay ve ortak personel araması tek satıra alındı. Tek arama konum sekmelerine de uygulanır.
+- Planlama Talep Merkezi'nin büyük üç özet kutusu küçük renkli durum rozetleri oldu. Sol üst personel kartında ad/kullanıcı adı taşması azaltıldı.
+- Sol menüde 🔔 Bildirimler ve Ayarlar → Bildirimler bulunur. Kapsama uygun talep sonucu, plan onay durumu, yayınlanan vardiya ve uygulama görüşüne yanıt listelenir. Konu/okunmamış filtreleri ve kişiye özel okundu durumu kalıcıdır. Kullanıcı başkasının bildirimini okundu yapamaz.
+- Uygulama görüşleri yetkili Planlama/Müdür tarafından yanıtlanabilir; yanıt bildirim kutusuna düşer. Anonim şikâyetin sahibi kendi yanıtını görür; diğer personeller göremez. E-posta/kurum mesajlaşması entegrasyonu eklenmemiştir.
+
+## Güncelleme
+Yeni ZIP'i ayrı klasöre açın, eski `data/auth_demo.db` ve `data/wfm_demo.db` kopyalarını aktarın. İki uygulama terminalini kapatıp yeni klasörden açın. Eski bekleyen taslaklar yeni hesap/kurallar yüzünden güncelliğini kaybedebilir; bu durumda eski taslağı reddedip yeni kurallarla yeniden oluşturun. Ayrıntılı macOS komutları ILK-OKU.txt içinde.
+
+---
+
 # WFM — 10 Kasım 2026 / 7. güncelleme
 
 ## Örnek veri ve kayıtlar

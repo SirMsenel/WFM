@@ -131,7 +131,7 @@ st.markdown("""
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid rgba(15, 23, 42, 0.08);
         border-radius: 20px;
-        padding: 18px;
+        padding: 14px;
         box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
         margin-bottom: 14px;
     }
@@ -139,13 +139,13 @@ st.markdown("""
     .sidebar-profile-top {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 10px;
     }
 
     .sidebar-avatar {
-        width: 52px;
+        width: 42px;
         height: 52px;
-        min-width: 52px;
+        min-width: 42px;
         border-radius: 16px;
         background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
         border: 1px solid rgba(15, 23, 42, 0.08);
@@ -158,6 +158,7 @@ st.markdown("""
     }
 
     .sidebar-user-meta {
+        min-width:0;flex:1;overflow-wrap:anywhere;
         line-height: 1.3;
     }
 
@@ -250,7 +251,7 @@ st.markdown("""
 PAGES = [
     "📞 Çağrı Tahmini",
     "📅 Mesai Planı",
-    "📈 GÜNCEL TAKİP ANALİZİ",
+    "📈 Güncel Takip Analizi",
     "🗓️ Vardiya Planı",
     "📊 İzleme",
     "🔮 Similasyon",
@@ -306,6 +307,10 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    from ortak.bildirimler import items as notification_items
+    unseen=sum(not p['Okundu'] for p in notification_items(st.session_state))
+    if st.button(f'🔔 Bildirimler ({unseen})',key='open_notifications',use_container_width=True):
+        st.session_state['main_page']='⚙️ Ayarlar';st.session_state['nav_settings']='Bildirimler';st.rerun()
     from ortak.moderator_gecis import render as render_switch
     render_switch(st.session_state,_api_get,_api_post)
     if st.button("Çıkış Yap", use_container_width=True):
@@ -363,7 +368,7 @@ elif main == "🗓️ Vardiya Planı":
     sections('nav_roster',{'Plan Dönem Seçimi':render_plan_period,'Vardiya Kuralları':render_current_plan,
                           'Talepler':render_requests_tab,'Vardiya Saatleri':render_shift_hours,
                           'Oluştur & Kontrol & Yayınla':render_publish,'Yayın Yönetimi':render_publication_management,'Yayın Onayları':__import__('modules.yayin_onay_ekrani',fromlist=['render']).render})
-elif main == "📈 GÜNCEL TAKİP ANALİZİ":
+elif main == "📈 Güncel Takip Analizi":
     render_history_comparison()
 elif main == "🧪 Demo Veritabanı":
     render_demo_workspace()

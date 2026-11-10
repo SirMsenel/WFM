@@ -48,7 +48,7 @@ def default_shift_rules():
 def enforce_current_rules(state):
     """Update old saved outsource durations without resetting user rules."""
     rules=state.get('shift_rules')
-    if rules and rules.get('work_type',{}).get('dis_kaynak',{}).get('shift_total_hours')!=10:
+    if rules and not rules.get('work_type',{}).get('dis_kaynak',{}).get('duration_custom') and rules.get('work_type',{}).get('dis_kaynak',{}).get('shift_total_hours')!=10:
         rules.setdefault('work_type',{}).setdefault('dis_kaynak',{})['shift_total_hours']=10
         state['shift_rules']=rules
         state['plan_ctx_confirmed']=False

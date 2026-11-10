@@ -122,3 +122,10 @@ Eski İngilizce yollar yalnızca uyumluluk dosyalarıdır; değişiklik yaparken
 - `ortak/canli_metrikler.py`: gerçekleşen SL/AHT ve Erlang ihtiyaçları.
 - `ortak/moderator_gecis.py`, `sunucu.py /auth/switch-*`: denetimli kullanıcı görünümü.
 - `ortak/gorusler.py`, `modules/similasyon.py`, `ortak/dagilim_adetleri.py`: geri bildirim, kapasite senaryoları, adet matrisi.
+
+## Faz 2
+- `ortak/veri_secimi.py`: tarih/sayı kontrolüyle kaynak sütunu seçimi.
+- `ortak/izleme_analitigi.py`, `modules/mesai_plani/canli_izleme.py`: tolerans, renk ve ortak takip.
+- `ortak/statu_planlayici.py`: shrinkage dahil yemek/mola/aylık koçluk dağıtımı.
+- `ortak/zorunlu_alanlar.py`, `ortak/modern_kartlar.py`: boş alan kontrolü ve ortak bilgi kartları.
+- `ortak/bildirimler.py`, `modules/bildirim_kutusu.py`: kapsamlı bildirim kaydı ve kişi bazlı okundu durumu.

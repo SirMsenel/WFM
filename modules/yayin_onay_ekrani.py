@@ -10,7 +10,12 @@ def render():
     byid={r['id']:r for r in items};ident=st.selectbox('Plan',[r['id'] for r in items],format_func=lambda i:f"{byid[i]['result']['period']['start']} – {byid[i]['result']['period']['end']} · {byid[i]['status']} · %{byid[i]['rate']:.1f} eksik",key='approval_pick');item=byid[ident]
     a,b,c=st.columns(3);a.metric('Planlama onayı',f"{len(item['votes'])}/2");b.metric('Eksik ihtiyaç',f"%{item['rate']:.2f}");c.metric('Yönetici onayı','Alındı' if item['manager'] else 'Gerekli' if item['rate']>5 else 'Gerekmiyor')
     result=item['result'];render_calendar(result['plan'],result['staff'],result['period']['start'],result['period']['end'],key='approval_calendar')
-    st.dataframe(item['votes'],hide_index=True,use_container_width=True)
+    st.info('Son gerekli onay verildiğinde vardiyalar otomatik yayınlanır; Tüm Vardiyalar ve Takip ekranlarında görünür.')
+    approvals=item['votes']+([item['manager']] if item.get('manager') else [])
+    if approvals:
+        st.dataframe([{'Onaylayan':v.get('name') or v.get('as') or v['actor'],'Rol':'Planlama Yöneticisi' if v.get('role')=='planning_manager' else 'Planlama','Kullanıcı':v.get('as',v['actor']),'Onay zamanı':v['at']} for v in approvals],hide_index=True,use_container_width=True)
+    else:st.caption('Henüz onay veren yok.')
+    if item['status']=='Yayınlandı':st.success('Vardiya otomatik yayınlandı. Tüm Vardiyalar ekranından inceleyebilirsin.')
     if item['status']!='Bekliyor':return
     if s['profile'].get('position') not in {'wfm','planning_manager'}:st.info('Bu hesap bu aşamada yalnızca görüntüleyebilir.');return
     reason=st.text_input('Ret gerekçesi',key='approval_reason');a,b=st.columns(2)

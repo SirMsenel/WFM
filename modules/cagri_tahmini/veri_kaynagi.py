@@ -283,6 +283,20 @@ def render():
         active_df = df.copy()
         st.session_state["cf_full_df"] = active_df
 
+    st.markdown('#### İşlenecek Sütunlar')
+    available=list(df_all.columns)
+    stored=st.session_state.get('cf_selected_source_columns',available)
+    selected=st.multiselect('Veriden hangi sütunlar alınsın?',available,default=[c for c in stored if c in available],key='cf_source_columns')
+    if st.button('Sütun Seçimini Uygula',key='cf_apply_columns'):
+        from ortak.veri_secimi import select_columns
+        try:
+            # Use the source and the existing date scope; previously removed columns can return.
+            source=df_all.copy();sig=st.session_state.get('cf_scope_sig',('ALL',))
+            if sig[0]=='RANGE':source=source[pd.to_datetime(source[sig[1]],errors='coerce').between(pd.Timestamp(sig[2]),pd.Timestamp(sig[3])+pd.Timedelta(days=1)-pd.Timedelta(microseconds=1))]
+            chosen=select_columns(source,selected)
+            _reset_all_call_forecast_state();st.session_state.update(cf_selected_source_columns=selected,cf_full_df=chosen,cf_raw_df=chosen.copy());st.rerun()
+        except ValueError as e:st.warning(str(e))
+
     # küçük bilgi: full vs active
     st.info(f"Tam veri satır: **{len(df_all):,}** | İşlenecek satır: **{len(active_df):,}**")
 

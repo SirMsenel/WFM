@@ -82,13 +82,9 @@ def render_center(audience='all', key='requests'):
     elif audience == 'tl':
         items = [r for r in items if profile.get('full_name') in r.get('assigned_tls',[])]
     pending = [r for r in items if not is_terminal(r)]
-    a,b,c = st.columns(3)
-    for col,card_title,count,status in [(a,'Değerlendirmede',len(pending),'Beklemede'),
-                                    (b,'Onaylanan',sum(r.get('status') in {'Uygulandı','Onaylandı'} and is_terminal(r) for r in items),'Onaylandı'),
-                                    (c,'Reddedilen',sum(r.get('status')=='Reddedildi' for r in items),'Reddedildi')]:
-        with col.container(border=True):
-            st.markdown(badge(status),unsafe_allow_html=True)
-            st.metric(card_title,count)
+    from html import escape
+    stats=[('Bekleyen',len(pending),'#b6812c'),('Onaylanan',sum(r.get('status') in {'Uygulandı','Onaylandı'} and is_terminal(r) for r in items),'#19856f'),('Reddedilen',sum(r.get('status')=='Reddedildi' for r in items),'#ba626c')]
+    st.markdown('<div style="display:flex;flex-wrap:wrap;gap:9px;margin:10px 0">'+''.join(f'<span style="background:{color}0d;color:{color};border:1px solid {color}33;border-radius:30px;padding:8px 16px;font-size:13px">{label} <b style="margin-left:12px">{count}</b></span>' for label,count,color in stats)+'</div>',unsafe_allow_html=True)
     category = st.radio('Göster',['Bekleyen kayıtlar','Sonuçlanan kayıtlar','Tüm kayıtlar'],horizontal=True,key=key+'_category')
     search = st.text_input('Kayıt ara',placeholder='Personel, talep türü veya kayıt numarası',key=key+'_search')
     filtered = [r for r in items if (category=='Tüm kayıtlar' or (is_terminal(r)==(category=='Sonuçlanan kayıtlar')))

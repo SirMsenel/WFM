@@ -33,10 +33,19 @@ def render_feedback():
     items=records(state)
     if items:st.dataframe([{'Tür':r['type'],'Gönderen':r['sender'] or 'Kimliği gizli','İçerik':r['message'],'Durum':r['status'],'Tarih':r['created_at']} for r in items],hide_index=True,use_container_width=True)
 
+    if items and state['profile'].get('position') in {'wfm','planning_manager','moderator'}:
+        byid={p['id']:p for p in items};ident=st.selectbox('Yanıtlanacak görüş',list(byid),format_func=lambda i:byid[i]['type']+' · '+byid[i]['created_at'][:16]+' · '+i[-6:],key='feedback_reply_pick');text=st.text_area('Kullanıcıya yanıt',key='feedback_reply_text')
+        if st.button('Yanıtı Kaydet',key='feedback_reply_send'):
+            try:
+                from ortak.gorusler import reply
+                reply(state,ident,text);st.success('Yanıt kullanıcının bildirim kutusuna eklendi.')
+            except ValueError as e:st.warning(str(e))
+
 _old_render=render
 
 def render():
     from ortak.gezinme import sections
-    pages={'Görüş ve Talepler':render_feedback}
+    from modules.bildirim_kutusu import render as render_notices
+    pages={'Bildirimler':render_notices,'Görüş ve Talepler':render_feedback}
     if (st.session_state.get('profile') or {}).get('position')=='wfm':pages={'Yetkilendirme':_old_render,**pages}
     sections('nav_settings',pages)

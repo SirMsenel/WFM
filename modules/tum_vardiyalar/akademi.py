@@ -11,7 +11,8 @@ from modules.tum_vardiyalar.takvim import render_shift_grid
 
 
 def render():
-    st.subheader("🏫 Akademi")
+    from modules.tum_vardiyalar.ortak import roster_heading
+    roster_heading('Akademi Vardiya Planı','🎓')
     year, month = month_selector_this_year("academy")
     render_period_card(year, month)
 
@@ -24,7 +25,7 @@ def render():
 
     for tab, loc in zip(tabs, locations):
         with tab:
-            q = st.text_input(f"Ara - {loc}", key=f"acad_{loc}_search", placeholder="isim...")
+            q = st.session_state.get('all_compact_search','')
             agents = fetch_agents(work_type="akademi", location=loc, language="tr", search=q or None)
 
             render_shift_grid(

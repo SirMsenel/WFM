@@ -59,3 +59,8 @@ Personelde `gender` alanı (örnek değerler Kadın/Erkek) Cuma erkek filtresi i
 `POST /actuals/intervals` satırları `tarih`, `slot` (1–48), `cagri_sayisi`, isteğe bağlı `aht_sec`, `answered`, `answered_target`, `staffed` alır. Sayımlar negatif olamaz; `answered_target <= answered <= cagri_sayisi`. `staffed` o dilimdeki gerçek etkin personel sayısıdır. SL hedef sürede karşılanan/gelen üzerinden hesaplanır. Yetkili Planlama hesabı gerekir. Kurumsal akış bu uç noktaya henüz bağlanmış değildir.
 
 Yemekler `planned_breaks`, kişisel molalar `break_requests`, yayın onayları `plan_approvals`, sabit örnek vardiyalar `roster_history`, gerçek operasyon metrikleri `interval_operations` tablolarında tutulur. Kullanıcı geçişi yalnızca asıl moderatör tokenı ile yapılır; imzalı token gerçek aktör bilgisini taşır.
+
+## Faz 2 hesap ve bildirim notu
+Shrinkage artık yemek/mola/koçluk dahil toplam kayıp oranıdır; kurum oranının aynı tanımı kullandığını doğrulayın. Planlı statüler bütçeyi aşarsa yalnızca aşan bölüm ek kayıp oluşturur. Statü süre hakları `status_rules` içindedir; saatleri yerel planlayıcı üretir. Kurum durum/telefon sistemi entegrasyonu bu pakette kurulmaz; otomatik saatler uygulamanın kendi Takip/İzleme ekranlarına düşer.
+
+`notification_reads` tablosu kullanıcı/bildirim bazında okundu durumunu tutar; içerikler yetkili talep/yayın/görüş kaynaklarından türetilir. E-posta veya dış mesaj servisi kurulmuş değildir.

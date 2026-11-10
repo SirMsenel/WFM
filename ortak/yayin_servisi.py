@@ -89,7 +89,11 @@ def publications(state):
     return result
 
 
+def publication_today():return datetime.now(ZoneInfo('Europe/Istanbul')).date()
+
+
 def withdraw(state,batch,reopen=False):
+    if str(batch['start'])<publication_today().isoformat():raise ValueError('Geçmiş günleri içeren yayın geri alınamaz. Yalnızca bugünden itibaren başlayan dönemler geri alınabilir.')
     from copy import deepcopy
     keys={(str(r['employee_id']),str(r['date'])) for r in batch['rows']}
     def change(current):

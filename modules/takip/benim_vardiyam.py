@@ -508,7 +508,7 @@ def render():
     from ortak.vardiya_gorunumu import shift_stats,WINDOWS,cell_style
     from ortak.planlama import SHIFT_LABELS
     from ortak.cagri_tahmin_servisi import DAY_NAMES
-    current=_profile();_inject_css();st.subheader('🧍 Benim Vardiyam')
+    current=_profile();_inject_css()
     from ortak.personel_karti import pick_person,render_person
     target=pick_person(st.session_state,current,'my_shift')
     if not target:return
@@ -521,8 +521,8 @@ def render():
     if not records:st.info('Bu personel ve tarih aralığı için yayınlanmış vardiya yok.');return
     summary=shift_stats(records,start,end);counts=summary['status_counts']
     cards=[('Toplam saat',f"{summary['total_hours']:.1f}"),('Çalıştığı gün',summary['work_days']),('OFF',summary['off_days']),('Rapor',counts.get('RAPOR',0)),('Yıllık izin',counts.get('YILLIK_IZIN',0)),('Diğer izin',sum(v for k,v in counts.items() if k not in {'OFF','RAPOR','YILLIK_IZIN'}))]
-    for col,(label,value) in zip(st.columns(6),cards):
-        with col.container(border=True):st.metric(label,value)
+    from ortak.modern_kartlar import metric_cards
+    metric_cards(cards)
     st.markdown('#### Günün Saatlerine Göre Çalışma')
     columns=st.columns(5)
     for col,(name,hint,_,__,bg,fg) in zip(columns,WINDOWS):
@@ -543,8 +543,13 @@ def render():
             hour=interval[0].hour;part='Sabah' if 8<=hour<13 else 'İkindi' if 13<=hour<17 else 'Akşam' if hour>=17 else 'Gece'
             label='Çalışma'
         output.append({'Tarih':r['date'],'Gün':DAY_NAMES[pd.Timestamp(r['date']).weekday()],'Durum':label,'Başlangıç':r.get('start') or '—','Bitiş':r.get('end') or '—','Saat':f'{round(hours*60)//60:02d}:{round(hours*60)%60:02d}'})
-    view=pd.DataFrame(output)
-    st.dataframe(view.style.map(cell_style,subset=['Durum','Başlangıç','Bitiş']),hide_index=True,use_container_width=True,height=520)
+    from ortak.takvim_gorunumu import render_calendar
+    render_calendar(records,[target],start,end,key='my_published_roster')
+    from ortak.mola_servisi import records as status_records
+    statuses=[x for x in status_records(st.session_state) if str(x['employee_id'])==str(target['employee_id']) and str(start)<=x['start'][:10]<=str(end) and x['status']!='İptal']
+    if statuses:
+        with st.expander('Yemek, mola ve görüşme takvimim'):
+            st.dataframe([{'Tarih':pd.Timestamp(x['start']).strftime('%d.%m.%Y'),'Statü':x['kind'],'Başlangıç':pd.Timestamp(x['start']).strftime('%H:%M'),'Bitiş':pd.Timestamp(x['end']).strftime('%H:%M')} for x in statuses],hide_index=True,use_container_width=True)
     if _is_academy(target):
         with st.expander('Akademi Ücret Hesabı'):
             dense=0.

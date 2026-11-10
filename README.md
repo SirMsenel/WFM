@@ -1,6 +1,6 @@
 # WFM
 
-**7. güncelleme:** sabit 2026 örnek geçmişi, saat bazlı shrinkage/yemek, kapasiteye göre mola, iki Planlama onaylı yayın, Similasyon ve moderatör kullanıcı geçişi. Güncel davranış ve kurallar için [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
+**Faz 2 / 8. güncelleme:** sütun seçimi, çağrı analitiği, eşik bazlı SL/tahmin izleme, toplam shrinkage içinde otomatik yemek/mola/koçluk, yayın kilitleri ve bildirim kutusu. Güncel davranış ve kurallar için [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
 
 Güncel kurulum: [ILK-OKU.txt](ILK-OKU.txt). Türkçe kaynaklar: [DOSYA_HARITASI.md](DOSYA_HARITASI.md). Kurum API/veritabanı hazırlığı ve sınırları: [KURUMSAL_BAGLANTI.md](KURUMSAL_BAGLANTI.md). Eski İngilizce Python dosyaları geriye uyumluluk yönlendirmeleridir.
 

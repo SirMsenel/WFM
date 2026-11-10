@@ -112,8 +112,10 @@ def render_interval_references():
 
 
 def render():
-    st.title('📈 GÜNCEL TAKİP ANALİZİ')
+    st.title('📈 Güncel Takip Analizi')
     from modules.mesai_plani.guncel_takip import render_current,render_accuracy
     def interval():
         sections('nav_interval_history',{'Dağılım Başarısı':render_accuracy,'Geçmiş Referanslar':render_interval_references})
-    sections('nav_history',{'Canlı İzleme':render_current,'Günlük':render_daily,'30 Dakikalık':interval})
+    from modules.mesai_plani.canli_izleme import render as live
+    def current():sections('nav_live_tracking',{'Servis Seviyesi İzleme':lambda:live('sl'),'Tahmin İzleme':lambda:live('forecast')})
+    sections('nav_history',{'Canlı İzleme':current,'Günlük':render_daily,'30 Dakikalık':interval})

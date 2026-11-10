@@ -163,7 +163,7 @@ def render():
         shrinkage_percent = st.slider("Shrinkage (%)", 0, 50, 30, 5)
 
     with st.expander('30 dakikalık shrinkage kuralları'):
-        st.caption('Çakışan kurallarda son satır uygulanır. Örn. 12:00–14:00 %35. Yemek/mola hariç diğer kayıplar.')
+        st.caption('Çakışan kurallarda son satır uygulanır. Örn. 12:00–14:00 %35. Yemek, mola ve koçluk dahil toplam kayıp oranı.')
         existing=st.session_state.get('slot_shrinkage',[])
         clock=lambda n:f'{n//2:02d}:{30*(n%2):02d}'
         starts=[clock(i) for i in range(48)];ends=[clock(i) for i in range(1,49)]
@@ -172,7 +172,8 @@ def render():
         if st.button('Dilim Oranlarını Kaydet',key='save_slot_loss'):
             try:
                 rows=[]
-                for r in edited.dropna().to_dict('records'):
+                if edited.isna().any().any():raise ValueError('Shrinkage tablosu boş kalamaz. Başlangıç, bitiş ve kayıp yüzdesini doldurun veya eksik satırı silin.')
+                for r in edited.to_dict('records'):
                     a,b=starts.index(r['Başlangıç'])+1,ends.index(r['Bitiş'])+1;rate=float(r['Kayıp (%)'])/100
                     if not 1<=a<=b<=48 or not 0<=rate<1:raise ValueError('Bitiş başlangıçtan sonra, kayıp %0–99 arasında olmalı.')
                     rows.append({'start_slot':a,'end_slot':b,'rate':rate})

@@ -45,6 +45,8 @@ def _manual_form(state,result,context):
             begin=a.time_input('Başlangıç saati',value=time.fromisoformat(state['shift_rules']['general']['night_window_start']) if kind=='GECE' else time(8),key=f'manual_begin_{kind}')
             if custom:finish=b.time_input('Bitiş saati',value=time(18),key=f'manual_finish_{kind}')
             else:b.caption('Gece saatleri mesai kurallarından; diğer bitiş saatleri personelin grup süresinden hesaplanır.')
+        if custom and (begin is None or finish is None):st.warning('Başlangıç ve bitiş saatleri boş kalamaz. Lütfen iki alanı da doldurun.');return
+        dates=dates or ()
         note=st.text_input('Not',key='manual_note_v2')
         additions=[];warnings=[]
         if picked and len(dates)==2:
