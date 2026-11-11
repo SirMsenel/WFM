@@ -129,3 +129,13 @@ Eski İngilizce yollar yalnızca uyumluluk dosyalarıdır; değişiklik yaparken
 - `ortak/statu_planlayici.py`: shrinkage dahil yemek/mola/aylık koçluk dağıtımı.
 - `ortak/zorunlu_alanlar.py`, `ortak/modern_kartlar.py`: boş alan kontrolü ve ortak bilgi kartları.
 - `ortak/bildirimler.py`, `modules/bildirim_kutusu.py`: kapsamlı bildirim kaydı ve kişi bazlı okundu durumu.
+
+## Faz 3
+- `ortak/ajanda_servisi.py`, `modules/ajanda.py`: çalışma ajandası, ekip/hat uygunluğu ve koçluk.
+- `ortak/statu_degisimleri.py`, `modules/statu_degisimi.py`: karşı personel + lider onaylı yemek/mola değişimi.
+- `ortak/statu_gecmisi.py`: örnek/gerçek statü verisi ve ölçülen shrinkage.
+- `modules/statu_analizi.py`, `ortak/statu_kartlari.py`: dağılım ve kişisel statü kartları.
+- `modules/onay_merkezi.py`, `ortak/bildirim_popup.py`: ortak onaylar ve giriş bildirimleri.
+- `ortak/donem_uyarisi.py`, `ortak/plan_ihtiyaci.py`: yayınlı dönem uyarısı ve dile özel ihtiyaç.
+- `modules/vardiya_plani/yabanci_dil_plani.py`, `ortak/yayin_hucreleri.py`: dil planı ve atomik hücre/statü düzeltmesi.
+- `ortak/okul_shiftleri.py`, `ortak/senaryolar.py`: okul görünümü ve geçmişten senaryo hesapları.

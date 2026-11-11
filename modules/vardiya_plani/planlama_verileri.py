@@ -11,7 +11,7 @@ from modules.vardiya_plani.vardiya_motoru import minutes
 from ortak.planlama import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("planning_demand_language","language_demands","status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
@@ -30,8 +30,12 @@ def fingerprint(state):
     for key in ('acad_schedules','acad_exam_calendar'):data[key]=state.get(key) or {}
     for key in ('planning_exam_hours','planning_exclude_early_hours'):data[key]=bool(state.get(key,False))
     data['planning_languages']={'tr':True,'en':True,'ar':True,**(state.get('planning_languages') or {})}
+    data['language_demands']=data.get('language_demands') or {}
+    if isinstance(data.get('language_demands'),dict):
+        data['language_demands']={lang:(frame.assign(Tarih=pd.to_datetime(frame.Tarih)).to_json(date_format='iso',orient='split') if isinstance(frame,pd.DataFrame) else frame) for lang,frame in data['language_demands'].items()}
     data['trk_requests']=sorted(data['trk_requests'],key=lambda r:str(r.get('id','')))
-    df = state.get("sp_staffing_result_df")
+    from ortak.plan_ihtiyaci import demand
+    df = demand(state)
     data["demand"] = None if df is None else df.to_json(date_format="iso", orient="split")
     return hashlib.sha256(json.dumps(data, default=str, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -247,7 +251,10 @@ def collect_inputs(state):
 
     for (eid,day,kind,user),finish in last_school_end.items():
         cfg=state.get('academic_transport',{}).get(user,{}).get(kind,{})
-        delay=max(60,int(cfg.get('minutes',60))) if cfg.get('enabled') else 30
+        all_cfg=state.get('academic_transport',{}).get(user,{})
+        if 'travel' in all_cfg or 'dorm' in all_cfg:
+            delay=max(30,round(max(float(all_cfg.get('travel_hours',1)) if all_cfg.get('travel') else 0,float(all_cfg.get('dorm_hours',1)) if all_cfg.get('dorm') else 0)*60))
+        else:delay=max(60,int(cfg.get('minutes',60))) if cfg.get('enabled') else 30
         until=finish+timedelta(minutes=delay)
         if cfg.get('enabled') and cfg.get('available_after'):
             selected=datetime.combine(day,time.fromisoformat(cfg['available_after']))

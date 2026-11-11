@@ -24,7 +24,7 @@ def preview_plan(state,include_auto=False):
     context=state.get('plan_ctx') or {}
     if not context.get('start') or not context.get('end'):
         raise ValueError('Önce plan dönemi seçin.')
-    demand=state.get('sp_staffing_result_df')
+    demand=__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state)
     if demand is None or demand.empty:
         raise ValueError('Önce personel ihtiyacını hesaplayın.')
     staff,fixed,history,unavailable,issues=collect_inputs(state)

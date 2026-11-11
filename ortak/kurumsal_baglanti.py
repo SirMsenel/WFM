@@ -4,7 +4,7 @@ import os
 from urllib.parse import urlparse
 import requests
 
-ROLE_MAP={'agent':'agent','müşteri temsilcisi':'agent','mt':'agent','tl':'tl','takım lideri':'tl','manager':'manager','yönetici':'manager','wfm':'wfm','planlama':'wfm','moderator':'moderator','director':'moderator','müdür':'moderator','planning_manager':'planning_manager','planlama yöneticisi':'planning_manager'}
+ROLE_MAP={'assistant_manager':'assistant_manager','yönetici yardımcısı':'assistant_manager','agent':'agent','müşteri temsilcisi':'agent','mt':'agent','tl':'tl','takım lideri':'tl','manager':'manager','yönetici':'manager','wfm':'wfm','planlama':'wfm','moderator':'moderator','director':'moderator','müdür':'moderator','planning_manager':'planning_manager','planlama yöneticisi':'planning_manager'}
 
 
 def _url(name):
@@ -28,7 +28,7 @@ def normalize_person(row):
     if not all(result.get(k) for k in ('username','sicil_no','employee_id','full_name','position')):raise ValueError('Kurumsal personelde sicil, kullanıcı adı, ad soyad ve geçerli rol gerekli.')
     result['company']=str(row.get('company') or row.get('sirket') or '')
     result['is_active']=str(row.get('is_active',True)).strip().lower() not in {'0','false','no','pasif'}
-    result['is_superuser']=result['position'] in {'moderator','wfm','manager'}
+    result['is_superuser']=result['position'] in {'moderator','wfm','manager','assistant_manager','planning_manager'}
     return result
 
 

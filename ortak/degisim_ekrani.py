@@ -83,7 +83,7 @@ def render_change_form(state,key='change',fixed_kind=None):
 def render_change_approvals(state,key='change_review'):
     role=(state.get('profile') or {}).get('position')
     items=change_requests(state)
-    if role not in {'wfm','manager','moderator','planning_manager'}:items=[r for r in items if r['requester'].get('username')==state['profile'].get('username')]
+    if role not in {'wfm','manager','assistant_manager','moderator','planning_manager'}:items=[r for r in items if r['requester'].get('username')==state['profile'].get('username')]
     if not items:st.info('Henüz değişiklik talebi yok.');return
     st.dataframe([{'Kayıt':r['id'],'İşlem':r['kind'],'İleten':r['requester'].get('full_name'),'Durum':r['status'],'Gerekçe':r['reason']} for r in items],hide_index=True,use_container_width=True)
     if role!='wfm':return

@@ -64,3 +64,12 @@ Yemekler `planned_breaks`, kişisel molalar `break_requests`, yayın onayları `
 Shrinkage artık yemek/mola/koçluk dahil toplam kayıp oranıdır; kurum oranının aynı tanımı kullandığını doğrulayın. Planlı statüler bütçeyi aşarsa yalnızca aşan bölüm ek kayıp oluşturur. Statü süre hakları `status_rules` içindedir; saatleri yerel planlayıcı üretir. Kurum durum/telefon sistemi entegrasyonu bu pakette kurulmaz; otomatik saatler uygulamanın kendi Takip/İzleme ekranlarına düşer.
 
 `notification_reads` tablosu kullanıcı/bildirim bazında okundu durumunu tutar; içerikler yetkili talep/yayın/görüş kaynaklarından türetilir. E-posta veya dış mesaj servisi kurulmuş değildir.
+
+## Faz 3
+Yeni rol `assistant_manager` / Yönetici Yardımcısı; yeni cinsiyet kuralları için `gender` değerlerini Kadın/Erkek olarak eşleştirin. Moderatörün imzalı tokenındaki actor_sub gerçek işlem yapanı korur; hedef hesap yetkileri uygulanır.
+
+`POST /actuals/statuses` yalnızca WFM/Planlama Yöneticisi tokenıyla çalışır. Gövde: `{"rows":[{"id":"kurum-kayit-1","employee_id":"sabit-ic-kimlik","kind":"Mola","start":"2026-11-09 10:00:00","end":"2026-11-09 10:15:00"}]}`. Türler Yemek/Mola/Koçluk/Cuma. Aynı id güncellenebilir; geçmiş kaynak source=actual olarak tutulur. Sicil no önce mevcut personel adaptöründeki sabit iç kimliğe eşlenmelidir. Zamanlar Türkiye yerel saatiyle tutarlı gönderilmelidir. Kurumun telefon/statü sağlayıcısına henüz bağlanmış değildir.
+
+`status_actuals`: gerçekleşme verisi (source=actual/synthetic). `manager_agenda`: yönetim çalışması/koçluk. `status_swap_requests`: iki aşamalı statü değişim onayı. `language_demands`: work_state içinde dile özel ihtiyaç. Yeni tablo/sütunlar ilk açılışta eklenir; kurum modunda sentetik veri/hesap eklenmez. Eksik statü kayıtlarıyla elde edilen shrinkage tam devamsızlık/eğitim kaybı değildir.
+
+Yeni tahmin kayıtlarının metadata.staffing_parameters alanı özgün Erlang ayarlarını taşır; eski kayıtlarda bu alan yoksa özgün tahmini SL bilinmiyor kabul edilir.

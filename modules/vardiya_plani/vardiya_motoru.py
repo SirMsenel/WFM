@@ -171,6 +171,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 night_boundary=ns if ns>=12*60 else ns+1440
                 if finish>night_boundary:
                     problems.append('Gece çalışması yasak olan grup gece dilimine taşıyor')
+        if day.weekday()==4 and rules.get('friday',{}).get('block_men_midday') and staff[eid].get('gender')=='Erkek' and interval[0]<datetime.combine(day,time(14)) and datetime.combine(day,time(12))<interval[1]:problems.append('Cuma 12:00–14:00 erkek personel kısıtı')
         if any(_overlap(interval, block) for block in unavailable.get(eid, [])):
             problems.append("Ders/sınav veya uygun olmama kaydıyla çakışıyor")
         week = day.isocalendar()[:2]
@@ -293,7 +294,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             if day.weekday()>=5:continue
             quota=int(boost.get('weekday_0700_fulltime_extra_count',0))
             used=sum(r['date']==str(day) and r.get('group')=='fulltime' and r.get('start')=='07:00' for r in plan)
-            for eid in sorted(early_members,key=lambda e:(sum((b[1]-b[0]).total_seconds() for r in by_employee[e] if (b:=bounds(r))),e)):
+            for eid in sorted(early_members,key=lambda e:(0 if day.weekday()==4 and rules.get('friday',{}).get('prefer_women_midday') and staff[e].get('gender')=='Kadın' else 1,sum((b[1]-b[0]).total_seconds() for r in by_employee[e] if (b:=bounds(r))),e)):
                 if used>=quota:break
                 if (eid,day) in occupied or (eid,day) in early_off:continue
                 finish=420+duration
@@ -318,7 +319,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             # Least-worked person goes first; ties are stable between reruns.
             def worked(eid):
                 return sum((b[1]-b[0]).total_seconds() for r in by_employee[eid] if (b := bounds(r)))
-            for eid in sorted(members, key=lambda e: (worked(e), e)):
+            for eid in sorted(members, key=lambda e: (0 if day.weekday()==4 and rules.get('friday',{}).get('prefer_women_midday') and staff[e].get('gender')=='Kadın' else 1,worked(e),e)):
                 if (eid, day) in occupied or (eid,day) in off_days:
                     continue
                 earliest = minutes(general.get("weekend_general_start" if day.weekday() >= 5 else "weekday_general_start", "08:00"))

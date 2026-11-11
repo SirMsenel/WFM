@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 DEFAULT_DB = Path(os.environ.get("WFM_WORKSPACE_DB_PATH",str(Path(__file__).resolve().parents[1] / "data" / "wfm_demo.db")))
-STATE_KEYS = ("slot_shrinkage","staffing_parameters","status_rules","planning_bypass","academic_transport","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "acad_schedules", "acad_exam_calendar", "acad_bayram_requests",
+STATE_KEYS = ("planning_demand_language","language_demands","slot_shrinkage","staffing_parameters","status_rules","planning_bypass","academic_transport","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "acad_schedules", "acad_exam_calendar", "acad_bayram_requests",
               "fixed_shift_records", "shift_overrides", "draft_shift_plan", "published_shift_plan",
               "shift_rules", "plan_group_priority", "cf_forecast_options", "sp_forecast_df", "sp_forecast_meta",
               "sp_ratio_profiles", "sp_active_ratio_profile_df", "sp_active_ratio_profile_name",

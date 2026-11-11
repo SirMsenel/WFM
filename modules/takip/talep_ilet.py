@@ -13,7 +13,7 @@ def render():
     state=st.session_state;profile=state.get('profile') or {};role=profile.get('position')
     st.subheader('Yeni Personel Talebi')
     if role not in {'agent','tl'}:st.info('Müşteri Temsilcisi talepleri kendi hesabından iletir; rapor girişini yalnızca Takım Lideri yapar.');return
-    types=['Rapor Bildirimi'] if role=='tl' else ['Yıllık İzin Talebi','Evlilik İzni Talebi','Mazeret İzni Talebi','Ücretsiz İzin Talebi','Doğum İzni Talebi','Gece Vardiyası Talebi','Mesai Talebi','Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi','Genel Talep']
+    types=['Rapor Bildirimi'] if role=='tl' else ['Yıllık İzin Talebi','Evlilik İzni Talebi','Mazeret İzni Talebi','Ücretsiz İzin Talebi','Doğum İzni Talebi','Gece Vardiyası Talebi','Genel Talep']
     typ=st.selectbox('Ne için talep oluşturuyorsun?',types,format_func=TYPE_LABELS.get,key='new_request_type')
     if typ in {'Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi'}:
         from ortak.degisim_ekrani import render_change_form

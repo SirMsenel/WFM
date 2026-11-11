@@ -64,9 +64,14 @@ def render():
         st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-radius:16px;padding:19px 23px;background:linear-gradient(110deg,#eaf5f7,#f5f0fb);color:#24465b;margin:12px 0"><div><small style="letter-spacing:1.5px;font-weight:700">PLAN DÖNEMİ</small><div style="font-size:23px;font-weight:750;margin:8px 0">{start:%d.%m.%Y} → {end:%d.%m.%Y}</div><span>{(end-start).days+1} gün · İhtiyaç verisi hazır</span></div><span style="color:{color};background:white;border:1px solid {color}55;padding:9px 13px;border-radius:30px;font-size:12px;font-weight:750">{status}</span></div>',unsafe_allow_html=True)
         c1,c2,_=st.columns([1,1,2])
         def confirm(value):
+            from ortak.donem_uyarisi import existing_range
+            if value and existing_range(st.session_state,start,end):st.session_state['period_existing_warning']=True;return
             st.session_state['plan_ctx_confirmed']=value;save_keys(st.session_state)
         c1.button('Dönemi Onayla',type='primary',key='vp_confirm',on_click=confirm,args=(True,))
         c2.button('Onayı Kaldır',disabled=not confirmed,key='vp_unconfirm',on_click=confirm,args=(False,))
+    if st.session_state.pop('period_existing_warning',False):
+        from ortak.donem_uyarisi import popup
+        popup(st.session_state,start,end)
     base=df[df.Tarih.between(start,end)].copy()
     if base.empty:
         st.warning('Seçilen dönemde ihtiyaç yok.');return

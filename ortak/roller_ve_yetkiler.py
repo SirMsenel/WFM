@@ -2,8 +2,8 @@
 """Roller ve Yetkiler — bütün değişiklik servislerinin ortak yetki kaynağı."""
 from ortak.calisma_alani_deposu import connect,init_db,dumps,loads
 
-ROLE_LABELS={'agent':'Müşteri Temsilcisi','tl':'Takım Lideri','manager':'Yönetici','wfm':'Planlama','moderator':'Müdür','planning_manager':'Planlama Yöneticisi'}
-DEFAULTS={'agent':{'talep_ilet'},'tl':{'talep_ilet','personel_talebi','vardiya_degistir','rapor_gir'},
+ROLE_LABELS={'assistant_manager':'Yönetici Yardımcısı','agent':'Müşteri Temsilcisi','tl':'Takım Lideri','manager':'Yönetici','wfm':'Planlama','moderator':'Müdür','planning_manager':'Planlama Yöneticisi'}
+DEFAULTS={'assistant_manager':{'personel_incele','vardiya_degistir','kayit_merkezi'},'agent':{'talep_ilet'},'tl':{'talep_ilet','personel_talebi','vardiya_degistir','rapor_gir'},
  'manager':{'personel_incele','vardiya_degistir','kayit_merkezi'},'wfm':{'personel_onayla','vardiya_degistir','kayit_merkezi','yetki_yonet'},
  'planning_manager':{'kayit_merkezi','personel_incele'},'moderator':{'personel_incele','vardiya_degistir','kayit_merkezi'}}
 CAPTIONS={'talep_ilet':'Talep iletme','personel_talebi':'Personel ekleme/çıkarma önerme','personel_incele':'Personel talebi yönetici onayı',
@@ -34,7 +34,7 @@ def permissions(state,role=None):
 
 
 def require(state,capability):
-    if capability=='kayit_merkezi' and (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator','planning_manager'}:raise ValueError('Kayıt Merkezi yalnızca Planlama, Yönetici ve Müdür içindir.')
+    if capability=='kayit_merkezi' and (state.get('profile') or {}).get('position') not in {'wfm','manager','assistant_manager','moderator','planning_manager'}:raise ValueError('Kayıt Merkezi yalnızca Planlama, Yönetici ve Müdür içindir.')
     if capability not in permissions(state):raise ValueError('Bu işlem için yetkiniz yok: '+CAPTIONS.get(capability,capability))
 
 

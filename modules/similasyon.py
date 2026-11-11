@@ -18,27 +18,28 @@ def inverse_erlang(agents,aht=300,target=.8,seconds=20,occupancy=.85):
 
 
 def render():
-    s=st.session_state;st.title('🔮 Similasyon');people=[p for p in get_people(s) if p.get('position')=='agent']
-    a,b,c=st.columns(3);groups=a.multiselect('Çalışma grupları',list(WORK_LABELS),default=list(WORK_LABELS));months=b.slider('Gelecek ay sayısı',1,12,3);start=c.date_input('Senaryo başlangıcı',value=pd.Timestamp('2026-12-01').date())
-    staff=sum(p['work_type'] in groups for p in people);a,b,c=st.columns(3);headcount=a.number_input('Başlangıç personel',0,100000,staff);growth=b.number_input('Aylık çağrı artışı (%)',-90.,300.,5.);attrition=c.number_input('Aylık ayrılma (%)',0.,100.,2.)
-    a,b,c,d=st.columns(4);aht=a.number_input('AHT (sn)',30,3600,300);shrink=b.slider('Diğer kayıp (%)',0,90,30);days=c.slider('Kişi başına haftalık gün',1,6,5);hours=d.number_input('Günlük çalışma (saat)',1.,12.,8.)
-    from ortak.gunluk_tahmin_deposu import saved_daily,daily_label
-    records=saved_daily(s['workspace_db_path']);byid={r['id']:r for r in records};selected=st.selectbox('Tahmin kaynağı',['history']+list(byid),format_func=lambda i:'Son 30 gün aynı hafta günü' if i=='history' else daily_label(byid[i],s['workspace_db_path']),key='sim_daily')
+    from ortak.senaryolar import simulate
     from ortak.calisma_alani_deposu import load_calls
-    history=load_calls(False,s['workspace_db_path']);history=history.tail(30)
-    if history.empty:st.info('Çağrı geçmişi gerekli.');return
-    profile=s.get('sp_active_ratio_profile_df');rows=[]
-    for i,month in enumerate(pd.date_range(pd.Timestamp(start).replace(day=1),periods=months,freq='MS')):
-        dates=pd.date_range(month,month+pd.offsets.MonthEnd());frame=byid[selected]['frame'] if selected!='history' else None;forecast=[]
-        for day in dates:
-            known=frame[pd.to_datetime(frame.tarih).dt.normalize()==day] if frame is not None else pd.DataFrame()
-            same=history[pd.to_datetime(history.tarih).dt.weekday==day.weekday()]
-            forecast.append(float(known.y_pred.iloc[0]) if not known.empty else float(same.cagri_sayisi.mean() if not same.empty else history.cagri_sayisi.mean())*(1+growth/100)**(i+1))
-        peak_share=float(profile['Oran(%)'].max())/100 if profile is not None and not profile.empty else 1/32
-        peak=max(forecast)*peak_share;net=erlang_c_required_agents(peak,aht,1800,.8,20,.85)['m'];needed=math.ceil(net/(1-shrink/100)*7*16/(days*hours));available=math.floor(headcount*(1-attrition/100)**(i+1));agents=math.floor(available*days*hours/(7*16)*(1-shrink/100))
-        rows.append({'Ay':month.strftime('%Y-%m'),'Çağrı tahmini':round(sum(forecast)),'Mevcut personel':available,'Gerekli personel':needed,'Önerilen alım':max(0,needed-available),'Tepe yarım saat çağrı kapasitesi':round(inverse_erlang(agents,aht))})
-    table=pd.DataFrame(rows);st.dataframe(table,hide_index=True,use_container_width=True);st.line_chart(table.set_index('Ay')[['Mevcut personel','Gerekli personel']]);st.caption('08–24 aralığında ortalama kapasite senaryosu; gerçek vardiya çizelgesi değildir. Eksik tahmin tarihleri aynı hafta günü geçmişiyle tamamlanır; büyüme yalnızca bu tamamlamalara uygulanır. Alım önerisi kurum İK sistemine gönderilmez.')
-    month=st.selectbox('Aksiyon ayı',table.Ay.tolist());kind=st.selectbox('Aksiyon',['Personel alım önerisi','Olağan dışı durum aksiyonu']);note=st.text_area('Aksiyon gerekçesi')
+    from ortak.modern_kartlar import metric_cards
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    import plotly.express as px
+    s=st.session_state;st.title('🔮 Similasyon');st.caption('Personel ve çağrı senaryolarının hedef servis seviyesine etkisini karşılaştır. Shrinkage, yemek/mola/koçluk dahil çağrı alınamayan sürenin oranıdır.')
+    people=[p for p in get_people(s) if p.get('position')=='agent'];a,b,c=st.columns(3);groups=a.multiselect('Çalışma grupları',list(WORK_LABELS),default=list(WORK_LABELS));months=b.slider('Gelecek ay sayısı',1,24,12);today=datetime.now(ZoneInfo('Europe/Istanbul')).date();start=c.date_input('Senaryo başlangıcı',value=(pd.Timestamp(today)+pd.offsets.MonthBegin(1)).date())
+    staff=sum(p['work_type'] in groups for p in people);a,b,c=st.columns(3);headcount=a.number_input('Başlangıç personel',0,100000,staff);growth=b.number_input('Aylık çağrı büyümesi (%)',-50.,100.,2.);attrition=c.number_input('Aylık ayrılma (%)',0.,50.,2.)
+    a,b,c,d=st.columns(4);sl=a.slider('Hedef servis seviyesi (%)',50,99,80);aht=b.number_input('AHT (sn)',30,3600,300);shrink=c.slider('Toplam shrinkage (%)',0,90,30);seconds=d.number_input('Hedef cevap süresi (sn)',5,120,20,5)
+    a,b=st.columns(2);days=a.slider('Kişi başına haftalık gün',1,6,5);hours=b.number_input('Günlük çalışma (saat)',1.,12.,8.)
+    from ortak.gunluk_tahmin_deposu import saved_daily,daily_label
+    records=saved_daily(s['workspace_db_path']);byid={r['id']:r for r in records};selected=st.selectbox('Tahmin kaynağı',['history']+list(byid),format_func=lambda i:'Son 12 ay geçmiş + gün/mevsim örüntüsü' if i=='history' else daily_label(byid[i],s['workspace_db_path']),key='sim_daily');profile=s.get('sp_active_ratio_profile_df');peak_share=float(profile['Oran(%)'].max())/100 if profile is not None and not profile.empty else 1/32
+    try:table,meta=simulate(load_calls(False,s['workspace_db_path']),start,months,headcount,aht,shrink/100,sl/100,seconds,growth=growth/100,attrition=attrition/100,days=days,hours=hours,peak_share=peak_share,forecast=byid[selected]['frame'] if selected!='history' else None)
+    except ValueError as e:st.info(str(e));return
+    metric_cards([('Geçmiş gün',meta['history_days']),('Ölçülen geçmiş hata',f"%{meta['wape']:.1f}"),('Senaryo farkı',f"±%{meta['spread']:.1f}")]);st.caption(f"Geçmiş: {meta['history_start']} – {meta['history_end']}. İyi senaryoda çağrı/ayrılma daha düşük, kötüde daha yüksektir. Aralık geçmiş hata oranından türetilir; güven aralığı değildir.")
+    fig=px.line(table,x='Ay',y='Gerekli personel',color='Senaryo',markers=True,color_discrete_map={'İyi':'#269d89','Normal':'#6983bb','Kötü':'#c96f72'});st.plotly_chart(fig,use_container_width=True)
+    fig=px.line(table,x='Ay',y='Simüle SL (%)',color='Senaryo',markers=True);fig.add_hline(y=sl,line_dash='dash',annotation_text='Hedef SL');st.plotly_chart(fig,use_container_width=True);st.dataframe(table,hide_index=True,use_container_width=True)
+    st.caption('08–24 hizmet penceresi için ortalama kapasite senaryosudur; gerçek vardiya optimizasyonunun yerini almaz. Kayıtlı tahmin olmayan tarihler geçmişten tamamlanır. Alım önerileri otomatik İK emri değildir.')
+    rows=table.to_dict('records');path=s['workspace_db_path']
+    with connect(path) as db:db.execute('CREATE TABLE IF NOT EXISTS simulation_actions(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')
+    month=st.selectbox('Aksiyon ayı',sorted(table.Ay.unique()));kind=st.selectbox('Aksiyon',['Personel alım önerisi','Olağan dışı durum aksiyonu']);note=st.text_area('Aksiyon gerekçesi')
     path=s['workspace_db_path']
     with connect(path) as db:db.execute('CREATE TABLE IF NOT EXISTS simulation_actions(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')
     if st.button('Aksiyonu Takibe Al',disabled=not note.strip()):

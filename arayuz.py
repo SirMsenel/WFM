@@ -254,6 +254,8 @@ PAGES = [
     "📈 Güncel Takip Analizi",
     "🗓️ Vardiya Planı",
     "📊 İzleme",
+    "📆 Ajanda",
+    "📥 Onay Merkezi",
     "🔮 Similasyon",
     "🧾 Fatura Mutabakat",
     "👥 Personel Takip",
@@ -366,7 +368,7 @@ elif main == "📅 Mesai Planı":
 elif main == "🗓️ Vardiya Planı":
     st.title(main)
     sections('nav_roster',{'Plan Dönem Seçimi':render_plan_period,'Vardiya Kuralları':render_current_plan,
-                          'Talepler':render_requests_tab,'Vardiya Saatleri':render_shift_hours,
+                          'Talepler':render_requests_tab,'Vardiya Saatleri':render_shift_hours,'Yabancı Dil Planı':__import__('modules.vardiya_plani.yabanci_dil_plani',fromlist=['render']).render,
                           'Oluştur & Kontrol & Yayınla':render_publish,'Yayın Yönetimi':render_publication_management,'Yayın Onayları':__import__('modules.yayin_onay_ekrani',fromlist=['render']).render})
 elif main == "📈 Güncel Takip Analizi":
     render_history_comparison()
@@ -376,9 +378,8 @@ elif main == "👥 Personel Takip":
     st.title(main)
     sections('nav_personnel',{'Personel Talepleri':render_personel_talep,'Personel Listesi':render_personnel_list,'Personel Ekleme / Ayrılma':__import__('modules.personel_takip.personel_yasam_dongusu',fromlist=['render']).render})
 elif main == "📌 Takip":
-    st.title(main)
     sections('nav_tracking',{'Benim Vardiyam':render_my_shift,'Ders Programı':render_class_schedule,
-                            'Talep İlet':render_requests_submit,'Talep Sonuç':render_requests_inbox,'İşlem Özeti':__import__('modules.izleme',fromlist=['render']).render})
+                            'Talep İlet':render_requests_submit,'Talep Sonuç':render_requests_inbox})
 elif main == "🗓️ Tüm Vardiyalar":
     st.title(main)
     if profile.get("position")!="agent":st.toggle("Ayrılan personellerin eski vardiyalarını da göster",value=False,key="all_include_inactive")
@@ -386,6 +387,12 @@ elif main == "🗓️ Tüm Vardiyalar":
                               'Yabancı Dil':render_all_foreign_language,'Akademi':render_all_academy,
                               'Gece':render_all_night,'Yıllık İzin':render_all_annual_leave,
                               'Hafta Sonu Sorumlu':render_all_weekend_owner,'Değişim Alanı':__import__('modules.tum_vardiyalar.vardiya_duzenleme',fromlist=['render']).render})
+elif main == '📆 Ajanda':
+    from modules.ajanda import render
+    render()
+elif main == '📥 Onay Merkezi':
+    from modules.onay_merkezi import render
+    render()
 elif main == "📊 İzleme":
     from modules.mola_izleme import render as render_monitor
     render_monitor()
@@ -402,5 +409,7 @@ elif main == "⚙️ Ayarlar":
     from modules.ayarlar import render as render_settings
     render_settings()
 
+from ortak.bildirim_popup import render as render_welcome_notices
+render_welcome_notices(st.session_state)
 from ortak.calisma_alani_deposu import save_keys
 save_keys(st.session_state)

@@ -498,7 +498,9 @@ def _compact_period():
     from zoneinfo import ZoneInfo
     now=datetime.now(ZoneInfo('Europe/Istanbul')).date()
     first=now.replace(day=1);last=now.replace(day=calendar.monthrange(now.year,now.month)[1])
-    selected=st.date_input('Vardiya tarih aralığı',value=(first,last),key='my_shift_range_v2')
+    with st.container(border=True):
+        st.markdown('#### İncelenecek Vardiya Dönemi')
+        selected=st.date_input('Vardiya tarih aralığı',value=(first,last),key='my_shift_range_v2')
     if len(selected)!=2:st.info('Başlangıç ve bitiş tarihini seçin.');return None
     return selected
 
@@ -523,7 +525,7 @@ def render():
     cards=[('Toplam saat',f"{summary['total_hours']:.1f}"),('Çalıştığı gün',summary['work_days']),('OFF',summary['off_days']),('Rapor',counts.get('RAPOR',0)),('Yıllık izin',counts.get('YILLIK_IZIN',0)),('Diğer izin',sum(v for k,v in counts.items() if k not in {'OFF','RAPOR','YILLIK_IZIN'}))]
     from ortak.modern_kartlar import metric_cards
     metric_cards(cards)
-    st.markdown('#### Günün Saatlerine Göre Çalışma')
+
     columns=st.columns(5)
     for col,(name,hint,_,__,bg,fg) in zip(columns,WINDOWS):
         with col:
@@ -544,19 +546,11 @@ def render():
             label='Çalışma'
         output.append({'Tarih':r['date'],'Gün':DAY_NAMES[pd.Timestamp(r['date']).weekday()],'Durum':label,'Başlangıç':r.get('start') or '—','Bitiş':r.get('end') or '—','Saat':f'{round(hours*60)//60:02d}:{round(hours*60)%60:02d}'})
     from ortak.takvim_gorunumu import render_calendar
-    render_calendar(records,[target],start,end,key='my_published_roster')
+    for month in pd.period_range(start,end,freq='M'):
+        left=max(start,month.start_time.date());right=min(end,month.end_time.date());st.markdown(f'#### {month.year} · {month.month:02d}')
+        render_calendar(records,[target],left,right,key='my_published_roster_'+str(month))
     from ortak.mola_servisi import records as status_records
     statuses=[x for x in status_records(st.session_state) if str(x['employee_id'])==str(target['employee_id']) and str(start)<=x['start'][:10]<=str(end) and x['status']!='İptal']
     if statuses:
-        with st.expander('Yemek, mola ve görüşme takvimim'):
-            st.dataframe([{'Tarih':pd.Timestamp(x['start']).strftime('%d.%m.%Y'),'Statü':x['kind'],'Başlangıç':pd.Timestamp(x['start']).strftime('%H:%M'),'Bitiş':pd.Timestamp(x['end']).strftime('%H:%M')} for x in statuses],hide_index=True,use_container_width=True)
-    if _is_academy(target):
-        with st.expander('Akademi Ücret Hesabı'):
-            dense=0.
-            for record in records:
-                interval=bounds(record)
-                if not interval:continue
-                for day in pd.date_range(start,end):
-                    a=max(pd.Timestamp(interval[0]),day+pd.Timedelta(hours=11));b=min(pd.Timestamp(interval[1]),day+pd.Timedelta(days=1))
-                    if b>a:dense+=(b-a).total_seconds()/3600
-            _academy_wage_ui(summary['total_hours'],dense,max(0,summary['total_hours']-dense))
+        from ortak.statu_kartlari import render_status_cards
+        render_status_cards(statuses)

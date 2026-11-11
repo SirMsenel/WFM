@@ -38,7 +38,7 @@ def prepare_manual(state,employee_ids,start,end,kind,begin=None,finish=None,note
                     b=f'{minute//60%24:02d}:{minute%60:02d}'
             candidates.append({'employee_id':eid,'date':key[1],'shift_code':kind,'start':a,'end':b,'source':'manual_candidate','note':note})
     if not candidates:return [],warnings
-    result=generate_plan(staff,state['sp_staffing_result_df'],state['shift_rules'],list(state['shift_rules']['work_type']),
+    result=generate_plan(staff,__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state),state['shift_rules'],list(state['shift_rules']['work_type']),
                          state['plan_ctx']['start'],state['plan_ctx']['end'],fixed=list(rows.values())+candidates,
                          history=history,unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),
                          languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),reject_invalid_sources=('manual_candidate',))

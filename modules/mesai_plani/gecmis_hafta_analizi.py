@@ -118,4 +118,4 @@ def render():
         sections('nav_interval_history',{'Dağılım Başarısı':render_accuracy,'Geçmiş Referanslar':render_interval_references})
     from modules.mesai_plani.canli_izleme import render as live
     def current():sections('nav_live_tracking',{'Servis Seviyesi İzleme':lambda:live('sl'),'Tahmin İzleme':lambda:live('forecast')})
-    sections('nav_history',{'Canlı İzleme':current,'Günlük':render_daily,'30 Dakikalık':interval})
+    sections('nav_history',{'Canlı İzleme':current,'Günlük':render_daily,'30 Dakikalık':interval,'Statü Dağılımları':__import__('modules.statu_analizi',fromlist=['render']).render})

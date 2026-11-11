@@ -134,7 +134,7 @@ def render():
                         'Hafta':p.get('meta',{}).get('week_start','Genel dağılım'),
                         'Oluşturma':str(p.get('created_at',''))[:10]} for p in profiles])
     table_key='profile_checks_'+hashlib.sha1(('|'.join(rows.Profil)+'|'+str(active)).encode()).hexdigest()[:10]
-    edited=st.data_editor(rows,hide_index=True,use_container_width=True,key=table_key,
+    edited=st.data_editor(rows.style.apply(lambda row:['background-color:#e5f5ef;color:#236a56' if row['Aktif'] else 'background-color:#f6f9fc;color:#35576b' for _ in row],axis=1),hide_index=True,use_container_width=True,key=table_key,
                          disabled=['Profil','Aktif','Hafta','Oluşturma'],
                          column_config={'Seç':st.column_config.CheckboxColumn('Seç'),'Aktif':st.column_config.CheckboxColumn('Aktif',disabled=True)})
     selected=edited.loc[edited['Seç'],'Profil'].tolist()

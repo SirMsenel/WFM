@@ -35,7 +35,7 @@ def refresh(state):
 
 def visible(request, profile):
     role = profile.get("position")
-    if role in {"wfm","manager","moderator","planning_manager"}:
+    if role in {"wfm","manager","assistant_manager","moderator","planning_manager"}:
         return True
     if request.get("created_by") == profile.get("username"):
         return True
@@ -163,7 +163,7 @@ def act(state, request, action, note=""):
             complete = set(request.get("assigned_tls",[])) <= set(approvals)
             status,new_queue,label = (("Planlamaya İletildi","WFM","Takım lideri onayladı ve planlamaya iletti") if complete
                                        else ("Diğer TL Onayı Bekliyor","TL_SWAP","Takım lideri onayladı; diğer lider bekleniyor"))
-    elif action in {"apply","reject"} and role in {"wfm","manager","moderator","planning_manager"} and queue=="WFM":
+    elif action in {"apply","reject"} and role in {"wfm","manager","assistant_manager","moderator","planning_manager"} and queue=="WFM":
         if action == "reject" and not note.strip():
             raise ValueError("Ret gerekçesi yazın.")
         if action=="apply" and request.get("type")=="Vardiya Değişim Talebi":

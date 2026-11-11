@@ -25,7 +25,7 @@ def render_fixed_records(code,year,month):
                 with st.expander('Gece eksiklerini göster'):st.dataframe(missing,hide_index=True,use_container_width=True)
             elif state.get('shift_rules',{}).get('night',{}).get('enabled'):st.success('Seçili plan dönemi için gece kontrolleri tamam.')
         except (ValueError,KeyError):pass
-    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator','planning_manager'}:return
+    if (state.get('profile') or {}).get('position') not in {'wfm','manager','assistant_manager','moderator','planning_manager'}:return
     with st.expander('Kesin Kayıt Ekle / Kaldır'):
         all_people={str(p['employee_id']):p for p in get_people(state) if p.get('position')=='agent'}
         selected=st.multiselect('Personeller',list(all_people),format_func=lambda i:all_people[i]['full_name'],key='fixed_people_'+code)

@@ -10,17 +10,19 @@ from ortak.takvim_gorunumu import render_calendar
 
 
 def render():
-    s=st.session_state;st.title('📊 İzleme');profile=s['profile'];person=pick_person(s,profile,'break_monitor')
+    s=st.session_state;profile=s['profile'];person=pick_person(s,profile,'break_monitor')
     if not person:return
     render_person(person);today=datetime.now(ZoneInfo('Europe/Istanbul')).date()
-    day=st.date_input('İzlenecek gün',value=today,key='break_day');eid=str(person['employee_id']);rows=[r for r in history_rows(s,day,day) if str(r['employee_id'])==eid]
+    day=today;st.markdown(f'### {today:%d.%m.%Y} · Bugünkü Vardiyam');eid=str(person['employee_id']);rows=[r for r in history_rows(s,day,day) if str(r['employee_id'])==eid]
     render_calendar(rows,[person],day,day,height=150,key='personal_break_calendar')
     reserved=[r for r in records(s) if str(r['employee_id'])==eid and pd.Timestamp(r['start']).date()==day]
     if reserved:
-        st.markdown('#### Planlı Statülerim')
-        for r in reserved:
-            color='#6c71bc' if r['kind']=='Yemek' else '#238b86'
-            st.markdown(f'<div style="border-left:5px solid {color};padding:12px;margin:7px 0;background:#f1f7fa;border-radius:10px"><b>{r["kind"]}</b> · {pd.Timestamp(r["start"]):%H:%M}–{pd.Timestamp(r["end"]):%H:%M} · {r["status"]}</div>',unsafe_allow_html=True)
+        from ortak.statu_kartlari import render_status_cards
+        render_status_cards([r for r in reserved if r['status']!='İptal'])
+    if profile.get('position')=='agent':
+        from modules.statu_degisimi import render_personal,render_requests
+        render_personal(s,day)
+        with st.expander('Statü değişim taleplerim'):render_requests(s)
     st.markdown('#### Mola uygunluğu · 30 dakikalık dilimler')
     options=[];duration=int(s.get('status_rules',{}).get('groups',{}).get(person['work_type'],{}).get('break_minutes',15))
     for slot in range(48):

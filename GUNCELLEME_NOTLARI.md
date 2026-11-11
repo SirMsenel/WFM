@@ -1,3 +1,55 @@
+# WFM — Faz 3 / 11 Kasım 2026 / 9. güncelleme
+
+## Yetki, bildirim ve yönetim
+- Moderatör kullanıcı geçişinde hedef hesabın gerçek rol/yetkileri ve ekip kapsamı kullanılır; Müşteri Temsilcisi, Takım Lideri, Planlama ve Yönetici Yardımcısı geçişleri API düzeyinde kontrol edildi. İşlemler gerçek kayda yazılır; asıl moderatör aktörü denetimde korunur. Aynı gerçek kişinin farklı hesap görünümleri iki bağımsız yayın onayı sayılmaz.
+- Her girişte/switch işleminde o kullanıcıya ait okunmamış bildirimler renkli karşılama penceresinde gösterilir. Okundu bilgisi kullanıcıya özeldir; bildirim kutusuna geçilebilir.
+- Yeni 📥 Onay Merkezi: Plan Yayın Onayları, Personel İşlemleri, Personel Talepleri, Statü Değişimleri. Yetkili rol kendi kararlarını verir. Yönetici, Yönetici Yardımcısı ve Takım Lideri için 📆 Ajanda eklendi.
+- `assistant_manager` = Yönetici Yardımcısı rolü eklendi. Demo hesabı `yonetici_yardimcisi / 1234`; kurumsal modda bu hesap üretilmez. Müdür/Planlama rollerinin eski iş akışları korunur.
+- Ajandaya kişi kendi çalışma aralıklarını girer. Koçluk için liderin çalışma aralığı, personelin yayınlanmış vardiyası, başka görüşmeler/statüler, hat kapasitesi ve aylık koçluk hedefi birlikte kontrol edilir. Takım lideri kendi ekibine; üst roller yetkili oldukları kapsama atama yapar. Görüşme personelin takvimine ve bildirimine düşer.
+
+## Statü planlama, geçmiş veri ve değişimler
+- Vardiyanın ilk/son saatinde mola verilmez. Her grubun başlangıç/bitimden kaç dakika korunacağı Statü Kuralları → Mola altında değiştirilebilir (varsayılan 60/60). Otomatik mola, kişisel mola talebi ve mola değişimi bu kuralları kullanır; saatlik kullanım sınırı da korunur.
+- Yemek otomatik yerleştirilir. Yemek hakkı Yok ise yemek süresi ve minimum çalışma koşulu sıfırlanır. Farklı yemek süresi uygulanacak hafta günleri ve süreleri seçilebilir; Cuma veya başka bir gün uzatılabilir.
+- Cuma 12–14 aralığını kapsayan vardiyalarda kadınlara öncelik verilebilir. Ayrıca bilinen Erkek personel için kesin engel isteğe bağlıdır. Tercih varsayılan açık, kesin engel kapalıdır; bilinmeyen cinsiyet tahmin edilmez. Kurumsal kayıtta cinsiyet Kadın/Erkek olarak eşleştirilmelidir.
+- Koçluk varsayılan olarak takım liderinin ajandasından atanır. İstenirse Statü Kuralları'ndan eski otomatik parçalama seçeneği kullanılabilir. Aylık varsayılan kişi başı 60 dakika ve önceki yayınlarda kullanılan süreler korunur.
+- Yemek/mola değişimi aynı gün, ekip, çalışma grubu, dil ve eş süreyle yapılır. Önce karşı personel, ardından ilgili takım lideri veya Planlama onaylar. Son karar sırasında güncel vardiya ve statüler tekrar kontrol edilir; çakışma/ilk-son saat/saatlik mola sınırı ihlali kabul edilmez. Onay öncesinde saatler değişmez.
+- Sentetik modda 1 Ocak–9 Kasım 2026 vardiya geçmişinden yaklaşık 116 bin yemek/mola/koçluk gerçekleşmesi üretilir. Bunlar gerçek kullanım değildir; source=synthetic etiketi taşır. Yeni örnekler bir defa eklenir, mevcut kullanıcı yayınları ezilmez. Gerçek kullanım ayrı status_actuals tablosuna API ile beslenebilir.
+- Personel Hesap'ta geçmiş kullanım aralığı seçilip yarım saatlik shrinkage önerisi alınabilir; dilim kurallarına aktarılıp elle değiştirilebilir. Öneri kayıtlı statü süresi / kayıtlı çalışma süresidir. Çakışan statüler iki kez sayılmaz; kayıtlı olmayan kayıplar bu orana dahil değildir. Eksik kurum kayıtlarıyla tam kayıp tahmini olduğu varsayılmamalıdır.
+- Dilim tablosundaki oran açıkça Shrinkage (%) olarak adlandırıldı; hesapta bu oran kullanılır. Toplam shrinkage içinde planlı statüyü ikinci kez düşmeme kuralı korunur.
+
+## Mesai planı ve canlı/geçmiş analiz
+- Interval özel gün etkileri çağrı tahmininin aynı ekstre/son ödeme/bayram/arife/resmi tatil/Ramazan takvimini kullanır. Hedef tarihten sonraki gerçekleşmeler eğitime girmez. Aynı özel dönemin yeterli benzer günü varsa dağılım şekline etki eder; yetersizse temel dağılım korunur. Bu ortak takvim test edildi.
+- Öneri gerekçeleri geçmiş pencerelerin katkısı ve anlaşılır pay-fark kartlarıyla gösterilir. “Gerçek %4, öneri %5 → 1 puan fark” açıklaması eklendi; özel günler vurgulu kartlardır.
+- Çağrı adedi görünümü tek matristir: ilk satır günlük toplam, altında 48 yarım saat. Gün toplamları ayrı küçük düzenleme alanından değiştirilebilir; ikinci veri tablosu yoktur. Kayıt Seçim de aynı görünümü kullanır; aktif profiller renklendirildi.
+- Servis seviyesi izleme tablosu/grafiği/kartında Tahmini SL gösterilir. Yeni kullanılan tahmin sürümleri Erlang parametrelerini arşivler. Tahmini SL, gerçekleşen AHT'den veya sonradan değişen ayarlardan yeniden türetilmez. Eski sürümde özgün parametre yoksa tahmini SL boş ve açıklamalı gösterilir; uydurulmaz.
+- İzleme seçimleri daha kısa, yan yana yerleştirildi. Yeni Statü Dağılımları ekranında Canlı/Geçmiş ve Planlanan/Gerçekleşen ayrımı vardır. Yarım saat dağılımı, kullanım adedi × ortalama süre ve toplam kişi-saat kartları gösterilir. Sentetik gerçekleşme açıkça etiketlenir. Geçmiş kapsamda ayrılmış personeller de yetki kapsamıyla okunabilir.
+
+## Vardiya planı, yayın ve öneriler
+- Personel Özeti'ndeki çalışma alanı iki parçadır: solda saat hedefi tanımı, sağda seçili aralık çalışma grafiği ve hedef dönemi için kullanılan/kalan kapasite. Saat hedefleri otomatik motorun kişi başına üst sınırı olmaya devam eder.
+- Taleplerin listesi, filtreleri ve içerik kartları sadeleştirildi; istenen açıklama kaldırıldı. Grup sırası kuralları renkli kartlar, ihtiyaç halkaları daha açık başlıklar kullanır.
+- Yayındaki tarih/dil için yeni ihtiyaç hesaplama veya dönem onayı denenirse popup gösterilir. Vardiya atama motorunun mevcut yayın kilidi de korunur.
+- Yabancı Dil Planı alanında İngilizce/Arapça ayrı ihtiyaç matrisi kaydedilip planlanabilir. Dilin ihtiyacı ortak veriyi ezmez; diğer dilin yayını korunur. Ortak havuzdan ilk alınan ihtiyaçların kullanıcı tarafından bu dile göre düzeltilip kaydedilmesi gerekir; dil bazlı çağrı tahmini kendiliğinden üretilmez.
+- Yayın Yönetimi'nde Planlama günlük/personel filtreli hücrelerden saat/statü düzenleyebilir. Gerekçe zorunludur; okul, dinlenme, grup üst süresi ve ardışık gün kuralları kontrol edilir. Planlama düzeltmesi, çalışanların karşılıklı vardiya değişiminden ayrı yetkili işlemdir; haftalık OFF/saat korunumu olağan karşılıklı değişim akışında devam eder.
+- Doğrudan düzeltmede etkilenen yemek/molalar aynı işlemde yeniden planlanır. Sığan koçluk korunur; yeni vardiyaya sığmayan görüşme kaldırılır. Eski/yeni vardiya ve statüler denetim kayıtlarına yazılır, personele bildirim düşer. Rapor girişi için Takım Lideri kuralı korunur. Geçmiş yayını komple geri alma yasağı devam eder.
+- Yayın Onayları/Onay Merkezi kişi-roster tablosu yerine doluluk, eksik/fazla 7×48, statü dağılımı ve onaylayan kartlarını gösterir. Çok haftalı dönemde incelenecek hafta seçilir. Kaynakları değişen taslağa yeni onay kaydedilmeden önce güncellik kontrol edilir; reddedip yeniden üretmek gerekir. Son gerekli onay yayını otomatik yapar.
+- Öneriler Bloklar/Yarım saatler seçimi ve personel kartlarıyla gösterilir. Simülasyondaki izin talebi gerekçeyle iptal edilip mesai uygunluğu yeniden değerlendirilebilir. İptal otomatik mesai garantisi değildir; yeni öneriler yine çalışma kurallarına uyar.
+
+## Kişisel İzleme ve Takip
+- İzleme iç başlığı kaldırıldı; yalnızca bugünkü yayınlanmış vardiya ve planlı statüler gösterilir. Yemek/mola değişim istekleri ve karşı personel onayı buradadır.
+- Takip iç başlığı, İşlem Özeti sekmesi, Akademi ücret hesabı ve saat dağılımının gereksiz başlığı kaldırıldı. Dönem seçimi ayrı kutuda; çok aylı vardiyalar ay ay alt alta takvimlerdir. Yemek/mola/koçluk saatleri kartlara dönüştü.
+- Öğrenci ders programı shift görünümünde sunulur; düzenleme tablosu kapalı bir giriş alanında korunur. Ulaşım/yurt iki küçük seçim ve saat sayacıyla tanımlanır. İkisi birlikte seçilirse **uzun olan gecikme** uygulanır (kullanıcının seçimi); süreler toplanmaz. Sorun yoksa son ders/sınav bitiminden 30 dakika sonra uygunluk başlar.
+- Vardiya değişimi, ek mesai, erken çıkış ve geç giriş talepleri Takip → Talep İlet listesinden çıkarıldı. Tüm Vardiyalar → Değişim Alanı ve Ek Mesai Talebi üzerinden iletilir.
+
+## Similasyon
+- Çağrı tahmini, personel sayısı, AHT, hedef SL/cevap süresi ve toplam shrinkage ile 12 aya kadar (isteğe bağlı 24) iyi/normal/kötü senaryolar karşılaştırılır. “Diğer kayıp” ifadesi kaldırıldı.
+- Senaryo başlangıcından önceki son 12 aylık gün/mevsim örüntüsü ve geçmişe dönük aynı gün hata ölçümü kullanılır. İyi/kötü farkı bu hatadan türetilir; istatistiksel güven aralığı değildir. Ayrılma ve kullanıcı büyüme varsayımları uygulanır. Gerekli personel, alım önerisi ve simüle SL grafikleri gösterilir.
+- 08–24 ortalama hizmet penceresi varsayımı vardır; sonuç gerçek vardiya optimizasyonu veya otomatik işe alım emri değildir. Kayıtlı tahmin olmayan günler geçmişten tamamlanır.
+
+## Güncelleme ve bağlantı
+Yeni ZIP'i ayrı klasöre çıkarın. Eski data/auth_demo.db ve data/wfm_demo.db dosyalarının kopyalarını aktarın; iki terminali kapatıp yeni klasörden çalıştırın. Şema/örnek veri bir defa güncellenir. Eski bekleyen taslaklar yeni kurallarla yeniden oluşturulmalıdır. Kurum statü/giriş/telefon bağlantısı bu pakette yapılmış değildir; API ve alanlar KURUMSAL_BAGLANTI.md içinde.
+
+---
+
 # WFM — Faz 2 / 10 Kasım 2026 / 8. güncelleme
 
 ## Çağrı verisi ve analiz

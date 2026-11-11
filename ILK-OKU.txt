@@ -1,4 +1,4 @@
-WFM — 10 KASIM 2026 / FAZ 2 (8. GÜNCELLEME) — macOS
+WFM — 11 KASIM 2026 / FAZ 3 (9. GÜNCELLEME) — macOS
 
 1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
 2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
@@ -69,3 +69,19 @@ FAZ 2 KULLANIMI
 - Güncel Takip Analizi > Canlı İzleme: Servis Seviyesi İzleme/Tahmin İzleme.
   Kabul edilen farkı üstten belirle; renkler bu eşiğe göre değişir.
 - Bildirim kutusu sol menüde ve Ayarlar > Bildirimler altında.
+
+FAZ 3
+- Onay Merkezi ve Ajanda yeni ana ekranlardır.
+- Takım lideri önce Ajanda'ya çalışma saatini girer, sonra uygun personeline
+  koçluk atar. Koçluk aylık hedeften düşer; personelin İzleme ekranında görünür.
+- Yemek/mola değişimi: İzleme > Yemek / Mola Değişimi İste. Önce karşı personel,
+  sonra lider onaylar. İlk/son saat mola kuralı varsayılan 60/60 dakikadır.
+- Yemek Yok, farklı gün yemek süresi ve Cuma tercihleri Statü Kuralları'ndadır.
+- Mesai Planı > Personel Hesap: geçmiş statülerden örnek shrinkage önerisi.
+- Güncel Takip Analizi > Statü Dağılımları: plan/gerçek, canlı/geçmiş dağılımları.
+- Yabancı Dil Planı: dile özel ihtiyacı kaydedip planla; diğer yayınlar korunur.
+- Yayın Yönetimi: Planlama hücreyi gerekçeyle değiştirir; statüler yeniden
+  planlanır ve personele bildirim düşer.
+- Demo Yönetici Yardımcısı: yonetici_yardimcisi / 1234. Kurumsal modda üretilmez.
+- İlk açılışta sentetik statü geçmişi eklenmesi birkaç saniye sürebilir.
+- Detaylı varsayımlar ve kural farkları GUNCELLEME_NOTLARI.md içindedir.

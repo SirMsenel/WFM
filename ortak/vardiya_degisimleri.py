@@ -40,7 +40,8 @@ def check_conservation(before,after):
 def validate_changes(state,changes,kind,reason,current=None,submitting=False,report_authorized=False):
     role=(state.get('profile') or {}).get('position')
     if not (submitting and role=='agent'):require(state,'vardiya_degistir')
-    if kind not in {'Vardiya değişimi','Erken çıkış','Geç giriş','Rapor','Yıllık izin','Mazeret izni'}:raise ValueError('Geçersiz değişiklik türü.')
+    if kind not in {'Vardiya değişimi','Planlama düzeltmesi','Erken çıkış','Geç giriş','Rapor','Yıllık izin','Mazeret izni'}:raise ValueError('Geçersiz değişiklik türü.')
+    if kind=='Planlama düzeltmesi' and role!='wfm':raise ValueError('Doğrudan hücre düzenleme yalnızca Planlama içindir.')
     if not reason.strip():raise ValueError('Reason / değişiklik gerekçesi zorunlu.')
     if kind=='Rapor' and not (role=='wfm' and report_authorized):require(state,'rapor_gir')
     if not changes:raise ValueError('En az bir kayıt değiştirin.')
@@ -62,7 +63,7 @@ def validate_changes(state,changes,kind,reason,current=None,submitting=False,rep
         row={**old,'shift_code':new.get('shift_code',old['shift_code']),'start':new.get('start'),'end':new.get('end')}
         from modules.vardiya_plani.vardiya_motoru import NON_WORK
         if row['shift_code'] in NON_WORK:row.update(start=None,end=None)
-        if kind in {'Erken çıkış','Geç giriş'}:row['attendance_adjusted']=True
+        if kind in {'Erken çıkış','Geç giriş','Planlama düzeltmesi'}:row['attendance_adjusted']=True
         interval=bounds(row);old_interval=bounds(old)
         if row['shift_code']=='RAPOR' and old.get('shift_code')!='RAPOR' and not(role=='wfm' and report_authorized):require(state,'rapor_gir')
         if kind=='Erken çıkış' and (not interval or not old_interval or interval[0]!=old_interval[0] or interval[1]>=old_interval[1]):raise ValueError('Erken çıkışta başlangıç korunmalı, bitiş erkene alınmalı.')
@@ -126,6 +127,9 @@ def apply_changes(state,changes,kind,reason,request_update=None,proposal_update=
         people={str(e['employee_id']):e for e in state.get('employees_cache',[])}
         after=[dict(r,change_id=ident,change_type=kind,source='audited_change',sicil_no=people.get(str(r['employee_id']),{}).get('sicil_no',str(r['employee_id'])),username=people.get(str(r['employee_id']),{}).get('username','')) for r in after]
         for r in after:actual[(str(r['employee_id']),str(r['date']))]=r
+        if kind=='Planlama düzeltmesi':
+            from ortak.yayin_hucreleri import reconcile_statuses
+            reconcile_statuses(db,state,after,list(actual.values()),ident)
         payload={'id':ident,'type':kind,'reason':reason.strip(),'actor':state['profile'].get('username'),
          'before':before,'after':after,'date':now()}
         db.execute('INSERT INTO shift_change_batches VALUES(?,?,?)',(ident,now(),dumps(payload)))

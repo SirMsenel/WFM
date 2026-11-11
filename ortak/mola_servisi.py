@@ -25,15 +25,21 @@ def records(state,db=None):
     with connect(path) as db:return read(db)
 
 
-def availability(state,eid,start,minutes,db=None):
+def availability(state,eid,start,minutes,db=None,kind="Mola"):
     eid=str(eid);a=pd.Timestamp(start);b=a+pd.Timedelta(minutes=minutes)
     if minutes<=0 or minutes>120 or a.minute%5:raise ValueError('Mola süresi ve 5 dakika adımı geçerli olmalı.')
     roster=history_rows(state,a.date()-pd.Timedelta(days=1),b.date());own=[r for r in roster if str(r['employee_id'])==eid and (span:=bounds(r)) and pd.Timestamp(span[0])<=a and b<=pd.Timestamp(span[1])]
     if not own:raise ValueError('Mola yalnızca kendi yayınlanmış çalışma vardiyan içinde alınabilir.')
-    need=state.get('sp_staffing_result_df')
+    people={str(p['employee_id']):p for p in (state.get('employees_cache') or state.get('personnel_cache') or [])};person=people.get(eid,{})
+    rule=state.get('status_rules',{}).get('groups',{}).get(person.get('work_type',''),{})
+    if rule and own and kind=="Mola":
+        span=bounds(own[0])
+        if a<pd.Timestamp(span[0])+pd.Timedelta(minutes=rule.get('break_first_minutes',60)) or b>pd.Timestamp(span[1])-pd.Timedelta(minutes=rule.get('break_last_minutes',60)):raise ValueError('Vardiyanın ilk/son saatinde mola kullanılamaz.')
+    languages=state.get('planning_languages') or {};lang=person.get('language') or 'tr';specific=state.get('language_demands',{}).get(lang)
+    if specific is not None:need=specific;languages={k:k==lang for k in ['tr','en','ar']}
+    else:need=__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state)
     if need is None or need.empty:raise ValueError('Bu tarih için personel ihtiyacı hesabı yok.')
-    languages=state.get('planning_languages') or {};people={str(p['employee_id']):p for p in state.get('employees_cache',[])}
-    if eid in people and not languages.get(people[eid].get('language') or 'tr',True):raise ValueError('Personelin dili bu ihtiyaç hesabına dahil değil; kendi dilinin ihtiyacı hesaplanmalı.')
+    if eid in people and not languages.get(lang,True):raise ValueError('Personelin dili bu ihtiyaç hesabına dahil değil; kendi dilinin ihtiyacı hesaplanmalı.')
     roster=[r for r in roster if languages.get(people.get(str(r['employee_id']),{}).get('language') or 'tr',True)]
     existing=[r for r in records(state,db) if r.get('status')!='İptal']
     if any(str(r['employee_id'])==eid and a<pd.Timestamp(r['end']) and pd.Timestamp(r['start'])<b for r in existing):raise ValueError('Planlı yemek veya başka mola ile çakışıyor.')
@@ -58,16 +64,17 @@ def request(state,start,minutes):
     from ortak.talep_servisi import now
     profile=state.get('profile') or {}
     if profile.get('position')!='agent':raise ValueError('Mola talebini Müşteri Temsilcisi kendi hesabından yapar.')
-    eid=str(profile['employee_id']);person=next(p for p in get_people(state) if str(p['employee_id'])==eid)
+    eid=str(profile['employee_id']);people=get_people(state);person=next(p for p in people if str(p['employee_id'])==eid)
     maximum=state.get('status_rules',{}).get('groups',{}).get(person['work_type'],{}).get('break_minutes',15)
     if not 0<minutes<=maximum:raise ValueError(f'Grup mola hakkı en fazla {maximum} dakika.')
     if pd.Timestamp(start)<pd.Timestamp.now(tz='Europe/Istanbul').tz_localize(None):raise ValueError('Geçmiş saate mola talep edilemez.')
     path=state['workspace_db_path'];init(path)
     with connect(path) as db:
         db.execute('BEGIN IMMEDIATE');check=dict(state)
-        for key in ('published_shift_plan','sp_staffing_result_df','status_rules','planning_languages','employees_cache'):
+        for key in ('published_shift_plan','sp_staffing_result_df','status_rules','planning_languages','employees_cache','language_demands'):
             raw=db.execute('SELECT payload FROM work_state WHERE key=?',(key,)).fetchone()
             if raw:check[key]=loads(raw[0])
+        check['employees_cache']=[p for p in people if p.get('position')=='agent']
         maximum=check.get('status_rules',{}).get('groups',{}).get(person['work_type'],{}).get('break_minutes',15)
         if minutes>maximum:raise ValueError('Mola hakkı değişti; ekranı yenileyin.')
         rule=check.get('status_rules',{}).get('groups',{}).get(person['work_type'],{})

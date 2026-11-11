@@ -28,8 +28,19 @@ def items(state):
         if 'publication_batches' in tables:
             for row in db.execute("SELECT payload,created_at FROM publication_batches WHERE status='active' ORDER BY rowid DESC LIMIT 40"):
                 p=loads(row['payload']);own=any(str(r['employee_id'])==eid for r in p.get('rows',[]))
-                if not own and role not in {'wfm','planning_manager','manager','moderator','tl'}:continue
+                if not own and role not in {'wfm','planning_manager','manager','assistant_manager','moderator','tl'}:continue
                 add('PUB-'+p['id'],'Vardiya yayınlandı',f"{p['start']} – {p['end']} · Vardiyalar Tüm Vardiyalar ekranında; kişisel yemek, mola ve koçluk saatlerin İzleme ve Takip ekranlarında.",row['created_at'],'Vardiya')
+        if 'status_swap_requests' in tables:
+            for row in db.execute('SELECT * FROM status_swap_requests'):
+                r=loads(row['payload'])
+                if username in {r['owner'],r['peer']} or (role=='tl' and profile.get('full_name')==r.get('team_lead')) or role in {'wfm','planning_manager'}:add('SS-'+r['id']+'-'+str(row['version']),'Yemek / mola değişimi · '+row['status'],r['reason'],r.get('updated_at',r['created_at']),'Statü değişimi')
+        if 'manager_agenda' in tables:
+            for row in db.execute("SELECT * FROM manager_agenda WHERE kind='Koçluk' AND (employee_id=? OR owner=?)",(eid,username)):
+                add('CO-'+row['id'],'Koçluk görüşmesi planlandı',row['start']+' – '+row['end'],row['start'],'Koçluk')
+        if 'shift_change_batches' in tables:
+            for row in db.execute('SELECT payload FROM shift_change_batches ORDER BY rowid DESC LIMIT 100'):
+                r=loads(row[0])
+                if any(str(x['employee_id'])==eid for x in r['after']):add('CHANGE-'+str(r.get('id') or r['date']),'Vardiyan güncellendi · '+r['type'],r['reason'],r['date'],'Vardiya değişimi')
     # Anonymous complaints retain owner-scoped tracking without leaking sender names.
     from ortak.gorusler import records
     for item in records(state):

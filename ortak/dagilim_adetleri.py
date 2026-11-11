@@ -27,7 +27,10 @@ def render(profile,state,key,expanded=False):
             for d in pd.date_range(start,periods=7):
                 selected=fc[pd.to_datetime(fc.tarih).dt.normalize()==d]
                 if not selected.empty:totals[DAY_NAMES[d.weekday()]]=round(float(selected.y_pred.iloc[0]))
-        table=pd.DataFrame({'Gün':DAY_NAMES,'Çağrı adedi':[totals[d] for d in DAY_NAMES]});edited=st.data_editor(table,disabled=['Gün'],hide_index=True,use_container_width=True,key=key+'_totals',column_config={'Çağrı adedi':st.column_config.NumberColumn(min_value=0,step=1)})
-        try:matrix=count_matrix(profile,dict(zip(edited['Gün'],edited['Çağrı adedi'])));st.dataframe(matrix.style.background_gradient(cmap='Blues').format('{:,.0f}'),use_container_width=True,height=480)
+        with st.expander('Günlük çağrı toplamlarını düzenle'):
+            for col,day in zip(st.columns(7),DAY_NAMES):totals[day]=col.number_input(day,min_value=0,value=int(totals[day]),step=100,key=key+'_total_'+day)
+        try:
+            matrix=count_matrix(profile,totals);top=pd.DataFrame([totals],index=['TOPLAM ÇAĞRI']);combined=pd.concat([top,matrix]);combined.index.name='Günlük toplam / Saat aralığı'
+            st.dataframe(combined.style.format('{:,.0f}').background_gradient(cmap='Blues').apply(lambda row:['background-color:#244f67;color:white;font-weight:bold' if row.name=='TOPLAM ÇAĞRI' else '' for _ in row],axis=1),use_container_width=True,height=540)
         except (ValueError,TypeError) as e:st.info(str(e))
-        st.caption('Bu tablo gösterim içindir; günlük tahmin kaydını değiştirmez.')
+        st.caption('İlk satır günlük toplam; alt satırlar bu toplamın 48 yarım saate dağılımıdır. Bu görünüm günlük tahmin kaydını değiştirmez.')

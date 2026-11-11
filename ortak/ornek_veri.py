@@ -167,6 +167,8 @@ def bootstrap(state, path=DEFAULT_DB):
     if demo:
         from ortak.sabit_demo import prepare
         prepare(state,path)
+        from ortak.statu_gecmisi import seed_demo
+        seed_demo(state)
     from ortak.varsayilan_kurallar import enforce_current_rules
     if not state.get('shift_rules'):state['shift_rules']=default_shift_rules()
     if not state.get('plan_ctx'):
@@ -176,11 +178,13 @@ def bootstrap(state, path=DEFAULT_DB):
     state.setdefault("status_rules",dict(defaults(),enabled=True))
     state["status_rules"]["shrinkage_included"]=True
     state["status_rules"].setdefault("automatic",True)
+    state["status_rules"].setdefault("coaching_by_leader",True)
     from copy import deepcopy
     for group,settings in defaults()["groups"].items():
         target=state["status_rules"].setdefault("groups",{}).setdefault(group,{})
         for field,value in settings.items():target.setdefault(field,deepcopy(value))
     enforce_current_rules(state)
+    state["shift_rules"].setdefault("friday",{"prefer_women_midday":True,"block_men_midday":False})
     state["shift_rules"].setdefault("publication_approvals",{"enabled":True})
     state["shift_rules"].setdefault("capacity",{"max_overstaff":2,"min_overtime_hours":4})
     from ortak.gunluk_tahmin_deposu import capture_daily

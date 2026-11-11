@@ -41,6 +41,8 @@ def plan(state,rows,coverage,people,used=None):
         if source is not None and 'Shrinkage (%)' in source:mapping={(str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])):float(r['Shrinkage (%)'])/100 for r in source.to_dict('records')}
         rates=np.array([mapping.get((str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])),shrinkage_for(state,r['Tarih'],int(r['Slot']),fallback)) for r in out.to_dict('records')])
     net_need=need*(1-rates);coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
+    for item in state.get('_status_fixed_baseline',[]):
+        a,b=pd.Timestamp(item['start']),pd.Timestamp(item['end']);overlap=np.maximum(0,(np.minimum(np.datetime64(b),stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(a),stamps))/np.timedelta64(30,'m'));loss[:]+=overlap;by_person.setdefault(str(item['employee_id']),[]).append(item)
     def place(row,kind,duration,a,b,mandatory=False):
         if duration<=0:return True
         eid=str(row['employee_id']);best=None;rule=cfg.get('groups',{}).get(lookup.get(eid,{}).get('work_type'),{})
@@ -72,8 +74,10 @@ def plan(state,rows,coverage,people,used=None):
         span=bounds(row)
         if not span:continue
         a,b=map(pd.Timestamp,span);eid=str(row['employee_id']);rule=cfg.get('groups',{}).get(lookup.get(eid,{}).get('work_type'),{});hours=(b-a).total_seconds()/3600;working.append((row,a,b,rule,hours))
-        if hours>=float(rule.get('min_shift_hours',4)):
+        if not rule.get('meal_disabled') and hours>=float(rule.get('min_shift_hours',4)):
             duration=int(rule.get('meal_minutes',30))
+            for override in rule.get('meal_day_overrides',[]):
+                if a.weekday() in override.get('weekdays',[]):duration=int(override['minutes'])
             if cfg.get('automatic',False):left=a+pd.Timedelta(minutes=min(60,hours*15));right=b-pd.Timedelta(minutes=30)
             elif rule.get('relative',True):left=a+pd.Timedelta(hours=float(rule.get('after_start',3)));right=min(b-pd.Timedelta(minutes=30),a+pd.Timedelta(hours=float(rule.get('before_start',6))))
             else:left=max(a+pd.Timedelta(hours=1),a.normalize()+pd.Timedelta(rule.get('meal_start','12:00')+':00'));right=min(b-pd.Timedelta(minutes=30),a.normalize()+pd.Timedelta(rule.get('meal_end','15:00')+':00'))
@@ -87,9 +91,9 @@ def plan(state,rows,coverage,people,used=None):
             remaining=allowance(rule,hours);chunk=max(5,int(rule.get('break_minutes',15)))
             while remaining>0:
                 duration=min(chunk,remaining)
-                if not place(row,'Mola',duration,a+pd.Timedelta(minutes=30),b-pd.Timedelta(minutes=15)):break
+                if not place(row,'Mola',duration,a+pd.Timedelta(minutes=rule.get('break_first_minutes',60)),b-pd.Timedelta(minutes=rule.get('break_last_minutes',60))):break
                 remaining-=duration
-        for row,a,b,rule,hours in working:
+        for row,a,b,rule,hours in ([] if cfg.get('coaching_by_leader') else working):
             eid=str(row['employee_id']);month=a.strftime('%Y-%m');target=int(rule.get('coaching_monthly_minutes',60));chunk=max(5,int(rule.get('coaching_chunk_minutes',15)));remaining=target-coached.get((eid,month),0)
             if remaining<=0:continue
             # At most one coaching fragment per working day; never crosses month end.

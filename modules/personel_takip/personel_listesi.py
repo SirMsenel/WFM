@@ -7,7 +7,7 @@ from ortak.personel import get_people,WORK_LABELS,LANG_LABELS
 def render():
     st.subheader('Personel Listesi')
     profile=st.session_state.get('profile') or {}
-    if profile.get('position') not in {'tl','wfm','manager','moderator'}:
+    if profile.get('position') not in {'tl','wfm','manager','assistant_manager','moderator'}:
         st.info('Personel listesi yönetim ve takım lideri rolleri içindir.');return
     if st.button('Listeyi Yenile',key='personnel_refresh'):
         get_people(st.session_state,True)

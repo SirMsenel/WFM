@@ -499,6 +499,11 @@ def _startup_auth():
     ensure_identity(AUTH_DB_PATH)
     from ortak.sabit_demo import directory
     directory({"auth_db_path":str(AUTH_DB_PATH)})
+    if demo_enabled():
+        with _conn() as con:
+            if not con.execute("SELECT 1 FROM users WHERE username='yonetici_yardimcisi'").fetchone():
+                eid=con.execute("INSERT INTO employees(full_name,position,work_type,language,location,sicil_no,company,employment_start) VALUES(?,?,?,?,?,?,?,?)",("Örnek Yönetici Yardımcısı","assistant_manager","yonetim","tr","Ankara","DEMO-ASSISTANT","Ulak","2026-01-01")).lastrowid
+                con.execute("INSERT INTO users(username,password_hash,employee_id,is_active) VALUES(?,?,?,1)",("yonetici_yardimcisi",_hash_password("1234"),eid))
 
 def _get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     with _conn() as con:
@@ -568,7 +573,7 @@ def auth_login(body: Dict[str, Any]):
         from zoneinfo import ZoneInfo
         if str(user["employment_end"])<=datetime.now(ZoneInfo("Europe/Istanbul")).date().isoformat():raise HTTPException(status_code=401,detail="Personelin ayrılma tarihi geçmiş.")
     pos = str(user.get("position") or "").lower()
-    is_superuser = pos in {"moderator", "wfm", "manager"}
+    is_superuser = pos in {"moderator", "wfm", "manager", "assistant_manager", "planning_manager"}
     is_mod = pos == "moderator"
 
     token = _create_token({
@@ -612,7 +617,7 @@ def auth_me(user: Dict[str, Any] = Depends(_auth_required)):
         from zoneinfo import ZoneInfo
         if str(user["employment_end"])<=datetime.now(ZoneInfo("Europe/Istanbul")).date().isoformat():raise HTTPException(status_code=401,detail="Personelin ayrılma tarihi geçmiş.")
     pos = str(user.get("position") or "").lower()
-    is_superuser = pos in {"moderator", "wfm", "manager"}
+    is_superuser = pos in {"moderator", "wfm", "manager", "assistant_manager", "planning_manager"}
     is_mod = pos == "moderator"
 
     base = {
@@ -658,7 +663,7 @@ def auth_demo_users(limit: int = 20):
 
 
 def _planning_role(user):
-    if str(user.get('position') or '').lower() not in {'wfm','manager','moderator'}:
+    if str(user.get('position') or '').lower() not in {'wfm','manager','assistant_manager','moderator'}:
         raise HTTPException(status_code=403,detail='Bu servis planlama rollerine açıktır.')
 
 
@@ -702,3 +707,12 @@ def switch_user(body:Dict[str,Any],user=Depends(_auth_required)):
     init_governance(DEFAULT_DB)
     with connect(DEFAULT_DB) as db:append_audit(db,'Moderatör kullanıcı görünümü',user,{'target':target['username']})
     return {'access_token':_create_token({'sub':target['username'],'actor_sub':user['username']}),'profile':profile}
+
+
+@app.post('/actuals/statuses')
+def actual_statuses(body:Dict[str,Any],user=Depends(_auth_required)):
+    if user.get('position') not in {'wfm','planning_manager'}:raise HTTPException(403,'Statü gerçekleşmelerini Planlama besler.')
+    from ortak.statu_gecmisi import ingest
+    from ortak.calisma_alani_deposu import DEFAULT_DB
+    try:return {'updated':ingest({'workspace_db_path':str(DEFAULT_DB),'profile':user},body.get('rows',[]))}
+    except (ValueError,KeyError,TypeError) as e:raise HTTPException(400,str(e))

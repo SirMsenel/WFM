@@ -323,13 +323,19 @@ def render():
     with st.expander('Bu dağılım neden önerildi?'):
         st.write('Son 2 hafta, 1 ay, 3 ay, 6 ay, 12 ay ve tüm geçmiş ayrı ayrı karşılaştırılır. Geçen tam haftayı daha iyi açıklayan geçmişlere daha fazla pay verilir; yeni günler eski günlerden daha etkilidir.')
         scores=result['scores'][['Pencere','Başarı ağırlığı (%)','MAE (yüzde puan)']].rename(columns={'Pencere':'Hesaplamada kullanılan geçmiş','Başarı ağırlığı (%)':'Son dağılıma katkısı (%)','MAE (yüzde puan)':'Geçen haftadaki ortalama sapma (yüzde puan)'})
-        st.dataframe(scores,hide_index=True,use_container_width=True,column_config={'Son dağılıma katkısı (%)':st.column_config.NumberColumn(format='%.1f'),'Geçen haftadaki ortalama sapma (yüzde puan)':st.column_config.NumberColumn(format='%.3f')})
+        from html import escape
+        for offset in range(0,len(scores),3):
+            for col,r in zip(st.columns(3),scores.iloc[offset:offset+3].to_dict('records')):
+                name=r['Hesaplamada kullanılan geçmiş'];weight=r['Son dağılıma katkısı (%)'];error=r['Geçen haftadaki ortalama sapma (yüzde puan)']
+                col.markdown(f'<div style="border:1px solid #dce7ed;border-top:4px solid #338e9b;border-radius:16px;padding:17px;margin:6px 0;background:linear-gradient(130deg,#edf8f8,#fff)"><b>{escape(name)}</b><div style="font-size:25px;color:#258694;margin:12px 0">%{weight:.1f} katkı</div><small>Yarım saat payında ortalama fark: <b>{error:.3f} puan</b></small></div>',unsafe_allow_html=True)
+        st.info('Pay hatası, çağrının hangi yarım saate dağıldığını ölçer. Örneğin gerçek pay %4, öneri %5 ise fark 1 puandır. Küçük fark daha iyi dağılım demektir; çağrı toplamının doğruluğunu ölçmez.')
         st.caption(f"Kontrol edilen hafta: {meta['validation_start']} – {meta['validation_end']}. Hatanın düşük olması daha iyi uyum demektir; gelecek hafta için garanti değildir.")
         flags=calendar_flags(pd.date_range(week,periods=7))
         labels={'EKSTRE_KESIM':'Ekstre kesim','SON_ODEME':'Son ödeme','Bayram':'Bayram','Arife':'Arife','Bayram_Sonrasi':'Bayram sonrası','Resmi_Tatil':'Resmi tatil','Ramazan':'Ramazan'}
         st.markdown('**Bu haftanın özel günleri**')
         special=[{'Gün':DAY_NAMES[d.weekday()],'Tarih':d.strftime('%d.%m.%Y'),'Etkiler':', '.join(labels[k] for k in flags if flags.loc[d,k]) or 'Standart gün'} for d in flags.index]
-        st.dataframe(special,hide_index=True,use_container_width=True)
+        for event in special:
+            if event['Etkiler']!='Standart gün':st.markdown(f"<div style='background:#fff3da;border-left:5px solid #dca048;padding:13px;border-radius:12px;margin:7px 0'><b>{event['Tarih']} · {event['Gün']}</b> — {event['Etkiler']}</div>",unsafe_allow_html=True)
         st.caption(f"{meta['used_history_days']} geçmiş tam gün değerlendirildi. {quality['Eksik veya sıfır gün']} eksik/sıfır gün değerlendirmeye alınmadı.")
     from ortak.dagilim_adetleri import render as render_counts
     render_counts(profile,st.session_state,'interval_counts')

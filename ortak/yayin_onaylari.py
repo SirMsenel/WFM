@@ -29,7 +29,7 @@ def submit(state,result):
     path=state['workspace_db_path'];init(path);coverage=result['coverage'];coverage=coverage[coverage.get('Sayaca Dahil',True)] if 'Sayaca Dahil' in coverage else coverage
     total=float(coverage['İhtiyaç'].sum());gap=float(coverage['Eksik'].sum());rate=100*gap/total if total else 0.
     result={k:deepcopy(result[k]) for k in ('plan','coverage','staff','period','issues','rules','breaks') if k in result}
-    context={k:deepcopy(state[k]) for k in ('plan_ctx','plan_ctx_confirmed','planning_languages','planning_exam_hours','planning_exclude_early_hours','planning_bypass','planning_accept_soft','employees_cache') if k in state}
+    context={k:deepcopy(state[k]) for k in ('planning_demand_language','plan_ctx','plan_ctx_confirmed','planning_languages','planning_exam_hours','planning_exclude_early_hours','planning_bypass','planning_accept_soft','employees_cache') if k in state}
     item={'id':'APR-'+uuid4().hex[:12],'fingerprint':fingerprint(state),'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
     baseline=dict(state.get('workspace_baseline',{}))
     with connect(path) as db:
@@ -53,6 +53,17 @@ def submit(state,result):
 def ready(item):return len({v['actor'] for v in item['votes']})>=2 and (item['rate']<=5 or item.get('manager') is not None)
 
 
+def current_context(state,item,db):
+    check=dict(state)
+    for r in db.execute('SELECT key,payload FROM work_state'):
+        if r['key'] in STATE_KEYS:check[r['key']]=loads(r['payload'])
+    check['trk_requests']=[loads(r[0]) for r in db.execute('SELECT payload FROM requests')];check.update(item['context']);check['planning_result_fingerprint']=item['fingerprint'];return check
+
+
+def is_current(state,item):
+    with connect(state['workspace_db_path']) as db:return fingerprint(current_context(state,item,db))==item['fingerprint']
+
+
 def vote(state,ident,approve=True,reason=''):
     profile=state.get('profile') or {};role=profile.get('position');actor=profile.get('_actor_username') or profile.get('username')
     if role not in {'wfm','planning_manager'}:raise ValueError('Planlamacı veya Planlama Yöneticisi gerekli.')
@@ -64,6 +75,7 @@ def vote(state,ident,approve=True,reason=''):
         if not approve:
             if not reason.strip():raise ValueError('Ret gerekçesi gerekli.')
             db.execute("UPDATE plan_approvals SET status='Reddedildi' WHERE id=?",(ident,));append_audit(db,'Plan yayını reddedildi',profile,{'id':ident,'reason':reason});return False
+        if fingerprint(current_context(state,item,db))!=item['fingerprint']:raise ValueError('Taslak güncel değil. Kaynaklar değişti; bu taslağı reddedip güncel planı yeniden oluşturun.')
         if actor in {v['actor'] for v in item['votes']} or (item.get('manager') or {}).get('actor')==actor:raise ValueError('Aynı gerçek kullanıcı ikinci onayı veremez; hesap görünümü değiştirmek bağımsız onay sayılmaz.')
         entry={'actor':actor,'as':profile['username'],'name':profile.get('full_name') or profile['username'],'role':role,'at':now()}
         if role=='wfm':item['votes'].append(entry)

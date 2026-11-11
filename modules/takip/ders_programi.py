@@ -165,18 +165,17 @@ def render():
         return
 
     user = _username()
-    with st.expander('Ulaşım bilgisi'):
-        transport=st.session_state.setdefault('academic_transport',{}).setdefault(user,{})
-        for kind,label in [('class','Ders sonrası'),('exam','Sınav sonrası')]:
-            config=transport.setdefault(kind,{})
-            config['enabled']=st.checkbox(label+' ulaşım sorunum var',value=config.get('enabled',False),key='travel_'+kind)
-            if config['enabled']:
-                config['minutes']=st.number_input(label+' ulaşım süresi (dk)',60,300,int(config.get('minutes',60)),15,key='travel_minutes_'+kind)
-                config['available_after']=st.time_input(label+' mesaiye başlayabileceğim en erken saat',key='travel_after_'+kind).strftime('%H:%M')
-        st.caption('Ulaşım sorunu seçilmezse son ders/sınav bitişinden 30 dakika sonra; seçilirse en az 1 saat ve belirttiğin saate göre uygunluk hesaplanır.')
-        if st.button('Ulaşım Bilgisini Kaydet'):
+    transport=st.session_state.setdefault('academic_transport',{}).setdefault(user,{})
+    with st.container(border=True):
+        a,b=st.columns(2);travel=a.toggle('Ulaşım sorunum var',value=transport.get('travel',False),key='travel_flag');dorm=b.toggle('Yurt sorunum var',value=transport.get('dorm',False),key='travel_dorm_flag');delay=30
+        travel_hours=a.number_input('Ulaşım için gecikme (saat)',1.,6.,float(transport.get('travel_hours',1)),.5,key='travel_hours') if travel else 0
+        dorm_hours=b.number_input('Yurt için gecikme (saat)',.5,6.,float(transport.get('dorm_hours',1)),.5,key='travel_dorm_hours') if dorm else 0
+        if st.button('Uygunluk Bilgisini Kaydet',key='travel_save'):
+            if travel_hours is None or dorm_hours is None:st.warning('Gecikme sürelerini doldurun.');st.stop()
+            delay=max(30,round(max(travel_hours,dorm_hours)*60));transport.update(travel=travel,dorm=dorm,travel_hours=travel_hours,dorm_hours=dorm_hours)
+            for kind in ['class','exam']:transport[kind]={'enabled':travel or dorm,'minutes':delay,'available_after':None}
             from ortak.calisma_alani_deposu import save_keys
-            save_keys(st.session_state);st.success('Ulaşım kısıtı kaydedildi.')
+            save_keys(st.session_state);st.success('Son ders/sınav sonrasındaki ulaşım payı kaydedildi.')
 
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -205,7 +204,10 @@ def render():
         else:
             df = _blank_schedule_df()
 
-        edited = st.data_editor(
+        from ortak.okul_shiftleri import render_course_grid
+        render_course_grid(df,user+'_'+term_key)
+        st.caption('Dersleri güncellemek için aşağıdaki giriş alanını kullanabilirsin.')
+        with st.expander("Programı Düzenle",expanded=False):edited = st.data_editor(
             df,
             use_container_width=True,
             hide_index=True,
@@ -253,7 +255,10 @@ def render():
         else:
             df = _blank_schedule_df()
 
-        edited = st.data_editor(
+        from ortak.okul_shiftleri import render_course_grid
+        render_course_grid(df,user+'_'+term_key)
+        st.caption('Dersleri güncellemek için aşağıdaki giriş alanını kullanabilirsin.')
+        with st.expander("Programı Düzenle",expanded=False):edited = st.data_editor(
             df,
             use_container_width=True,
             hide_index=True,
@@ -301,7 +306,10 @@ def render():
         else:
             df = _blank_bayram_df()
 
-        edited = st.data_editor(
+        from ortak.okul_shiftleri import render_course_grid
+        render_course_grid(df,user+'_'+term_key)
+        st.caption('Dersleri güncellemek için aşağıdaki giriş alanını kullanabilirsin.')
+        with st.expander("Programı Düzenle",expanded=False):edited = st.data_editor(
             df,
             use_container_width=True,
             hide_index=True,
@@ -350,7 +358,10 @@ def render():
             df = _blank_exam_df()
 
         if "Bitiş" not in df:df["Bitiş"]=""
-        edited = st.data_editor(
+        from ortak.okul_shiftleri import render_course_grid
+        render_course_grid(df,user+'_'+term_key)
+        st.caption('Dersleri güncellemek için aşağıdaki giriş alanını kullanabilirsin.')
+        with st.expander("Programı Düzenle",expanded=False):edited = st.data_editor(
             df,
             use_container_width=True,
             hide_index=True,

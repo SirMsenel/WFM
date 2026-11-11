@@ -36,13 +36,17 @@ def render_group_priority():
                      'Haftalık gün':str(rule.get('max_days_per_week',rule.get('max_days_per_week_default','—'))),
                      'Dinlenme':f"{rule['min_rest_hours']} saat" if 'min_rest_hours' in rule else '—',
                      'Gece':'Uygun' if rule.get('night_allowed') else 'Uygun değil'})
-    st.dataframe(rows,hide_index=True,use_container_width=True)
+    for col,row in zip(st.columns(max(1,len(rows))),rows):
+        from html import escape
+        content=''.join('<div style="font-size:12px;margin-top:8px">'+escape(k)+': <b>'+escape(str(v))+'</b></div>' for k,v in row.items() if k!='Grup')
+        col.markdown('<div style="border:1px solid #d6e5ed;border-top:4px solid #4b94a2;background:#f5fafc;border-radius:16px;padding:16px;min-height:175px"><b>'+escape(row['Grup'])+'</b>'+content+'</div>',unsafe_allow_html=True)
+
 
 
 def render():
     state=st.session_state
     st.subheader('Oluştur, Kontrol Et ve Yayınla')
-    if (state.get('profile') or {}).get('position') not in {'wfm','manager','moderator','planning_manager'}:
+    if (state.get('profile') or {}).get('position') not in {'wfm','manager','assistant_manager','moderator','planning_manager'}:
         st.info('Plan oluşturma ve yayınlama yönetim rolleri içindir.');return
     context=period_banner(state)
     if not context:return
@@ -66,7 +70,7 @@ def render():
     st.caption('Sınav başlangıç ve bitişi varsa yalnızca o saatler kapanır. Bitiş bilinmiyorsa gün tamamen kapalı kalır.')
     ready=bool(state.get('plan_ctx_confirmed') and people and state.get('plan_group_priority')
                and len(state['plan_group_priority'])==len(state['shift_rules']['work_type'])
-               and isinstance(state.get('sp_staffing_result_df'),pd.DataFrame) and not state['sp_staffing_result_df'].empty)
+               and isinstance(state.get('sp_staffing_result_df'),pd.DataFrame) and not __import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state).empty)
     if not ready:st.info('Dönemi onaylayın ve personel ihtiyacını hesaplayın.')
     if st.button('Otomatik Vardiya Taslağı Oluştur',disabled=not ready,key='planning_generate',type='primary'):
         try:
@@ -74,7 +78,7 @@ def render():
                 from ortak.donem_kilitleri import assert_can_plan
                 assert_can_plan(state)
                 staff,fixed,history,unavailable,source_issues=collect_inputs(state)
-                result=generate_plan(staff,state['sp_staffing_result_df'],state['shift_rules'],state['plan_group_priority'],
+                result=generate_plan(staff,__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state),state['shift_rules'],state['plan_group_priority'],
                                      context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
                                      strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False))
                 from ortak.statuler import meal_plan

@@ -10,7 +10,7 @@ def render():
     st.subheader('Yetkilendirme')
     role=st.selectbox('Rol',list(ROLE_LABELS),format_func=ROLE_LABELS.get,key='permission_role')
     existing=permissions(state,role)
-    options=[k for k in CAPTIONS if (k!='rapor_gir' or role=='tl') and (k!='yetki_yonet' or role=='wfm') and (k!='kayit_merkezi' or role in {'wfm','manager','moderator','planning_manager'})]
+    options=[k for k in CAPTIONS if (k!='rapor_gir' or role=='tl') and (k!='yetki_yonet' or role=='wfm') and (k!='kayit_merkezi' or role in {'wfm','manager','assistant_manager','moderator','planning_manager'})]
     chosen=st.multiselect('İzin verilen işlemler',options,default=[k for k in existing if k in options],format_func=CAPTIONS.get,key='permission_flags_'+role)
     reason=st.text_input('Yetki değişikliği gerekçesi',key='permission_reason')
     if st.button('Yetkileri Kaydet',key='permission_save'):

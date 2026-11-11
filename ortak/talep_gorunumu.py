@@ -46,7 +46,9 @@ def render_detail(req,key):
     fields.append(('Onay beklenen',stage(req)))
     fields.append(('İlgili takım lideri',', '.join(req.get('assigned_tls',[])) or '—'))
     if req.get('targets'):fields.append(('Değişim yapılacak personel',', '.join(t.get('full_name','') for t in req['targets'])))
-    st.dataframe(pd.DataFrame(fields,columns=['Bilgi','İçerik']),hide_index=True,use_container_width=True)
+    for offset in range(0,len(fields),2):
+        for col,(label,value) in zip(st.columns(2),fields[offset:offset+2]):
+            col.markdown('<div style="padding:13px 16px;margin:5px 0;background:#f4f8fb;border:1px solid #dce7ee;border-radius:12px"><small style="color:#6b8798">'+escape(label)+'</small><div style="font-weight:650;color:#35566b;margin-top:6px;overflow-wrap:anywhere">'+escape(str(value))+'</div></div>',unsafe_allow_html=True)
     st.markdown('#### Personelin Açıklaması')
     st.info(req.get('note') or 'Açıklama eklenmemiş.')
     attachment=req.get('attachment') or {}
@@ -76,7 +78,7 @@ def render_center(audience='all', key='requests'):
     role = profile.get('position')
     items = [r for r in refresh(state) if visible(r,profile)]
     if audience == 'planning':
-        planning_scope=st.radio('Talep akışı',['Planlamaya ulaşanlar','Planlamaya iletilmeyi bekleyenler','Tüm talepler'],horizontal=True,key=key+'_flow')
+        planning_scope=st.segmented_control('Talep akışı',['Planlamaya ulaşanlar','Planlamaya iletilmeyi bekleyenler','Tüm talepler'],default='Planlamaya ulaşanlar',key=key+'_flow')
         if planning_scope=='Planlamaya ulaşanlar':items=[r for r in items if r.get('queue')=='WFM' or (is_terminal(r) and any(e.get('action','').startswith('Planlama') for e in r.get('events',[])))]
         elif planning_scope=='Planlamaya iletilmeyi bekleyenler':items=[r for r in items if r.get('queue') in {'TL','TL_SWAP'}]
     elif audience == 'tl':
@@ -85,16 +87,17 @@ def render_center(audience='all', key='requests'):
     from html import escape
     stats=[('Bekleyen',len(pending),'#b6812c'),('Onaylanan',sum(r.get('status') in {'Uygulandı','Onaylandı'} and is_terminal(r) for r in items),'#19856f'),('Reddedilen',sum(r.get('status')=='Reddedildi' for r in items),'#ba626c')]
     st.markdown('<div style="display:flex;flex-wrap:wrap;gap:9px;margin:10px 0">'+''.join(f'<span style="background:{color}0d;color:{color};border:1px solid {color}33;border-radius:30px;padding:8px 16px;font-size:13px">{label} <b style="margin-left:12px">{count}</b></span>' for label,count,color in stats)+'</div>',unsafe_allow_html=True)
-    category = st.radio('Göster',['Bekleyen kayıtlar','Sonuçlanan kayıtlar','Tüm kayıtlar'],horizontal=True,key=key+'_category')
-    search = st.text_input('Kayıt ara',placeholder='Personel, talep türü veya kayıt numarası',key=key+'_search')
-    filtered = [r for r in items if (category=='Tüm kayıtlar' or (is_terminal(r)==(category=='Sonuçlanan kayıtlar')))
+    filter_col,search_col=st.columns([1.6,1])
+    category = filter_col.segmented_control('Göster',['Bekleyen kayıtlar','Sonuçlanan kayıtlar','Tüm kayıtlar'],default='Bekleyen kayıtlar',key=key+'_category')
+    search = search_col.text_input('Kayıt ara',placeholder='Personel, talep türü veya kayıt numarası',key=key+'_search')
+    filtered = [r for r in items if (category=='Tüm kayıtlar' or (is_terminal(r)==((category or 'Bekleyen kayıtlar')=='Sonuçlanan kayıtlar')))
                 and (not search or search.casefold() in (title(r)+' '+r['id']+' '+(r.get('note') or '')).casefold())]
     filtered.sort(key=lambda r:r.get('created_at',''),reverse=True)
     if not filtered:
         st.info('Bu görünümde kayıt yok.')
         return
     st.caption('Detayını görmek istediğin kaydın satırına tıkla. Başlangıçta ilk kayıt gösterilir.')
-    event=st.dataframe(pd.DataFrame(rows_for_table(filtered)).style.map(cell_style,subset=['Durum']),hide_index=True,use_container_width=True,
+    event=st.dataframe(pd.DataFrame(rows_for_table(filtered)).style.set_properties(**{'background-color':'#f6fafc','color':'#35566b'}).map(cell_style,subset=['Durum']),hide_index=True,use_container_width=True,
                        on_select='rerun',selection_mode='single-row',key=key+'_table')
     picked=event.selection.rows
     index=picked[0] if picked and picked[0]<len(filtered) else 0
@@ -121,7 +124,7 @@ def render_center(audience='all', key='requests'):
         return
     tl_action = role=='tl' and req.get('queue') in {'TL','TL_SWAP'} and profile.get('full_name') in req.get('assigned_tls',[]) and profile.get('full_name') not in req.get('tl_approvals',[])
     final_only=req.get('type') in {'Vardiya Değişim Talebi','Erken Çıkış Talebi','Geç Giriş Talebi','Rapor Bildirimi'}
-    wfm_action = (role=='wfm' if final_only else role in {'wfm','manager','moderator','planning_manager'}) and req.get('queue')=='WFM'
+    wfm_action = (role=='wfm' if final_only else role in {'wfm','manager','assistant_manager','moderator','planning_manager'}) and req.get('queue')=='WFM'
     own = req.get('created_by')==profile.get('username')
     if not (tl_action or wfm_action or own):
         st.caption('Talep ilgili değerlendirme aşamasında. Bu hesapta işlem beklenmiyor.')

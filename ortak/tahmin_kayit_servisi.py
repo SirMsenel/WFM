@@ -28,7 +28,7 @@ def capture_forecast(state,forecast,profile):
         if not np.isfinite(weights).all() or (weights<0).any() or abs(weights.sum()-100)>.01:raise ValueError('Dağılım toplamı %100 olmalı.')
         for (_,r),w in zip(selected.iterrows(),weights):rows.append((str(day.date()),int(r.Slot),float(total)*float(w)/100,float(w)))
     if not rows:raise ValueError('Kayıt için tahmin günü gerekli.')
-    rows.sort();meta={'forecast':state.get('sp_forecast_meta',{}),'profile':state.get('sp_active_ratio_profile_name'),
+    rows.sort();meta={'staffing_parameters':state.get('staffing_parameters',{}),'forecast':state.get('sp_forecast_meta',{}),'profile':state.get('sp_active_ratio_profile_name'),
                      'profile_meta':state.get('sp_active_ratio_profile_meta',{}),'recorded_by':(state.get('profile') or {}).get('username','system')}
     metadata=json.dumps(meta,ensure_ascii=False,default=str,sort_keys=True)
     digest=hashlib.sha256(json.dumps([rows,metadata],ensure_ascii=False).encode()).hexdigest()

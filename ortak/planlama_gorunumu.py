@@ -41,10 +41,10 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
     excess=float(coverage.Fazla.sum());slots=int((coverage.Eksik>0).sum());total=len(coverage)
     st.markdown('### '+title)
     a,b,c,d=st.columns(4)
-    _ring(a,'Karşılanan ihtiyaç',f'%{100*(needed-left)/needed:.1f}' if needed else '%100',1-left/needed if needed else 1,'#14977f')
-    _ring(b,'Kalan personel-saat',f'{left/2:,.1f}',left/needed if needed else 0,'#e8a33d')
-    _ring(c,'Eksik olan yarım saat',str(slots),slots/total if total else 0,'#dc7760')
-    _ring(d,'Fazla personel-saat',f'{excess/2:,.1f}',excess/(needed+excess) if needed+excess else 0,'#8574bf')
+    _ring(a,'İhtiyacın karşılanan oranı',f'%{100*(needed-left)/needed:.1f}' if needed else '%100',1-left/needed if needed else 1,'#14977f')
+    _ring(b,'Eksik çalışma süresi (kişi-saat)',f'{left/2:,.1f}',left/needed if needed else 0,'#e8a33d')
+    _ring(c,'Personel açığı bulunan yarım saat',str(slots),slots/total if total else 0,'#dc7760')
+    _ring(d,'Fazladan planlanan kişi-saat',f'{excess/2:,.1f}',excess/(needed+excess) if needed+excess else 0,'#8574bf')
     if excess:st.warning('Kesin veya elle girilmiş kayıtlar bazı saatlerde ihtiyacı aşıyor. Otomatik atama bu saatlere personel eklemez.')
 
 
@@ -89,7 +89,7 @@ def render_shortages(result,key='gap'):
         missing['Aralık']=missing.Slot.map(lambda s:f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}–{s//2:02d}:{(s%2)*30:02d}')
     cols=[c for c in ['Tarih','Gün','Aralık','İhtiyaç','Atanan','Eksik'] if c in missing]
     view=missing[cols].rename(columns={'İhtiyaç':'Gereken personel','Atanan':'Yerleştirilen','Eksik':'Eksik personel'})
-    if (st.session_state.get('profile') or {}).get('position') in {'wfm','manager','moderator','planning_manager'}:
+    if (st.session_state.get('profile') or {}).get('position') in {'wfm','manager','assistant_manager','moderator','planning_manager'}:
         from ortak.eksik_aksiyonlari import render_actions
         render_actions(st.session_state,result,key)
     st.download_button('Eksik Dilimleri CSV İndir',view.to_csv(index=False).encode('utf-8-sig'),'eksik_dilimler.csv','text/csv',key=key+'_csv')

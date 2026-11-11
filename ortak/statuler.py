@@ -4,7 +4,7 @@ from modules.vardiya_plani.vardiya_motoru import bounds
 
 
 def defaults():
-    return {'groups':{g:{'meal_minutes':30,'meal_start':'12:00','meal_end':'15:00','break_minutes':15,'break_total_minutes':30,'break_per_hour_max':15,'coaching_monthly_minutes':60,'coaching_chunk_minutes':15,'break_rules':[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':24,'minutes':30}],'min_shift_hours':4,'relative':True,'after_start':3,'before_start':6} for g in ('fulltime','akademi','dis_kaynak')},'friday':{'enabled':False,'male_only':False,'start':'12:00','end':'14:00','minutes':60}}
+    return {'groups':{g:{'meal_minutes':30,'meal_start':'12:00','meal_end':'15:00','break_first_minutes':60,'break_last_minutes':60,'break_minutes':15,'break_total_minutes':30,'break_per_hour_max':15,'coaching_monthly_minutes':60,'coaching_chunk_minutes':15,'break_rules':[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':24,'minutes':30}],'min_shift_hours':4,'relative':True,'after_start':3,'before_start':6} for g in ('fulltime','akademi','dis_kaynak')},'friday':{'enabled':False,'male_only':False,'start':'12:00','end':'14:00','minutes':60}}
 
 
 def shrinkage_for(state,day,slot,fallback=.30):

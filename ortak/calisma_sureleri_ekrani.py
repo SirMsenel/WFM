@@ -8,27 +8,21 @@ from ortak.calisma_alani_deposu import save_keys
 
 
 def render_hours_summary(state,people):
-    st.divider()
-    st.markdown('### Seçili Dönemde Çalışma Saatleri')
-    today=pd.Timestamp.today().date()
-    dates=st.date_input('Çalışma saatleri için geçmiş tarih aralığı',value=(today.replace(day=1),today),key='hours_history_range')
-    if len(dates)!=2:st.info('Başlangıç ve bitiş tarihini seçin.');return
-    ctx={'start':dates[0],'end':dates[1]}
-    st.caption('Yayınlanmış vardiyalardan hesaplanır. Günlük ortalama bütün takvim günlerini kapsar; izinler 0 saattir. Gece saatleri ilgili güne bölünür.')
-    agents=[e for e in people if e.get('position','agent')=='agent']
-    if not agents:st.info('Personel bulunamadı.');return
-    ids={str(e['employee_id']) for e in agents}
-    from ortak.sabit_demo import history_rows
-    published=[r for r in history_rows(state,dates[0],dates[1]) if str(r['employee_id']) in ids and str(dates[0])<=str(r['date'])<=str(dates[1])]
-    if not published:
-        from ortak.calisma_sureleri import overlap_hours
-        if not any(str(r['employee_id']) in ids and overlap_hours(r,dates[0],dates[1])>0 for r in state.get('published_shift_plan',[])):
-            st.info('Bu tarih aralığında yayınlanmış vardiya kaydı yok.');return
-    df=personnel_hours(state,agents,ctx['start'],ctx['end'],published_only=True)
-    table=df.groupby('Grup',as_index=False).agg(**{'Personel':('Personel','size'),'Toplam saat':('Toplam saat','sum'),'Kişi başı dönem ortalaması':('Toplam saat','mean'),'Kişi başı günlük ortalama':('Günlük ortalama saat','mean')})
-    table.Grup=table.Grup.map(lambda g:WORK_LABELS.get(g,g))
-    st.dataframe(table.style.format({c:'{:.1f}' for c in table if c not in {'Grup','Personel'}}),hide_index=True,use_container_width=True)
-    st.bar_chart(table.set_index('Grup')[['Kişi başı dönem ortalaması']],color='#118aa1')
+    st.divider();st.markdown('### Çalışma Süresi ve Kalan Kapasite');left,right=st.columns([1,1.3])
+    with left.container(border=True):render_targets(state)
+    with right.container(border=True):
+        today=pd.Timestamp.now(tz='Europe/Istanbul').date();ctx=state.get('plan_ctx') or {};start=pd.Timestamp(ctx.get('start',today.replace(day=1))).date();end=pd.Timestamp(ctx.get('end',today)).date();dates=st.date_input('İncelenecek çalışma dönemi',(start,end),key='hours_history_range')
+        if len(dates)!=2:return
+        agents=[x for x in people if x.get('position','agent')=='agent'];df=personnel_hours(state,agents,*dates,published_only=True)
+        if df.empty:st.info('Personel veya çalışma kaydı yok.');return
+        st.bar_chart(df.groupby('Grup')['Toplam saat'].mean().rename(index=WORK_LABELS),color='#2c98a2')
+        from html import escape
+        for group in sorted(df.Grup.unique()):
+            used=float(df.loc[df.Grup==group,'Toplam saat'].mean());targets=[x for x in state.get('group_hour_targets',[]) if x['group']==group and x['start']<=str(dates[1]) and str(dates[0])<=x['end']]
+            st.markdown('<div style="padding:15px;background:#f0f7fb;border-left:4px solid #358d9e;border-radius:13px;margin:12px 0"><b>'+escape(WORK_LABELS.get(group,group))+'</b><div style="font-size:23px;margin:10px 0;color:#267b8b">'+f'{used:.1f} saat / kişi</div><small>Seçilen aralıkta yayınlanmış çalışma</small></div>',unsafe_allow_html=True)
+            if targets:
+                target=targets[0];used_all=personnel_hours(state,[p for p in agents if p['work_type']==group],target['start'],target['end']);amount=float(used_all['Toplam saat'].mean()) if not used_all.empty else 0;remaining=max(0,target['hours']-amount);st.progress(min(1.,amount/target['hours']) if target['hours'] else 1.,text=f"Hedef dönemi {target['start']} – {target['end']} · {amount:.1f} / {target['hours']:.1f} sa · Kalan {remaining:.1f} sa / kişi")
+            else:st.caption('Bu aralıkla eşleşen çalışma saati üst sınırı henüz tanımlı değil.')
 
 
 def render_targets(state):
