@@ -43,19 +43,23 @@ def availability(state,eid,start,minutes,db=None,kind="Mola"):
     roster=[r for r in roster if languages.get(people.get(str(r['employee_id']),{}).get('language') or 'tr',True)]
     existing=[r for r in records(state,db) if r.get('status')!='İptal']
     if any(str(r['employee_id'])==eid and a<pd.Timestamp(r['end']) and pd.Timestamp(r['start'])<b for r in existing):raise ValueError('Planlı yemek veya başka mola ile çakışıyor.')
+    from ortak.kocluk_alanlari import read as read_openings
+    openings=read_openings(state,db)
+    claim=state.get('_claim_coaching_opening')
     spare=[]
     for t in pd.date_range(a,b-pd.Timedelta(seconds=1),freq='5min'):
         day=t.normalize();slot=t.hour*2+t.minute//30+1;demand=need[(pd.to_datetime(need.Tarih).dt.normalize()==day)&(need.Slot==slot)]
         if demand.empty:raise ValueError('Seçilen saat için ihtiyaç verisi yok; kapasite teyit edilemiyor.')
         workers={str(r['employee_id']) for r in roster if (span:=bounds(r)) and pd.Timestamp(span[0])<=t<pd.Timestamp(span[1])}
-        on_break={str(r['employee_id']) for r in existing if pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end'])}
+        on_break={str(r['employee_id']) for r in existing if str(r['employee_id']) in workers and pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end'])}
+        reserved=sum(1 for r in openings if r['id']!=claim and pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end']) and languages.get(people.get(str(r['employee_id']),{}).get('language') or 'tr',True))
         if state.get('status_rules',{}).get('shrinkage_included'):
             from ortak.statuler import shrinkage_for
             rate=float(demand['Shrinkage (%)'].iloc[0])/100 if 'Shrinkage (%)' in demand else shrinkage_for(state,t,slot,float(state.get('staffing_parameters',{}).get('shrinkage',.3)))
             net=float(demand['Net Agent'].max()) if 'Net Agent' in demand else float(demand['Planlanan Agent'].max())*(1-rate)
             # Extra simultaneous statuses may use the already-funded shrinkage budget.
-            spare.append(max(0,len(workers)-len(on_break)-net) if len(workers)*(1-rate)>=net else 0)
-        else:spare.append(len(workers-on_break)-float(demand['Planlanan Agent'].max()))
+            spare.append(max(0,len(workers)-len(on_break)-reserved-net) if len(workers)*(1-rate)>=net else 0)
+        else:spare.append(len(workers-on_break)-reserved-float(demand['Planlanan Agent'].max()))
     return min(spare)
 
 

@@ -10,9 +10,11 @@ def coaching_used(state):
     if not path:return used
     with connect(path) as db:
         if not db.execute("SELECT 1 FROM sqlite_master WHERE name='planned_breaks'").fetchone():return used
-        for row in db.execute('SELECT payload FROM planned_breaks'):
+        reserved=[]
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='coaching_openings'").fetchone():reserved=[r[0] for r in db.execute("SELECT payload FROM coaching_openings WHERE status='Açık'")]
+        for row in list(db.execute('SELECT payload FROM planned_breaks'))+[(r,) for r in reserved]:
             p=loads(row[0])
-            if p.get('kind')!='Koçluk':continue
+            if p.get('kind') not in {'Koçluk','Koçluk Alanı'}:continue
             a,b=pd.Timestamp(p['start']),pd.Timestamp(p['end']);k=(str(p['employee_id']),a.strftime('%Y-%m'));used[k]=used.get(k,0)+(b-a).total_seconds()/60
     return used
 
@@ -43,11 +45,12 @@ def plan(state,rows,coverage,people,used=None):
     net_need=need*(1-rates);coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
     for item in state.get('_status_fixed_baseline',[]):
         a,b=pd.Timestamp(item['start']),pd.Timestamp(item['end']);overlap=np.maximum(0,(np.minimum(np.datetime64(b),stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(a),stamps))/np.timedelta64(30,'m'));loss[:]+=overlap;by_person.setdefault(str(item['employee_id']),[]).append(item)
-    def place(row,kind,duration,a,b,mandatory=False):
+    def place(row,kind,duration,a,b,mandatory=False,probe=False):
         if duration<=0:return True
         eid=str(row['employee_id']);best=None;rule=cfg.get('groups',{}).get(lookup.get(eid,{}).get('work_type'),{})
         indices=np.flatnonzero((stamps+np.timedelta64(30,'m')>np.datetime64(a))&(stamps<np.datetime64(b)))
         local_stamps=stamps[indices];local_need=net_need[indices];local_gross=gross[indices];local_rates=rates[indices];local_loss=loss[indices]
+        counted=out['Sayaca Dahil'].to_numpy(bool)[indices] if 'Sayaca Dahil' in out else np.ones(len(indices),bool)
         before=np.maximum(0,local_need-net_capacity(local_gross,local_loss,local_rates))
         for t in pd.date_range(a,b-pd.Timedelta(minutes=duration),freq='15min'):
             finish=t+pd.Timedelta(minutes=duration)
@@ -58,12 +61,13 @@ def plan(state,rows,coverage,people,used=None):
                 if any(hour_use.get((eid,k),0)+v>limit for k,v in buckets.items()):continue
             overlap=np.maximum(0,(np.minimum(np.datetime64(finish),local_stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(t),local_stamps))/np.timedelta64(30,'m'))
             if overlap.sum()+1e-8<duration/30:continue
-            after=np.maximum(0,local_need-net_capacity(local_gross,local_loss+overlap,local_rates));cost=float((after-before).sum())
+            after=np.maximum(0,local_need-net_capacity(local_gross,local_loss+overlap,local_rates));cost=float(((after-before)*counted).sum())
             if not mandatory and cost>1e-8:continue
             # Prefer middle of shift; capacity always has precedence.
             candidate=(cost,abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds()),t,finish,overlap)
             if best is None or candidate[:2]<best[:2]:best=candidate
         if best is None:
+            if probe:return False
             issues.append({'employee_id':eid,'date':row['date'],'Sorun':kind+' için uygun kapasite/pencere yok; '+('vardiyayı veya ihtiyacı düzenleyin' if mandatory else 'uygun başka döneme ertelendi'),'severity':'error' if mandatory else 'warning','override_required':False});return False
         _,__,t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
         if kind=='Mola':
@@ -88,17 +92,24 @@ def plan(state,rows,coverage,people,used=None):
             if left<right:place(row,'Cuma',int(friday.get('minutes',60)),left,right,True)
     if cfg.get('automatic',False):
         for row,a,b,rule,hours in working:
-            remaining=allowance(rule,hours);chunk=max(5,int(rule.get('break_minutes',15)))
+            night=(row.get('shift_code')=='GECE')
+            night_rules=(state.get('shift_rules') or {}).get('night',{})
+            remaining=int(night_rules.get('break_total_minutes',60)) if night and hours>=8 else allowance(rule,hours)
+            chunk=min(15,max(5,int(rule.get('break_minutes',15))))
             while remaining>0:
-                duration=min(chunk,remaining)
-                if not place(row,'Mola',duration,a+pd.Timedelta(minutes=rule.get('break_first_minutes',60)),b-pd.Timedelta(minutes=rule.get('break_last_minutes',60))):break
-                remaining-=duration
-        for row,a,b,rule,hours in ([] if cfg.get('coaching_by_leader') else working):
+                candidates=sorted(set([min(chunk,remaining)]+[x for x in (10,5) if x<=min(chunk,remaining)]),reverse=True)
+                placed=False
+                for duration in candidates:
+                    if place(row,'Mola',duration,a+pd.Timedelta(minutes=rule.get('break_first_minutes',60)),b-pd.Timedelta(minutes=rule.get('break_last_minutes',60)),probe=True):
+                        remaining-=duration;placed=True;break
+                if not placed:
+                    issues.append({'employee_id':str(row['employee_id']),'date':row['date'],'Sorun':f'Mola: {remaining} dakika için uygun kapasite/pencere yok.','severity':'warning','override_required':False});break
+        for row,a,b,rule,hours in working:
             eid=str(row['employee_id']);month=a.strftime('%Y-%m');target=int(rule.get('coaching_monthly_minutes',60));chunk=max(5,int(rule.get('coaching_chunk_minutes',15)));remaining=target-coached.get((eid,month),0)
             if remaining<=0:continue
             # At most one coaching fragment per working day; never crosses month end.
             finish=min(b,(a+pd.offsets.MonthBegin(1)).normalize());duration=int(min(chunk,remaining))
-            if place(row,'Koçluk',duration,a+pd.Timedelta(minutes=30),finish-pd.Timedelta(minutes=15)):coached[(eid,month)]=coached.get((eid,month),0)+duration
+            if place(row,'Koçluk Alanı' if cfg.get('coaching_by_leader') else 'Koçluk',duration,a+pd.Timedelta(minutes=60),finish-pd.Timedelta(minutes=60),probe=bool(cfg.get('coaching_by_leader'))):coached[(eid,month)]=coached.get((eid,month),0)+duration
     out['Brüt Atanan']=out['Atanan'];out['Mola kaybı']=loss;out['Shrinkage statü bütçesi']=gross*rates
     # Keep the existing gross-need units throughout planning/approval counters.
     out['Atanan']=np.round(np.maximum(0,net_capacity(gross,loss,rates)/(1-rates)),8);out['Eksik']=(out['İhtiyaç']-out.Atanan).clip(lower=0);out['Fazla']=(out.Atanan-out['İhtiyaç']).clip(lower=0)

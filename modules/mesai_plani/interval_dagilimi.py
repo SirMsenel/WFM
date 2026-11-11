@@ -270,27 +270,9 @@ def render():
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     state=st.session_state
     st.subheader('Haftalık Çağrı Dağılımı')
-    with st.expander('Veri kaynağı',expanded=False):
-        source=st.radio('30 dakikalık veri',['Hazır Veritabanı','Dosya (CSV/Excel)'],horizontal=True,key='interval_source')
-        raw=None
-        if source=='Hazır Veritabanı':
-            raw=cached_calls(str(state.get('workspace_db_path',DEFAULT_DB)),True)
-            date_col,count_col='tarih','cagri_sayisi'
-            st.caption(f'{len(raw):,} yarım saatlik kayıt otomatik yüklendi.')
-            if st.button('Veritabanını Yenile',key='interval_refresh'):
-                cached_calls.clear();_weekly_model.clear();st.rerun()
-        else:
-            upload=st.file_uploader('CSV / Excel dosyası',type=['csv','xlsx'],key='interval_upload')
-            if upload:
-                try:
-                    raw=pd.read_csv(upload) if upload.name.lower().endswith('.csv') else pd.read_excel(upload)
-                except Exception as exc:
-                    st.error(f'Dosya okunamadı: {exc}');return
-                a,b=st.columns(2);dt_guess=_guess_datetime_col(raw);call_guess=_guess_calls_col(raw)
-                date_col=a.selectbox('Tarih / saat sütunu',list(raw),index=list(raw).index(dt_guess) if dt_guess in raw else 0,key='interval_date_column')
-                count_col=b.selectbox('Çağrı sayısı sütunu',list(raw),index=list(raw).index(call_guess) if call_guess in raw else 0,key='interval_calls_column')
-    if raw is None:
-        st.info('Bir dosya seçin veya hazır veritabanını kullanın.');return
+    raw=cached_calls(str(state.get('workspace_db_path',DEFAULT_DB)),True)
+    date_col,count_col='tarih','cagri_sayisi'
+    if raw.empty:st.info('Veritabanında yarım saatlik çağrı kaydı yok.');return
     use_iqr=st.toggle('Aykırı değerleri IQR ile değerlendir',value=False,key='interval_iqr')
     iqr_k=1.5;iqr_mode='cap'
     if use_iqr:

@@ -73,3 +73,9 @@ Yeni rol `assistant_manager` / Yönetici Yardımcısı; yeni cinsiyet kuralları
 `status_actuals`: gerçekleşme verisi (source=actual/synthetic). `manager_agenda`: yönetim çalışması/koçluk. `status_swap_requests`: iki aşamalı statü değişim onayı. `language_demands`: work_state içinde dile özel ihtiyaç. Yeni tablo/sütunlar ilk açılışta eklenir; kurum modunda sentetik veri/hesap eklenmez. Eksik statü kayıtlarıyla elde edilen shrinkage tam devamsızlık/eğitim kaybı değildir.
 
 Yeni tahmin kayıtlarının metadata.staffing_parameters alanı özgün Erlang ayarlarını taşır; eski kayıtlarda bu alan yoksa özgün tahmini SL bilinmiyor kabul edilir.
+
+
+## Faz 4
+`coaching_openings(id,publication_id,employee_id,status,payload)` yayınlanmış fakat henüz lidere atanmış görüşme olmayan koçluk kapasite alanlarını tutar. Açık alan lider atamasıyla Atandı olur; atama `manager_agenda` ve `planned_breaks` içine yazılır. İptal/yeniden planlama durumları arşivlenir. Alanlar vardiya tarih/saatinden bağımsız gerçek görüşme sayılmamalıdır. Kurum takvimi entegrasyonu ayrıca gerekir.
+
+Gün bazlı `slot_shrinkage` kuralı örneği: `{"weekdays":[5,6],"start_slot":17,"end_slot":34,"rate":0.15}` (Pazartesi=0). Son eşleşen satır uygulanır. Geriye dönük sentetik tahminler metadata.forecast.synthetic/retrospective alanlarıyla ayırt edilir; kayıt zamanı üretim anıdır.

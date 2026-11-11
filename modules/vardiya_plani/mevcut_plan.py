@@ -25,17 +25,13 @@ def render(profile=None):
     profile = profile or st.session_state.get("profile") or {}
     token = st.session_state.get("auth_token")
 
-    part=st.segmented_control('Mevcut plan bölümü',['Personel Özeti','Mesai Kuralları','Statü Kuralları','Çalışma Süreleri'],default='Personel Özeti',key='nav_current_plan_v2',label_visibility='collapsed')
+    part=st.segmented_control('Mevcut plan bölümü',['Personel Özeti','Mesai Kuralları','Statü Kuralları'],default='Personel Özeti',key='nav_current_plan_v2',label_visibility='collapsed')
     if part=='Personel Özeti':
         from ortak.personel import get_people,personnel_summary
         from ortak.personel_grafikleri import render_summary
         render_summary(personnel_summary(get_people(st.session_state)))
         from ortak.calisma_sureleri_ekrani import render_hours_summary
         render_hours_summary(st.session_state,get_people(st.session_state))
-
-    if part=='Çalışma Süreleri':
-        from ortak.calisma_sureleri_ekrani import render_targets
-        render_targets(st.session_state)
 
     if part=='Statü Kuralları':
         from modules.statu_kurallari import render

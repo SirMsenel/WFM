@@ -32,7 +32,7 @@ def render_daily():
     for metric,col in zip((a,b,c),columns):
         metric.metric(col,f'{table[col].sum(min_count=1):,.0f}' if table[col].notna().all() else 'Eksik gün var')
     with st.expander('Günlük karşılaştırma tablosu'):
-        st.dataframe(table,hide_index=True,use_container_width=True)
+        st.dataframe(table.style.format(precision=2,na_rep="—"),hide_index=True,use_container_width=True)
     st.download_button('Günlük Analiz CSV İndir',table.to_csv(index=False).encode('utf-8-sig'),'gunluk_gecmis.csv','text/csv')
     options=st.session_state.get('cf_forecast_options',[])
     if options:
@@ -107,7 +107,7 @@ def render_interval_references():
     from ortak.saat_etiketleri import slot_label
     view=table.copy();view.insert(2,'Saat aralığı',view.Slot.map(slot_label));view=view.drop(columns='Slot')
     with st.expander('30 dakikalık karşılaştırma tablosu'):
-        st.dataframe(view,hide_index=True,use_container_width=True)
+        st.dataframe(view.style.format(precision=2,na_rep="—"),hide_index=True,use_container_width=True)
     st.download_button('30 dk Analiz CSV İndir',view.to_csv(index=False).encode('utf-8-sig'),'30dk_gecmis.csv','text/csv')
 
 

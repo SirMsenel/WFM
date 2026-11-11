@@ -37,6 +37,6 @@ def render(kind='forecast'):
     for i,row in view.iterrows():
         style='background-color:#edf1f5;color:#7a8699' if row['Sonuç'] in {'Ölçüm dışı','Veri yok'} else difference_color(row[diff],tolerance)
         styles.loc[i,:]=style
-    st.dataframe(view.style.apply(lambda _:styles,axis=None).format({diff:'{:+.2f}'},na_rep='—'),hide_index=True,use_container_width=True,height=540)
+    st.dataframe(view.style.apply(lambda _:styles,axis=None).format({diff:'{:+.2f}'},precision=2,na_rep='—'),hide_index=True,use_container_width=True,height=540)
     st.caption('Yeşil: seçtiğin fark sınırında. Kırmızı: sınır dışında; fark arttıkça koyulaşır. Veri olmayan ve ölçüm dışındaki dilimler gri, başarı hesabı dışındadır.')
     st.download_button('Takip CSV İndir',view.to_csv(index=False).encode('utf-8-sig'),kind+'_izleme.csv','text/csv',key=prefix+'_csv')

@@ -1,4 +1,4 @@
-WFM — 11 KASIM 2026 / FAZ 3 (9. GÜNCELLEME) — macOS
+WFM — 11 KASIM 2026 / FAZ 4 (10. GÜNCELLEME) — macOS
 
 1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
 2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
@@ -21,6 +21,13 @@ WFM — 11 KASIM 2026 / FAZ 3 (9. GÜNCELLEME) — macOS
 7. http://localhost:8501 adresini aç. Demo hesap: moderator / 1234
    Sadece tarayıcıyı yenilemek eski klasörden çalışan kodu güncellemez.
    Windows ortam etkinleştirmesi: .venv\Scripts\activate
+
+FAZ 4 İÇİN
+- Geçmiş kayıp önerisini Personel Hesap ekranından inceleyip gün bazlı aktarabilirsin.
+- Koçluk alanları yeni planlarda ayrılır; eski yayınlar kendiliğinden değişmez.
+- Ajandada haftalık çalışma saatlerini kaydet, personeli seç, uygun alana ata.
+- Yayın Yönetimi takvim hücresini değiştir; gerekçe girip kaydet.
+- Ayrıntılı değişiklik listesi: GUNCELLEME_NOTLARI.md
 
 YENİ AKIŞLAR
 - Mesai Planı > Tahmin Kaynağı > Kayıtlı tahmin seç: yıllık/dönemsel günlük tahmini

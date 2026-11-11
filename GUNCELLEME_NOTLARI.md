@@ -1,3 +1,36 @@
+# WFM — Faz 4 / 11 Kasım 2026 / 10. güncelleme
+
+## Geçmiş veri ve personel hesabı
+- Demo modunda en az altı aylık, hafta hafta günlük/30 dakikalık tahmin ve oran arşivi eklenir. Tahminler hedef haftadan önceki aynı gün kayıtlarından üretilen sentetik karşılaştırma örnekleridir; geçmişte yapılmış gerçek tahmin gibi tarihlenmez. Gerçekleşen çağrı/AHT/SL örnekleri ve personel vardiya geçmişi korunur.
+- Sentetik statü geçmişi güncellendi: hafta sonu yemek/mola süreleri daha düşük; yemek, mola ve koçluk kayıtları mevcut. Yalnızca source=synthetic satırları yenilenir; kurumdan alınan actual kayıtları korunur. Kurumsal modda bu üretimler çalışmaz.
+- Kayıp önerisi her hafta günü ve her yarım saat için ayrı hesaplanır: birleştirilmiş statü süresi / vardiya süresi. Çakışan statüler çift sayılmaz. Çalışma yoksa oran üretilmez ve mevcut varsayılan korunur. Sonuçlar iki ondalık gösterilir; gün grafiği ve açık sütun adları eklendi. Aktarılan gün filtresi elle düzenleme/kaydetmede korunur. %95 üzerindeki öneriler uygulanırken %95'e sınırlanır.
+- Interval artık doğrudan veritabanından beslenir. Profil listesi aktif profil vurgusu, kart içi aktif yapma ve çoklu silme seçimi sunar.
+
+## Vardiya ve kapasite
+- Ayrı Çalışma Süreleri alt ekranı kaldırıldı. Personel Özeti içindeki süre tanımlama alanı korunur; sağda seçilen tarihlere ait çalışma ve hedef dönemi kalan süre kartları, altında grup grafiği bulunur. Kalan süre hedef dönemine aittir ve tarihleri ayrıca gösterilir.
+- Grup sırası açık, numaralı seçim düğmeleriyle yönetilir. Otomatik Taslağı Sıfırla yalnızca seçili dönem/personellerde otomatik taslak atamalarını siler; elle/kesin kayıtları, yayın ve onay geçmişini silmez.
+- Gece Kuralları'na 8 saatlik GECE vardiyası toplam mola süresi eklendi (varsayılan 60 dakika). İlk/son saat ve saatlik mola sınırları korunur. Sayaca dahil olmayan dilimler mola kapasite maliyetini engellemez. Tek mola en fazla 15 dakika; uygunluğa göre 10/5 dakikalık parçalar da denenir.
+- Eksik tablosunda kırmızı eksik kişi, koyulaşan yeşil + ise fazla kişi gösterilir. Öneriler kısa dolu aralıkları birleştirebilir: Kapasite ve Ek Mesai içindeki varsayılan 1 yarım saatlik köprü; fazla personel, dinlenme, okul, grup/dönem süre sınırları korunur. Elle blok seçimi gerçek saat aralıklarını gösterir.
+- Statülerin shrinkage bütçesine sığıp sığmadığı ek kartlarla gösterilir. Yalnızca bütçeyi aşan statü kaybı ayrıca kapasiteden düşülür.
+- Yayın Yönetimi'nde takvimin hücreleri doğrudan düzenlenir. Değerler 08:00–17:00, Gece 00:00–08:00 veya OFF/izin adı olabilir. Gerekçe ve Kaydet ile kural kontrolü, denetim, statü yeniden planlama ve bildirim aynı işlemde çalışır. Düzenleme Planlama içindir; diğer takvimler salt okunurdur.
+
+## Koçluk ve haftalık ajanda
+- Otomatik planda aylık hedef ve kapasiteye göre kişiye uygun koçluk alanları ayrılır. Bunlar henüz kesin görüşme değildir. Koçluk alanları kapasite kaybına dahildir ve yayın onayı snapshot'ıyla birlikte yayınlanır; lider atayana kadar personelin planlı statülerine eklenmez.
+- Ajandada lider 7 günlük çalışma saatlerini tek seferde kaydeder. Personeli seçince yayınlanmış koçluk alanları ile kendi çalışma aralığının kesişimi tarih/saat kartlarında görünür. Seçilen alana atama tek işlemde yapılır; aynı alan ikinci kez kullanılamaz. Başka görüşme, hat kapasitesi, ekip yetkisi ve aylık hedef son anda tekrar kontrol edilir.
+- Haftayı değiştirmek atanmış görüşmeleri çalışma dışında bırakamaz. Alt bölümde haftalık vardiya biçiminde kendi çalışma/görüşme takvimi vardır. Yayın geri alınırsa ayrılmış alanlar da kaldırılır; hücre değişiminde ilgili kişinin alanları yeniden değerlendirilir.
+
+## İzleme, takip ve görünüm
+- Giriş bildirimi ekran ortasında ve sınırlı yükseklikte açılır; küçük ekranlarda içerik kaydırılır.
+- İzleme bugün/vardiya/statü saatlerini ortak başlıkta ayırır. Mola kapasite grafiği kaldırıldı; kişi üst sınırdan daha kısa mola isteyebilir.
+- İzleme → Personel Bilgileri: tarih bazlı çalışma, OFF ve planlı statü/koçluk özeti. Müşteri Temsilcisi kendisini, lider kendi ekibini görür. Performans skoru üretilmez; ileride gerçek skor kaynağı bağlanabilir.
+- Takip bölümünde ayırıcı çizgiler ve planlı statülerin renkli satır listesi eklendi. Statü analizi gün bazında toplam saat grafiği, açık kişi-eşdeğeri açıklaması ve renkli kullanım özeti kartları sunar. Analiz tablolarında ondalıklar iki basamak gösterilir.
+
+## Kullanım
+Eski süreçleri durdurup ZIP'i yeni klasöre çıkarın. Kendi verilerinizi korumak için eski data/auth_demo.db ve data/wfm_demo.db dosyalarının kopyalarını yeni klasöre alın; ilk açılışta yeni tablolar eklenir. Ayrıntılı macOS komutları ILK-OKU.txt içinde.
+Kurum API/statü/kimlik entegrasyonu henüz canlı değildir; bu sürümdeki geçmişler örnektir. Vardiya motorunun kural tabanlı yöntemi ve çağrı tahmini modelleri değiştirilmedi.
+
+---
+
 # WFM — Faz 3 / 11 Kasım 2026 / 9. güncelleme
 
 ## Yetki, bildirim ve yönetim

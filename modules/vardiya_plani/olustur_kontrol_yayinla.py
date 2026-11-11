@@ -20,14 +20,14 @@ def render_group_priority():
     groups=list(rules)
     st.session_state.setdefault('plan_group_priority',groups)
     selected=[g for g in st.session_state.get('plan_group_priority',groups) if g in groups]
-    with st.expander('Grup sırasını seç · tıkladığın sırayla yerleştirilir'):
-        if st.button('Sırayı Yeniden Seç',key='priority_reset'):
-            st.session_state['plan_group_priority']=[];st.rerun()
+    with st.container(border=True):
+        st.markdown('#### Yerleştirme Önceliği')
         cols=st.columns(len(groups))
         for col,group in zip(cols,groups):
-            if col.button(GROUP_LABELS.get(group,group),disabled=group in selected,key='priority_add_'+group):
-                st.session_state['plan_group_priority']=selected+[group];st.rerun()
-    st.markdown(' → '.join(f"**{i+1}. {GROUP_LABELS.get(g,g)}**" for i,g in enumerate(selected)) or 'Sıra boş; yukarıdan gruplara sırayla tıklayın.')
+            rank=str(selected.index(group)+1)+' · ' if group in selected else '+ '
+            if col.button(rank+GROUP_LABELS.get(group,group),type='primary' if group in selected else 'secondary',key='priority_add_'+group,use_container_width=True):
+                st.session_state['plan_group_priority']=([g for g in selected if g!=group] if group in selected else selected+[group]);st.rerun()
+        if st.button('Sırayı Yeniden Seç',key='priority_reset'):st.session_state['plan_group_priority']=[];st.rerun()
     if len(selected)<len(groups):st.info('Plan oluşturmadan önce tüm grupları sıraya ekleyin.')
     rows=[]
     for group in selected:
@@ -96,6 +96,11 @@ def render():
             st.success('Taslak hazır. Takvimi Vardiya Saatleri ekranından da inceleyebilirsin.')
         except (ValueError,TypeError,KeyError) as exc:
             st.error(f'Plan oluşturulamadı: {exc}')
+    if st.button('Otomatik Taslağı Sıfırla',key='planning_reset'):
+        start,end=str(context['start']),str(context['end']);included={str(p['employee_id']) for p in people}
+        state['draft_shift_plan']=[r for r in state.get('draft_shift_plan',[]) if not (r.get('source')=='auto' and start<=str(r.get('date'))<=end and str(r['employee_id']) in included)]
+        for key in ('planning_result','planning_result_fingerprint','_status_plan_cache'):state.pop(key,None)
+        save_keys(state);st.rerun()
     result=state.get('planning_result')
     if result is None:
         if ready:

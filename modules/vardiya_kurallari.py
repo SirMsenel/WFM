@@ -19,6 +19,7 @@ def render():
         for k,label in [('night_window_start','Gece başlangıç'),('night_window_end','Gece bitiş')]:g[k]=clock(label,value=time.fromisoformat(g[k]),key='p7_'+k).strftime('%H:%M')
         target=n.setdefault(n['mode'],{'tr':0,'en':0,'ar':0});cols=st.columns(3)
         for col,lang in zip(cols,['tr','en','ar']):target[lang]=col.number_input(lang.upper(),0,100,int(target.get(lang,0)))
+        n['break_total_minutes']=number('8 saatlik gece vardiyasında toplam mola (dk)',0,120,int(n.get('break_total_minutes',60)),5,key='night_break_minutes')
         n['allowed_work_types']=st.multiselect('Gece grupları',list(WORK_LABELS),default=n.get('allowed_work_types',['akademi']))
     cols=st.columns(3)
     for i,group in enumerate(['dis_kaynak','akademi','fulltime']):
@@ -42,6 +43,7 @@ def render():
         st.markdown('#### Kapasite ve ek mesai');capacity=r.setdefault('capacity',{})
         capacity['max_overstaff']=number('Bir dilimde izin verilen fazla personel',0,100,int(capacity.get('max_overstaff',2)))
         capacity['min_overtime_hours']=number('Yeni ek mesai bloğu en az saat',.5,10.,float(capacity.get('min_overtime_hours',4)),.5)
+        capacity['bridge_gap_slots']=number('Eksik bloklar arasında birleştirilecek yarım saat',0,6,int(capacity.get('bridge_gap_slots',1)),key='bridge_gap_slots')
         school=r.setdefault('school',{});school['holiday_priority']=st.checkbox('Bayram önceliği',school.get('holiday_priority',True));school['summer_months']=st.multiselect('Ders uygulanmayan yaz ayları',list(range(1,13)),default=school.get('summer_months',[6,7,8]))
     sync=st.checkbox('Seçili dönemin kesin gece kayıtlarını yeni saatlere uyarla',True,key='rules_sync_nights')
     if st.button('Kaydet ve Uygula',key='rules_apply',type='primary'):

@@ -128,20 +128,18 @@ def render():
     from ortak.profil_yonetimi import manage_profiles
     import hashlib
     active=st.session_state.get('sp_active_ratio_profile_name')
-    st.markdown('### Kayıtlı Profiller')
-    st.caption('Bir profili işaretleyip aktif yapabilirsin. Silmek için birden fazla profil seçebilirsin.')
-    rows=pd.DataFrame([{'Seç':False,'Profil':p['name'],'Aktif':p['name']==active,
-                        'Hafta':p.get('meta',{}).get('week_start','Genel dağılım'),
-                        'Oluşturma':str(p.get('created_at',''))[:10]} for p in profiles])
-    table_key='profile_checks_'+hashlib.sha1(('|'.join(rows.Profil)+'|'+str(active)).encode()).hexdigest()[:10]
-    edited=st.data_editor(rows.style.apply(lambda row:['background-color:#e5f5ef;color:#236a56' if row['Aktif'] else 'background-color:#f6f9fc;color:#35576b' for _ in row],axis=1),hide_index=True,use_container_width=True,key=table_key,
-                         disabled=['Profil','Aktif','Hafta','Oluşturma'],
-                         column_config={'Seç':st.column_config.CheckboxColumn('Seç'),'Aktif':st.column_config.CheckboxColumn('Aktif',disabled=True)})
-    selected=edited.loc[edited['Seç'],'Profil'].tolist()
-    a,b,_=st.columns([1,1,3])
-    action=None
-    if a.button('Aktif Yap',key='sp_btn_activate',disabled=len(selected)!=1):action='activate'
-    if b.button('Seçilenleri Sil',key='sp_btn_delete',disabled=not selected):action='delete'
+    from html import escape
+    selected=[];action=None;activate_name=None
+    for offset in range(0,len(profiles),3):
+        for column,p in zip(st.columns(3),profiles[offset:offset+3]):
+            with column.container(border=True):
+                name=p['name'];ident=hashlib.sha1(name.encode()).hexdigest()[:12]
+                color='#158570' if name==active else '#487ca8'
+                st.markdown(f'<div style="color:{color};font-weight:750;font-size:18px">{escape(name)}</div><div style="margin:10px 0;color:#64748b">{escape(str(p.get("meta",{}).get("week_start","Genel dağılım")))} · {"● Aktif" if name==active else "Kayıtlı"}</div>',unsafe_allow_html=True)
+                if st.checkbox('Seç',key='profile_card_'+ident):selected.append(name)
+                if st.button('Aktif Yap',key='profile_activate_'+ident,disabled=name==active,use_container_width=True):activate_name=name
+    if st.button('Seçilenleri Sil',key='sp_btn_delete',disabled=not selected):action='delete'
+    if activate_name is not None:selected=[activate_name];action='activate'
     if action:
         try:
             manage_profiles(st.session_state,selected,action)

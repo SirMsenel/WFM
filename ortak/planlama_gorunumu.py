@@ -45,14 +45,24 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
     _ring(b,'Eksik çalışma süresi (kişi-saat)',f'{left/2:,.1f}',left/needed if needed else 0,'#e8a33d')
     _ring(c,'Personel açığı bulunan yarım saat',str(slots),slots/total if total else 0,'#dc7760')
     _ring(d,'Fazladan planlanan kişi-saat',f'{excess/2:,.1f}',excess/(needed+excess) if needed+excess else 0,'#8574bf')
-    if excess:st.warning('Kesin veya elle girilmiş kayıtlar bazı saatlerde ihtiyacı aşıyor. Otomatik atama bu saatlere personel eklemez.')
+    if excess:st.info('Yeşil + hücreler ihtiyacın üzerinde planlanan kapasiteyi gösterir. Yeni otomatik atamalar tanımlı fazla personel sınırını korur.')
+    if 'Shrinkage statü bütçesi' in coverage and 'Mola kaybı' in coverage:
+        from ortak.modern_kartlar import metric_cards
+        budget=float(coverage['Shrinkage statü bütçesi'].sum())*.5;planned=float(coverage['Mola kaybı'].sum())*.5
+        over=(coverage['Mola kaybı']-coverage['Shrinkage statü bütçesi']).clip(lower=0)
+        st.markdown('#### Statüler Seçilen Kayıp Bütçesine Sığıyor mu?')
+        metric_cards([('Shrinkage ile ayrılan süre',f'{budget:.2f} kişi-saat'),('Yemek, mola ve koçluk alanları',f'{planned:.2f} kişi-saat'),('Bütçeyi aşan yarım saat',str(int((over>1e-8).sum())))])
+        if (over>1e-8).any():st.warning('Bazı yarım saatlerde statü süresi shrinkage bütçesini aşıyor. Bu aşım kapasiteden ayrıca düşüldü; yukarıdaki eksik hesabına dahildir.')
+        else:st.caption('Planlanan statüler seçilen shrinkage bütçesi içinde; kapasiteden ikinci kez düşülmez.')
 
 
-def shortage_matrix(coverage,start):
+
+def shortage_matrix(coverage,start,signed=False):
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     week=pd.Timestamp(start).normalize()
     days=pd.date_range(week,periods=7)
     df=coverage.copy()
+    if signed:df['Eksik']=df['Eksik']-df['Fazla']
     if 'Sayaca Dahil' in df:df.loc[~df['Sayaca Dahil'],'Eksik']=float('nan')
     df['Tarih']=pd.to_datetime(df.Tarih).dt.normalize()
     table=df.pivot_table(index='Slot',columns='Tarih',values='Eksik',aggfunc=lambda v:v.sum(min_count=1)).reindex(index=range(1,49),columns=days)
@@ -65,11 +75,13 @@ def styled_shortage_matrix(matrix):
     peak=float(matrix.max().max()) if matrix.notna().any().any() else 0
     def color(value):
         if pd.isna(value):return 'background-color:#eef2f6;color:#64748b;text-align:center'
+        if value<0:
+            intensity=min(1.,abs(float(value))/max(1.,abs(float(matrix.min().min()))));return f'background-color:rgb({int(220-190*intensity)},{int(245-115*intensity)},{int(225-135*intensity)});color:{"white" if intensity>.5 else "#17533d"};text-align:center'
         ratio=min(1,float(value)/peak) if peak else 0
         red=255;green=int(247-120*ratio);blue=int(245-120*ratio)
         return f'background-color:rgb({red},{green},{blue});color:#6d2424;text-align:center'
     styles=matrix.map(color)
-    display=matrix.map(lambda v:'—' if pd.isna(v) else str(int(v)))
+    display=matrix.map(lambda v:'—' if pd.isna(v) else ('+'+f'{abs(v):.2f}' if v<0 else f'{v:.2f}'))
     return display.style.apply(lambda _:styles,axis=None)
 
 
@@ -81,8 +93,8 @@ def render_shortages(result,key='gap'):
     first=dates.min().normalize()-pd.Timedelta(days=dates.min().weekday())
     weeks=list(pd.date_range(first,dates.max(),freq='7D'))
     week=st.selectbox('Gösterilecek hafta',weeks,format_func=lambda d:f'{d:%d.%m.%Y} – {d+pd.Timedelta(days=6):%d.%m.%Y}',key=key+'_week') if len(weeks)>1 else first
-    matrix=shortage_matrix(coverage,week)
-    st.caption('Hücrelerde o yarım saatte eksik olan kişi sayısı bulunur. 0: ihtiyaç karşılanmış · —: sayaca dahil değil, veri yok veya seçili dönem dışında.')
+    matrix=shortage_matrix(coverage,week,signed=True)
+    st.caption('Kırmızı: eksik kişi · Yeşil +: fazla kişi · 0: ihtiyaç karşılanmış · —: sayaca dahil değil, veri yok veya seçili dönem dışında.')
     st.dataframe(styled_shortage_matrix(matrix),height=540,use_container_width=True)
     if missing.empty:st.success('Seçili dönemde tüm yarım saatlik ihtiyaç karşılanmış.');return
     if 'Aralık' not in missing:

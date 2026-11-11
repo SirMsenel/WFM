@@ -32,6 +32,8 @@ def publish_plan(state,result,approval_ticket=None):
     payload={'id':batch_id,'start':start,'end':end,'rows':rows,'languages':sorted(set(language.values())),'actor':(state.get('profile') or {}).get('username')}
     if path:
         init_publications(path)
+        from ortak.kocluk_alanlari import init as init_openings
+        init_openings(path)
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             if gated:
@@ -54,7 +56,9 @@ def publish_plan(state,result,approval_ticket=None):
             finalize(db,rows,start,end,(state.get('profile') or {}).get('username'))
             if result.get('breaks'):
                 db.execute('CREATE TABLE IF NOT EXISTS planned_breaks(id TEXT PRIMARY KEY,publication_id TEXT,payload TEXT)')
-                for i,r in enumerate(result['breaks']):db.execute('INSERT INTO planned_breaks VALUES(?,?,?)',(batch_id+'-'+str(i),batch_id,dumps(r)))
+                for i,r in enumerate(result['breaks']):
+                    if r['kind']=='Koçluk Alanı':db.execute('INSERT INTO coaching_openings VALUES(?,?,?,?,?)',(batch_id+'-'+str(i),batch_id,str(r['employee_id']),'Açık',dumps(r)))
+                    else:db.execute('INSERT INTO planned_breaks VALUES(?,?,?)',(batch_id+'-'+str(i),batch_id,dumps(r)))
         from ortak.talep_servisi import refresh
         refresh(state)
         state['published_shift_plan']=published
@@ -71,6 +75,8 @@ def publications(state):
     path=state.get('workspace_db_path')
     if path:
         init_publications(path)
+        from ortak.kocluk_alanlari import init as init_openings
+        init_openings(path)
         with connect(path) as db:result=[dict(loads(r['payload']),status=r['status'],created_at=r['created_at']) for r in db.execute('SELECT * FROM publication_batches ORDER BY created_at DESC')]
     else:result=list(state.get('publication_batches',[]))
     for batch in result:
@@ -105,6 +111,8 @@ def withdraw(state,batch,reopen=False):
     path=state.get('workspace_db_path')
     if path:
         init_publications(path)
+        from ortak.kocluk_alanlari import init as init_openings
+        init_openings(path)
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE');stored=db.execute("SELECT payload FROM work_state WHERE key='published_shift_plan'").fetchone()
             published=change(loads(stored[0]) if stored else state.get('published_shift_plan',[]))
@@ -112,6 +120,13 @@ def withdraw(state,batch,reopen=False):
             else:db.execute("UPDATE publication_batches SET status='withdrawn' WHERE id=? AND status='active'",(batch['id'],))
             db.execute("INSERT INTO work_state VALUES('published_shift_plan',?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",(dumps(published),))
             if db.execute("SELECT 1 FROM sqlite_master WHERE name='planned_breaks'").fetchone():db.execute('DELETE FROM planned_breaks WHERE publication_id=?',(batch['id'],))
+            opening_ids={r[0] for r in db.execute('SELECT id FROM coaching_openings WHERE publication_id=?',(batch['id'],))}
+            if opening_ids and db.execute("SELECT 1 FROM sqlite_master WHERE name='planned_breaks'").fetchone():
+                for item in db.execute('SELECT id,payload FROM planned_breaks').fetchall():
+                    if loads(item['payload']).get('opening_id') in opening_ids:
+                        db.execute('DELETE FROM planned_breaks WHERE id=?',(item['id'],))
+                        if db.execute("SELECT 1 FROM sqlite_master WHERE name='manager_agenda'").fetchone():db.execute("DELETE FROM manager_agenda WHERE id=? AND kind='Koçluk'",(item['id'],))
+            db.execute('DELETE FROM coaching_openings WHERE publication_id=?',(batch['id'],))
         state['published_shift_plan']=published
     else:
         state['published_shift_plan']=change(state.get('published_shift_plan',[]))

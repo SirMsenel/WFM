@@ -15,14 +15,16 @@ def render_hours_summary(state,people):
         if len(dates)!=2:return
         agents=[x for x in people if x.get('position','agent')=='agent'];df=personnel_hours(state,agents,*dates,published_only=True)
         if df.empty:st.info('Personel veya çalışma kaydı yok.');return
+        from ortak.modern_kartlar import metric_cards
+        selected_group=st.selectbox('Kapasitesi incelenecek grup',list(df.Grup.unique()),format_func=lambda g:WORK_LABELS.get(g,g),key='capacity_review_group')
+        subset=df[df.Grup==selected_group];used=float(subset['Toplam saat'].mean())
+        targets=[x for x in state.get('group_hour_targets',[]) if x['group']==selected_group and x['start']<=str(dates[1]) and str(dates[0])<=x['end']]
+        remaining=None
+        if targets:
+            target=targets[0];used_all=personnel_hours(state,[p for p in agents if p['work_type']==selected_group],target['start'],target['end']);amount=float(used_all['Toplam saat'].mean()) if not used_all.empty else 0;remaining=max(0,target['hours']-amount)
+        metric_cards([('Seçilen tarihlerde çalışma / kişi',f'{used:.2f} sa'),('Hedef dönemi kalan süre / kişi',f'{remaining:.2f} sa' if remaining is not None else 'Hedef tanımlı değil')])
+        if targets:st.caption(f"Kalan süre hedef dönemi: {target['start']} – {target['end']}; seçilen tarih aralığından farklı olabilir.")
         st.bar_chart(df.groupby('Grup')['Toplam saat'].mean().rename(index=WORK_LABELS),color='#2c98a2')
-        from html import escape
-        for group in sorted(df.Grup.unique()):
-            used=float(df.loc[df.Grup==group,'Toplam saat'].mean());targets=[x for x in state.get('group_hour_targets',[]) if x['group']==group and x['start']<=str(dates[1]) and str(dates[0])<=x['end']]
-            st.markdown('<div style="padding:15px;background:#f0f7fb;border-left:4px solid #358d9e;border-radius:13px;margin:12px 0"><b>'+escape(WORK_LABELS.get(group,group))+'</b><div style="font-size:23px;margin:10px 0;color:#267b8b">'+f'{used:.1f} saat / kişi</div><small>Seçilen aralıkta yayınlanmış çalışma</small></div>',unsafe_allow_html=True)
-            if targets:
-                target=targets[0];used_all=personnel_hours(state,[p for p in agents if p['work_type']==group],target['start'],target['end']);amount=float(used_all['Toplam saat'].mean()) if not used_all.empty else 0;remaining=max(0,target['hours']-amount);st.progress(min(1.,amount/target['hours']) if target['hours'] else 1.,text=f"Hedef dönemi {target['start']} – {target['end']} · {amount:.1f} / {target['hours']:.1f} sa · Kalan {remaining:.1f} sa / kişi")
-            else:st.caption('Bu aralıkla eşleşen çalışma saati üst sınırı henüz tanımlı değil.')
 
 
 def render_targets(state):

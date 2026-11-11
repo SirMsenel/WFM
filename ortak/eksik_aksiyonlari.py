@@ -33,7 +33,7 @@ def suggestions(state,day,start_slot,end_slot,include_existing=True):
             added=pd.Timestamp(span[0])<=t and t+pd.Timedelta(minutes=30)<=pd.Timestamp(span[1]) and not was
             if added:
                 if r.Atanan+1>r.İhtiyaç+allow:bad=True;break
-                if r.Eksik>0:gain+=1
+                if r.Eksik>0:gain+=min(1.,float(r.Eksik))
         if bad or not gain:continue
         base=[r for (i,d),r in existing.items() if i==eid and d!=str(day)]
         ctx=state['plan_ctx'];result=generate_plan([person],__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state),state['shift_rules'],list(state['shift_rules']['work_type']),ctx['start'],ctx['end'],fixed=base+[row],history=[r for r in history if str(r['employee_id'])==eid],unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),reject_invalid_sources=('capacity_candidate',))
@@ -53,7 +53,7 @@ def render_actions(state,result,key):
         selected=missing[missing.Tarih.astype(str)==day].sort_values('Slot')
         groups=[];begin=previous=None
         for slot in selected.Slot.astype(int):
-            if previous is None or slot!=previous+1:
+            if previous is None or slot>previous+1+int(state.get('shift_rules',{}).get('capacity',{}).get('bridge_gap_slots',1)):
                 if previous is not None:groups.append((begin,previous))
                 begin=slot
             previous=slot
@@ -76,7 +76,7 @@ def render_actions(state,result,key):
         include=st.checkbox('Mevcut vardiyası olanlara da ek mesai öner',value=False,key=key+'_include_existing')
         custom=st.checkbox('Saat bloğunu ben seçeceğim',key=key+'_custom_gap')
         if custom:
-            first,last=st.slider('Atanacak saat bloğu (yarım saat dilimi)',1,48,(gap[0],gap[1]),key=key+'_custom_slots');gap=(first,last)
+            first,last=st.select_slider('Atanacak saat bloğu',options=list(range(1,49)),value=(gap[0],gap[1]),format_func=slot_label,key=key+'_custom_slots');gap=(first,last)
         signature=fingerprint(state)+str((day,gap,include));cachekey=key+'_action_result'
         if st.button('Uygun Aksiyonları Bul',key=key+'_find_actions'):
             try:

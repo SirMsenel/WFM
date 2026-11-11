@@ -24,7 +24,7 @@ def render_data(items,start,end,key):
     for kind in ['Yemek','Mola','Koçluk']:
         selected=[r for r in items if r['kind']==kind and r.get('status')!='İptal'];duration=sum(max(0,(min(pd.Timestamp(r['end']),pd.Timestamp(end)+pd.Timedelta(days=1))-max(pd.Timestamp(r['start']),pd.Timestamp(start))).total_seconds()/60) for r in selected);count=len(selected);totals.append((f'{kind} · {count} × {duration/count:.0f} dk' if count else kind+' · 0 kullanım',f'{data[kind].sum()*.5:.1f} kişi-saat'))
     metric_cards(totals)
-    st.caption('Kişi-saat = dilimde kullanılan kişi eşdeğeri × 0,5 saat. 15 dakikalık kullanım yarım kişi-dilimdir.')
+    st.caption('Grafik, her yarım saatin ne kadarının statülere ayrıldığını gösterir. Örneğin 1 kişi 15 dakika mola kullanırsa o yarım saatte 0,50 kişi görünür. Toplam süreler kartlarda saat olarak gösterilir.')
     st.area_chart(data,stack=True,color=['#49a8a4','#8c7ac1','#dca760','#c17893'])
     with st.expander('Yarım saatlik dağılım'):
         table=data.copy();table.index=table.index.strftime('%d.%m.%Y %H:%M');st.dataframe(table.style.format('{:.2f}').background_gradient(cmap='Blues'),use_container_width=True)
@@ -47,4 +47,10 @@ def render():
     render_data(items,*dates,'status_analysis');summary=[]
     for kind in ['Yemek','Mola','Koçluk']:
         selected=[x for x in items if x['kind']==kind];minutes=sum(max(0,(min(pd.Timestamp(x['end']),pd.Timestamp(dates[1])+pd.Timedelta(days=1))-max(pd.Timestamp(x['start']),pd.Timestamp(dates[0]))).total_seconds()/60) for x in selected);summary.append({'Statü':kind,'Kullanım adedi':len(selected),'Ort. süre (dk)':minutes/len(selected) if selected else 0,'Toplam dakika':minutes})
-    st.dataframe(summary,hide_index=True,use_container_width=True)
+    st.divider();st.markdown('### Kullanım Özeti')
+    for col,row,color in zip(st.columns(3),summary,['#258f94','#7c69b0','#c18e44']):
+        col.markdown(f'<div style="padding:20px;border-radius:18px;border-top:5px solid {color};background:{color}12;color:{color}"><b>{row["Statü"]}</b><h2 style="color:{color}">{row["Toplam dakika"]/60:.2f} saat</h2><div>{row["Kullanım adedi"]} kullanım</div><small>Ortalama kullanım: {row["Ort. süre (dk)"]:.2f} dakika</small></div>',unsafe_allow_html=True)
+    daily=distribution(items,*dates).resample('D').sum()*.5
+    st.markdown('#### Günlere Göre Statülere Ayrılan Toplam Süre (saat)')
+    st.bar_chart(daily,stack=True,color=['#49a8a4','#8c7ac1','#dca760','#c17893'])
+

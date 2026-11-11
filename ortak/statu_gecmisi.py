@@ -16,21 +16,25 @@ def seed_demo(state):
     if not demo_enabled():return
     path=state['workspace_db_path'];init(path)
     with connect(path) as db:
-        if not db.execute("SELECT 1 FROM metadata WHERE key='synthetic' AND value='true'").fetchone() or db.execute("SELECT 1 FROM metadata WHERE key='faz3_status_history'").fetchone():return
+        if not db.execute("SELECT 1 FROM metadata WHERE key='synthetic' AND value='true'").fetchone() or db.execute("SELECT 1 FROM metadata WHERE key='faz4_status_history'").fetchone():return
         rows=db.execute('SELECT payload FROM roster_history').fetchall()
     output=[]
     for entry in rows:
         row=loads(entry[0]);span=bounds(row)
         if not span:continue
         a,b=map(pd.Timestamp,span);hours=(b-a).total_seconds()/3600
-        intervals=[('Mola',a+pd.Timedelta(hours=1.5),15)]
-        if hours>=4:intervals += [('Yemek',a+pd.Timedelta(hours=hours/2),30),('Mola',b-pd.Timedelta(hours=1.5),15)]
+        weekend=a.weekday()>=5
+        intervals=[('Mola',a+pd.Timedelta(hours=1.5),10 if weekend else 15)]
+        if hours>=4:intervals += [('Yemek',a+pd.Timedelta(hours=hours/2),20 if weekend else 30)]
+        if hours>=4 and not weekend:intervals += [('Mola',b-pd.Timedelta(hours=1.5),15)]
         if a.day in {3,10,17,24} and hours>=5:intervals += [('Koçluk',a+pd.Timedelta(hours=2.25),15)]
         for n,(kind,start,minutes) in enumerate(intervals):
             end=start+pd.Timedelta(minutes=minutes)
             if start<a or end>b:continue
             ident='DEMO-'+hashlib.sha256(f"{row['employee_id']}|{row['date']}|{n}".encode()).hexdigest()[:24];output.append((ident,str(row['employee_id']),str(start),str(end),kind,'synthetic'))
-    with connect(path) as db:db.executemany('INSERT OR IGNORE INTO status_actuals VALUES(?,?,?,?,?,?)',output);db.execute("INSERT OR REPLACE INTO metadata VALUES('faz3_status_history','1')")
+    with connect(path) as db:
+        db.execute("DELETE FROM status_actuals WHERE source='synthetic'")
+        db.executemany('INSERT OR IGNORE INTO status_actuals VALUES(?,?,?,?,?,?)',output); db.execute("INSERT OR REPLACE INTO metadata VALUES('faz4_status_history','1')")
 
 
 def actuals(state,start,end,ids=None):
@@ -51,9 +55,9 @@ def ingest(state,records):
     return len(prepared)
 
 
-def suggested_shrinkage(state,start,end):
+def suggested_shrinkage(state,start,end,by_weekday=False):
     from ortak.sabit_demo import history_rows
-    roster=history_rows(state,pd.Timestamp(start)-pd.Timedelta(days=1),end);actual=actuals(state,start,end);days=pd.date_range(start,end);numerator=np.zeros(48);denominator=np.zeros(48)
+    roster=history_rows(state,pd.Timestamp(start)-pd.Timedelta(days=1),end);actual=actuals(state,start,end);days=pd.date_range(start,end);numerator=np.zeros(336 if by_weekday else 48);denominator=np.zeros_like(numerator)
     # Union intervals per employee: overlapping status records must not double count.
     intervals={}
     for p in actual.to_dict('records'):intervals.setdefault(str(p['employee_id']),[]).append((pd.Timestamp(p['start']),pd.Timestamp(p['end'])))
@@ -64,15 +68,29 @@ def suggested_shrinkage(state,start,end):
             if combined and a<=combined[-1][1]:combined[-1]=(combined[-1][0],max(b,combined[-1][1]))
             else:combined.append((a,b))
         merged[eid]=combined
+    from bisect import bisect_right,bisect_left
+    unit=30*60*1_000_000_000;day_ns=48*unit;low=pd.Timestamp(start).value;high=(pd.Timestamp(end)+pd.Timedelta(days=1)).value
+    indexed={eid:([(a.value,b.value) for a,b in spans],[b.value for a,b in spans],[a.value for a,b in spans]) for eid,spans in merged.items()}
+    def accumulate(target,a,b):
+        a=max(a,low);b=min(b,high)
+        if a>=b:return
+        ticks=np.arange(a//unit,(b-1)//unit+1,dtype=np.int64)*unit
+        seconds=(np.minimum(b,ticks+unit)-np.maximum(a,ticks))/1e9
+        slots=(ticks//unit)%48
+        if by_weekday:slots=slots+((ticks//day_ns+3)%7)*48
+        np.add.at(target,slots,seconds)
     for row in roster:
         span=bounds(row)
         if not span:continue
-        a,b=map(pd.Timestamp,span);usable=[(x,y) for x,y in merged.get(str(row['employee_id']),[]) if x<b and a<y]
-        for t in pd.date_range(a.floor('30min'),b-pd.Timedelta(seconds=1),freq='30min'):
-            if not pd.Timestamp(start)<=t<pd.Timestamp(end)+pd.Timedelta(days=1):continue
-            left,right=max(a,t),min(b,t+pd.Timedelta(minutes=30));slot=t.hour*2+t.minute//30;denominator[slot]+=(right-left).total_seconds()
-            numerator[slot]+=sum(max(0,(min(right,y)-max(left,x)).total_seconds()) for x,y in usable)
-    rates=np.divide(numerator,denominator,out=np.full(48,np.nan),where=denominator>0)
+        a,b=(pd.Timestamp(v).value for v in span)
+        accumulate(denominator,a,b)
+        spans,ends,starts=indexed.get(str(row['employee_id']),([],[],[]))
+        for x,y in spans[bisect_right(ends,a):bisect_left(starts,b)]:accumulate(numerator,max(a,x),min(b,y))
+    rates=np.divide(numerator,denominator,out=np.full(len(numerator),np.nan),where=denominator>0)
     from ortak.saat_etiketleri import slot_label
-    frame=pd.DataFrame({'Slot':range(1,49),'Saat aralığı':[slot_label(i) for i in range(1,49)],'Shrinkage (%)':np.round(100*rates,2),'Çalışma kişi-saat':denominator/3600,'Statü kişi-saat':numerator/3600})
+    from ortak.cagri_tahmin_servisi import DAY_NAMES
+    n=len(numerator)
+    frame=pd.DataFrame({'Slot':[i%48+1 for i in range(n)],'Saat aralığı':[slot_label(i%48+1) for i in range(n)],'Shrinkage (%)':np.round(100*rates,2),'Çalışma kişi-saat':np.round(denominator/3600,2),'Statü kişi-saat':np.round(numerator/3600,2)})
+    if by_weekday:
+        frame.insert(0,'Gün',[DAY_NAMES[i//48] for i in range(n)]);frame['Haftanın günü']=[i//48 for i in range(n)]
     return frame,100*numerator.sum()/denominator.sum() if denominator.sum() else None,not actual.empty and bool((actual.source=='synthetic').any())

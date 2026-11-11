@@ -22,7 +22,7 @@ def meal_plan(state,rows,coverage,people):
     if not cfg.get('enabled'):return [],coverage,[]
     used=coaching_used(state) if cfg.get('automatic') else {}
     source=state.get('sp_staffing_result_df')
-    material=[rows,people,cfg,state.get('slot_shrinkage',[]),state.get('staffing_parameters',{}),[(str(k),v) for k,v in sorted(used.items())],coverage.to_json(date_format='iso',orient='split'),None if source is None else source.to_json(date_format='iso',orient='split')]
+    material=[rows,people,cfg,state.get('shift_rules',{}).get('night',{}),state.get('slot_shrinkage',[]),state.get('staffing_parameters',{}),[(str(k),v) for k,v in sorted(used.items())],coverage.to_json(date_format='iso',orient='split'),None if source is None else source.to_json(date_format='iso',orient='split')]
     signature=hashlib.sha256(json.dumps(material,default=str,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     cached=state.get('_status_plan_cache')
     if cached and cached['signature']==signature:return copy.deepcopy(cached['result'])

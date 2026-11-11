@@ -1,6 +1,6 @@
 # WFM
 
-**Faz 3 / 9. güncelleme:** yönetim ajandası ve onay merkezi, koçluk ataması, yemek/mola değişimi, statü geçmişi ve shrinkage önerisi, dil bazlı planlama ve senaryo analizi. Güncel davranış ve kurallar için [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
+**Faz 4 / 10. güncelleme:** gün ve yarım saat bazlı geçmiş kayıp önerisi, altı aylık sentetik tahmin arşivi, gece molası, koçluk kapasite alanları ve haftalık ajanda, yayın takviminde hücre düzenleme. Ayrıntılar [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
 
 Güncel kurulum: [ILK-OKU.txt](ILK-OKU.txt). Türkçe kaynaklar: [DOSYA_HARITASI.md](DOSYA_HARITASI.md). Kurum API/veritabanı hazırlığı ve sınırları: [KURUMSAL_BAGLANTI.md](KURUMSAL_BAGLANTI.md). Eski İngilizce Python dosyaları geriye uyumluluk yönlendirmeleridir.
 

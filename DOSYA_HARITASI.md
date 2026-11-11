@@ -139,3 +139,6 @@ Eski İngilizce yollar yalnızca uyumluluk dosyalarıdır; değişiklik yaparken
 - `ortak/donem_uyarisi.py`, `ortak/plan_ihtiyaci.py`: yayınlı dönem uyarısı ve dile özel ihtiyaç.
 - `modules/vardiya_plani/yabanci_dil_plani.py`, `ortak/yayin_hucreleri.py`: dil planı ve atomik hücre/statü düzeltmesi.
 - `ortak/okul_shiftleri.py`, `ortak/senaryolar.py`: okul görünümü ve geçmişten senaryo hesapları.
+
+
+Faz 4: `ortak/kocluk_alanlari.py` ayrılmış koçluk alanları; `ortak/ajanda_servisi.py` haftalık çalışma ve atama; `ortak/yayin_hucre_duzenleyici.py` takvim hücresi ayrıştırma; `ortak/statu_gecmisi.py` gün/saat bazlı kayıp; `ortak/ornek_gecmis_tahmin.py` sentetik altı aylık karşılaştırma; `modules/mola_izleme.py` kişisel İzleme alt ekranları.

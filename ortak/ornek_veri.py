@@ -236,3 +236,5 @@ def bootstrap(state, path=DEFAULT_DB):
     migrate_legacy(state)
     from ortak.ornek_gecmis_tahmin import prepare_demo_backtest
     prepare_demo_backtest(state)
+    from ortak.ornek_gecmis_tahmin import prepare_six_month_history
+    prepare_six_month_history(state)

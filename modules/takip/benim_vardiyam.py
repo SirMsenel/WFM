@@ -515,6 +515,7 @@ def render():
     target=pick_person(st.session_state,current,'my_shift')
     if not target:return
     render_person(target)
+    st.divider()
     selected=_compact_period()
     if not selected:return
     start,end=selected
@@ -526,12 +527,13 @@ def render():
     from ortak.modern_kartlar import metric_cards
     metric_cards(cards)
 
+    st.divider()
     columns=st.columns(5)
     for col,(name,hint,_,__,bg,fg) in zip(columns,WINDOWS):
         with col:
             st.markdown(f'<div style="background:linear-gradient(135deg,{bg},#fff);border:1px solid {bg};border-radius:20px;padding:20px;text-align:center;color:{fg}"><b>{name}</b><div style="font-size:28px;font-weight:750;margin:8px 0">{summary["parts"][name]:.1f} sa</div><small>{hint}</small></div>',unsafe_allow_html=True)
     with columns[4]:st.markdown(f'<div style="background:linear-gradient(135deg,#2c2554,#5b4b91);border-radius:20px;padding:20px;text-align:center;color:white"><b>Gece adedi</b><div style="font-size:28px;font-weight:750;margin:8px 0">{summary["night_count"]}</div><small>Geceye girilen vardiya</small></div>',unsafe_allow_html=True)
-    st.markdown('### Vardiya Tablosu')
+    st.divider();st.markdown('### Vardiya Tablosu')
     output=[]
     for r in sorted(records,key=lambda r:r['date']):
         interval=bounds(r)
@@ -552,5 +554,5 @@ def render():
     from ortak.mola_servisi import records as status_records
     statuses=[x for x in status_records(st.session_state) if str(x['employee_id'])==str(target['employee_id']) and str(start)<=x['start'][:10]<=str(end) and x['status']!='İptal']
     if statuses:
-        from ortak.statu_kartlari import render_status_cards
-        render_status_cards(statuses)
+        from ortak.statu_kartlari import render_status_list
+        render_status_list(statuses)
