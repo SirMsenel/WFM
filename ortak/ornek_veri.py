@@ -195,7 +195,10 @@ def bootstrap(state, path=DEFAULT_DB):
     if not state.get('employees_cache'):
         state['employees_cache']=[e for e in get_people(state) if e['position']=='agent']
     if state.get('cf_all_df') is None:
+        # İlk oturum açılışı kayıtlı tahmin seçeneklerini yeni deneme gibi üretmez.
+        saved_options=state.get('cf_forecast_options')
         load_demo_history(state,path=path)
+        if saved_options:state['cf_forecast_options']=saved_options
     if not demo:
         save_keys(state);return
     # Four genuine model fits per session; persisted forecasts stay intact.
