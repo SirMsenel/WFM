@@ -18,7 +18,7 @@ def records(state,db=None):
     if not path:return []
     init(path) if db is None else None
     def read(c):
-        planned=[dict(loads(r[0]),id=r[1],status='Planlı') for r in c.execute('SELECT payload,id FROM planned_breaks')]
+        planned=[dict(loads(r[0]),id=r[1],status=loads(r[0]).get('status','Planlı')) for r in c.execute('SELECT payload,id FROM planned_breaks')]
         requested=[dict(loads(r['payload']),id=r['id'],status=r['status']) for r in c.execute('SELECT * FROM break_requests')]
         return planned+requested
     if db is not None:return read(db)

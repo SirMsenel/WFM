@@ -181,12 +181,14 @@ def bootstrap(state, path=DEFAULT_DB):
     state["status_rules"]["automatic"]=True
     state["status_rules"]["coaching_by_leader"]=True
     state["status_rules"].setdefault("operation_reserve_rate",.05)
-    state["status_rules"].setdefault("coaching_slot_minutes",15)
+    state["status_rules"]["coaching_slot_minutes"]=15
     state["status_rules"].setdefault("coaching_by_leader",True)
     from copy import deepcopy
     for group,settings in defaults()["groups"].items():
         target=state["status_rules"].setdefault("groups",{}).setdefault(group,{})
-        for field,value in settings.items():target.setdefault(field,deepcopy(value))
+        for field,value in settings.items():
+            if field=='break_preferred_minutes':value=min(value,max(1,int(target.get('break_minutes',15))))
+            target.setdefault(field,deepcopy(value))
     enforce_current_rules(state)
     state["shift_rules"].setdefault("friday",{"prefer_women_midday":True,"block_men_midday":False})
     state["shift_rules"].setdefault("publication_approvals",{"enabled":True})

@@ -20,6 +20,11 @@ def render():
         with a:st.markdown('**Eksik personel**');st.dataframe(styled_shortage_matrix(shortage_matrix(result['coverage'],chosen)),use_container_width=True,height=300)
         with b:
             extra=result['coverage'].copy();extra['Eksik']=extra['Fazla'];st.markdown('**Fazla personel**');st.dataframe(styled_shortage_matrix(shortage_matrix(extra,chosen),excess=True),use_container_width=True,height=300)
+    from ortak.statu_kapasite_raporu import entitlement_snapshot,render_capacity_report
+    rights=result.get('status_rights')
+    if rights is None:
+        rights=entitlement_snapshot(s,result['plan'],result['staff']);st.caption('Bu eski onay kaydında tarihsel hak sürümü yok; hak özeti mevcut statü kurallarına göre hesaplanır.')
+    render_capacity_report(s,rights,result.get('breaks',[]),[r for r in result.get('breaks',[]) if r['kind']=='Koçluk Alanı'],result['period']['start'],result['period']['end'],'approval_rights',include_cancellations=False)
     with st.expander('Yemek, Mola ve Koçluk Dağılımı',expanded=False):
         from modules.statu_analizi import render_data
         render_data(result.get('breaks',[]),result['period']['start'],result['period']['end'],'approval_statuses')

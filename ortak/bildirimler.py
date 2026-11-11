@@ -34,6 +34,10 @@ def items(state):
             for row in db.execute('SELECT * FROM status_swap_requests'):
                 r=loads(row['payload'])
                 if username in {r['owner'],r['peer']} or (role=='tl' and profile.get('full_name')==r.get('team_lead')) or role in {'wfm','planning_manager'}:add('SS-'+r['id']+'-'+str(row['version']),'Yemek / mola değişimi · '+row['status'],r['reason'],r.get('updated_at',r['created_at']),'Statü değişimi')
+        if 'status_cancellations' in tables:
+            for entry in db.execute('SELECT id,payload FROM status_cancellations ORDER BY rowid DESC'):
+                r=loads(entry['payload'])
+                if str(r.get('employee_id'))==eid or role in {'wfm','planning_manager','manager','assistant_manager','moderator'} or (role=='tl' and profile.get('full_name')==r.get('team_lead')):add('SC-'+entry['id'],r['kind']+' iptal edildi',r['start']+' – '+r['end']+' · '+r['reason'],r['created_at'],'Statü iptali')
         if 'manager_agenda' in tables:
             for row in db.execute("SELECT * FROM manager_agenda WHERE kind='Koçluk' AND (employee_id=? OR owner=?)",(eid,username)):
                 add('CO-'+row['id'],'Koçluk görüşmesi planlandı',row['start']+' – '+row['end'],row['start'],'Koçluk')

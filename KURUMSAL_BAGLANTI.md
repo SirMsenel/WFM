@@ -84,3 +84,9 @@ Gün bazlı `slot_shrinkage` kuralı örneği: `{"weekdays":[5,6],"start_slot":1
 ## 12 Kasım / Faz 4.1
 Yeni ortak `coaching_openings` payload'ı `pool=true`, `employee_id="*"`, `eligible_employee_ids`, `capacity` (ilk kontenjan), `remaining_capacity`, `languages`, `operation_reserve_count` alanlarını içerir. Bir kayıt bir zaman aralığına ait birden çok koltuğu temsil edebilir. Atama `BEGIN IMMEDIATE` içinde kontenjanı bir azaltır ve `planned_breaks`/`manager_agenda` kayıtlarını oluşturur. Kalan 0 olunca durum Atandı olur. Önceki kişiye bağlı kayıtlar desteklenir. Aylık kullanılan süreye açık kontenjanlar değil, atanmış Koçluk kayıtları girer.
 Grup kuralı `coaching_multiple_per_week=false` ise aynı personelin Pazartesi–Pazar içinde ikinci ataması reddedilir. `status_rules.operation_reserve_rate` varsayılan 0.05, `coaching_slot_minutes` varsayılan 15'tir.
+
+
+## Faz 4.3
+`status_rules.groups.<grup>.break_preferred_minutes` varsayılan 10; maksimum parça halen 15. Yeni yayın ve onay payload'ındaki `status_rights` kişi/gün/tür bazında özgün dakika hakkını saklar. Yayın düzeltmeleri `status_rights_updates` dizisine sürümlenir.
+`status_cancellations(id,target_id,payload)` gerekçe, aktör, özgün kayıt, iptal edilen aralık ve dakika/kapasite adedini tutar. `planned_breaks.payload.status=İptal` kayıtları aktif plan sayılmaz. Başlamış kayıt ikiye ayrılır; geçmiş planlı kısım aktif kalır. Koçluk alanında `cancelled_capacity` ve `operation_cancelled` alanları iptal edilen adedi korur. Kaynak gerçekleşmeler değiştirilmez.
+Takım lideri kapasite raporu/iptal yetkisi almaz; uygun 15 dakikalık seçeneğe atama yapar. Statü yönetimi Planlama/yönetim içindir. Kurum softphone kontrol entegrasyonu ayrıca kurulmalıdır.

@@ -144,3 +144,5 @@ Eski İngilizce yollar yalnızca uyumluluk dosyalarıdır; değişiklik yaparken
 Faz 4: `ortak/kocluk_alanlari.py` ayrılmış koçluk alanları; `ortak/ajanda_servisi.py` haftalık çalışma ve atama; `ortak/yayin_hucre_duzenleyici.py` takvim hücresi ayrıştırma; `ortak/statu_gecmisi.py` gün/saat bazlı kayıp; `ortak/ornek_gecmis_tahmin.py` sentetik altı aylık karşılaştırma; `modules/mola_izleme.py` kişisel İzleme alt ekranları.
 
 Faz 4.1: `ortak/statu_haklari.py` eksiksiz hak/yayın kapısı; `ortak/kocluk_kapasitesi.py` operasyon rezervi ve ortak kontenjan; `ortak/ajanda_gorunumu.py` ortak renkli ajanda shift matrisi.
+
+Faz 4.3: `ortak/statu_kapasite_raporu.py` hak/kişi/kapasite sayımı ve tarihsel hak sürümü; `ortak/statu_iptalleri.py` gerekçeli atomik operasyonel iptal; `modules/statu_yonetimi.py` Onay Merkezi iptal ekranı.

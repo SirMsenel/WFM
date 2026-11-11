@@ -31,6 +31,8 @@ def submit(state,result):
     path=state['workspace_db_path'];init(path);coverage=result['coverage'];coverage=coverage[coverage.get('Sayaca Dahil',True)] if 'Sayaca Dahil' in coverage else coverage
     total=float(coverage['İhtiyaç'].sum());gap=float(coverage['Eksik'].sum());rate=100*gap/total if total else 0.
     result={k:deepcopy(result[k]) for k in ('plan','coverage','staff','period','issues','rules','breaks') if k in result}
+    from ortak.statu_kapasite_raporu import entitlement_snapshot
+    result['status_rights']=entitlement_snapshot(state,result['plan'],result['staff'])
     context={k:deepcopy(state[k]) for k in ('planning_demand_language','plan_ctx','plan_ctx_confirmed','planning_languages','planning_exam_hours','planning_exclude_early_hours','planning_bypass','planning_accept_soft','employees_cache') if k in state}
     item={'id':'APR-'+uuid4().hex[:12],'fingerprint':fingerprint(state),'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
     baseline=dict(state.get('workspace_baseline',{}))

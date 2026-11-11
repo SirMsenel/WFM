@@ -32,6 +32,8 @@ def publish_plan(state,result,approval_ticket=None):
     batch_id='PUB-'+uuid4().hex[:12]
     rows=[dict(r,language=language[str(r['employee_id'])],publication_id=batch_id) for r in result['plan']]
     payload={'id':batch_id,'start':start,'end':end,'rows':rows,'languages':sorted(set(language.values())),'actor':(state.get('profile') or {}).get('username')}
+    from ortak.statu_kapasite_raporu import entitlement_snapshot
+    payload['status_rights']=entitlement_snapshot(state,result['plan'],result['staff'])
     if path:
         init_publications(path)
         from ortak.kocluk_alanlari import init as init_openings

@@ -51,8 +51,8 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
         from ortak.modern_kartlar import metric_cards
         rights=balance(st.session_state,result.get('plan',[]),result['staff'],result['breaks'])
         st.markdown('#### Yemek → Tüm Molalar → Operasyon Rezervi → Koçluk')
-        metric_cards([('Yemek / mola eksik hakkı',f"{sum(r['Eksik (dk)'] for r in rights):.0f} dk"),('Operasyon rezervi',f"{coverage.get('Operasyon rezervi',pd.Series(dtype=float)).sum()*.5:.2f} kişi-saat"),('Açık koçluk kontenjanı',sum(int(x.get('remaining_capacity',1)) for x in result['breaks'] if x['kind']=='Koçluk Alanı'))])
-        missing_rights=[r for r in rights if r['Eksik (dk)'] or r['Fazla (dk)']]
+        metric_cards([('Yemek / mola eksik hakkı',('Kural düzeltilmeli' if any(r.get('Kural hatası') for r in rights) else f"{sum(r['Eksik (dk)'] for r in rights):.0f} dk")),('Operasyon rezervi',f"{coverage.get('Operasyon rezervi',pd.Series(dtype=float)).sum()*.5:.2f} kişi-saat"),('Açık koçluk kontenjanı',sum(int(x.get('remaining_capacity',1)) for x in result['breaks'] if x['kind']=='Koçluk Alanı'))])
+        missing_rights=[r for r in rights if r['Eksik (dk)'] or r['Fazla (dk)'] or r.get('Kural hatası')]
         if missing_rights:st.dataframe(pd.DataFrame(missing_rights).drop(columns=['employee_id']).rename(columns={'date':'Tarih'}),hide_index=True,use_container_width=True)
     if 'Shrinkage statü bütçesi' in coverage and 'Mola kaybı' in coverage:
         from ortak.modern_kartlar import metric_cards

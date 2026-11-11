@@ -1,4 +1,4 @@
-WFM — 12 KASIM 2026 / FAZ 4.2 — GÖRSEL DÜZENLEMELER — macOS
+WFM — 12 KASIM 2026 / FAZ 4.3 — MOLA, KOÇLUK VE STATÜ YÖNETİMİ — macOS
 
 1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
 2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
@@ -100,3 +100,12 @@ MOLA / AJANDA YAMASI
 
 FAZ 4.2: Onaylarda fazla personel yeşil; Similasyon senaryoları aylık kartlar;
 Takip statüleri ilgili vardiyanın altında kompakt kartlar. Yeni veritabanı gerekmez.
+
+FAZ 4.3: Statü Kuralları > Mola altında Akademi hızlı kontrol satırı vardır.
+Kural eksikse toplam hak sıfır sayılmaz. Eski yayınlar kendiliğinden değiştirilmez.
+
+FAZ 4.3 SON AKIŞ
+- Mola tercihi 10 dk; toplam hak tamamlanır, gerekirse daha kısa parçalar kullanılır.
+- Lider: 15 dk kutuyu seç > Onayla ve Ajandaya Ekle. Kapasite adedi gösterilmez.
+- Planlama/yönetim: Onay Merkezi ve Statü Dağılımları içinde kişi/adet raporu.
+- Onay Merkezi > Statü Yönetimi: gerekçeli statü iptali ve geçmişi.

@@ -24,5 +24,5 @@ def render():
     from modules.statu_degisimi import render_requests
     from ortak.talep_gorunumu import render_center
     pages={'Personel İşlemleri':personnel,'Personel Talepleri':lambda:render_center('all','central_requests'),'Statü Değişimleri':lambda:render_requests(s)}
-    if role in {'wfm','planning_manager','manager','assistant_manager','moderator'}:pages={'Plan Yayın Onayları':publications,**pages}
+    if role in {'wfm','planning_manager','manager','assistant_manager','moderator'}:pages={'Plan Yayın Onayları':publications,'Statü Yönetimi':__import__('modules.statu_yonetimi',fromlist=['render']).render,**pages}
     sections('nav_approval_center',pages)

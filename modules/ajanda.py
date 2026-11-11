@@ -47,17 +47,32 @@ def render():
     st.markdown('#### Personelin Vardiyası');render_calendar(personal,[person],week,end,key='agenda_person_shifts')
     from ortak.kocluk_alanlari import eligible
     openings=[r for r in eligible(s,eid) if week.date()<=pd.Timestamp(r['start']).date()<=end.date()]
-    st.markdown('#### Vardiyanla Eşleşen Açık Koçluk Kontenjanları')
+    from ortak.statu_kapasite_raporu import capacity_visible
+    show_capacity=capacity_visible(p)
+    st.markdown('#### Uygun Koçluk Saatleri')
     if not openings:
-        st.info('Bu hafta için uygun kontenjan yok. Haftalık çalışma kaydı, personelin vardiyası, diğer statüler ve haftalık/aylık koçluk sınırları birlikte kontrol edilir.');return
-    modern_grid(opportunity_grid(openings,week,person['full_name']),'agenda_opening_shifts')
+        st.info('Bu hafta personelin vardiyası ve ajandanla eşleşen uygun görüşme saati yok. Haftalık çalışma kaydı ile haftalık/aylık koçluk sınırları da kontrol edilir.');return
+    if show_capacity:modern_grid(opportunity_grid(openings,week,person['full_name']),'agenda_opening_shifts')
     groups=defaultdict(list)
-    for r in openings:groups[(r['start'],r['end'])].append(r)
+    for r in openings:
+        if pd.Timestamp(r['end'])-pd.Timestamp(r['start'])==pd.Timedelta(minutes=15):groups[(r['start'],r['end'])].append(r)
+    if not groups:st.info('Bu dönem için uygun 15 dakikalık görüşme saati yok.');return
     dates=sorted({pd.Timestamp(a).date() for a,b in groups});chosen_day=st.segmented_control('Koçluk günü',dates,default=dates[0],format_func=lambda d:f'{d:%d.%m} {DAY_NAMES[d.weekday()]}',key='agenda_coach_day') or dates[0]
+    if chosen_day not in dates:chosen_day=dates[0]
     windows=sorted(k for k in groups if pd.Timestamp(k[0]).date()==chosen_day)
-    if not windows:return
-    choice=st.selectbox('Uygun saat aralığı',windows,format_func=lambda t:f"{pd.Timestamp(t[0]):%H:%M}–{pd.Timestamp(t[1]):%H:%M} · {sum(int(r.get('remaining_capacity',1)) for r in groups[t])} kişilik kontenjan",key='agenda_coach_window');item=groups[choice][0];a,b=pd.Timestamp(item['start']),pd.Timestamp(item['end'])
-    metric_cards([('Seçilen görüşme',f'{a:%H:%M}–{b:%H:%M}'),('Kalan kontenjan',sum(int(r.get('remaining_capacity',1)) for r in groups[choice])),('Görüşme süresi',f'{(b-a).total_seconds()/60:.0f} dk')])
-    if st.button('Seçilen Kontenjana Koçluk Ata',key='agenda_assign_coach',type='primary'):
-        try:add_coaching(s,eid,a,int((b-a).total_seconds()/60),opening_id=item['id']);st.success('Görüşme takvimlere ve bildirimlere eklendi.');st.rerun()
+    scope=(eid,str(week.date()),str(chosen_day))
+    if s.get('_agenda_choice_scope')!=scope:s['_agenda_choice_scope']=scope;s.pop('agenda_coach_choice',None)
+    for offset in range(0,len(windows),4):
+        for col,choice in zip(st.columns(4),windows[offset:offset+4]):
+            selected=s.get('agenda_coach_choice')==choice;a,b=map(pd.Timestamp,choice)
+            with col.container(border=True):
+                st.markdown(f'**{a:%H:%M} → {b:%H:%M}**');st.caption('15 dakika')
+                if show_capacity:st.caption(f"Açık kontenjan: {sum(int(r.get('remaining_capacity',1)) for r in groups[choice])}")
+                if st.button('✓ Seçildi' if selected else 'Seç',type='primary' if selected else 'secondary',key='agenda_slot_'+eid+'_'+str(a.value),use_container_width=True):s['agenda_coach_choice']=choice;st.rerun()
+    choice=s.get('agenda_coach_choice')
+    if choice not in groups or choice not in windows:st.caption('Bir saat kutusu seçip onaylayabilirsin.');return
+    item=groups[choice][0];a,b=map(pd.Timestamp,choice)
+    st.success(f"{person['full_name']} · {a:%d.%m.%Y} · {a:%H:%M}–{b:%H:%M}")
+    if st.button('Onayla ve Ajandaya Ekle',key='agenda_assign_coach',type='primary'):
+        try:add_coaching(s,eid,a,15,opening_id=item['id']);s.pop('agenda_coach_choice',None);st.success('Görüşme kendi ajandana ve personelin Takip ekranına eklendi.');st.rerun()
         except ValueError as e:st.warning(str(e))

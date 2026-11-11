@@ -31,7 +31,11 @@ def reserve_pool(state,rows,coverage,people,scheduled,net_need,by_person,used,al
     for eid,mask in on_shift.items():workers+=mask;busy+=mask&blocked.get(eid,np.zeros(n,bool))
     need=np.zeros(n);need[valid]=net_need[index[valid]];room=np.maximum(0,workers-busy-need)
     active=valid.copy();active[valid]&=counted[index[valid]];room[~active]=0
-    hold=room*rate
+    protected={}
+    for eid,a,b in state.get('_status_call_reserve_windows',[]):
+        mask=(ticks<pd.Timestamp(b))&(ticks+pd.Timedelta(minutes=5)>pd.Timestamp(a));protected[str(eid)]=protected.get(str(eid),np.zeros(n,bool))|mask
+    extra=sum(protected.values(),np.zeros(n))
+    hold=np.minimum(room,room*rate+extra)
     for j in np.flatnonzero(valid):reserve[index[j]]+=hold[j]/6
     if not allow:return output,reserve,pool_loss
     available=np.floor(np.maximum(0,room-hold)+1e-8).astype(int)
@@ -42,6 +46,7 @@ def reserve_pool(state,rows,coverage,people,scheduled,net_need,by_person,used,al
         if end>n:break
         window=slice(begin,end);a=ticks[begin];b=a+pd.Timedelta(minutes=minutes)
         if a.month!=(b-pd.Timedelta(seconds=1)).month or not active[window].all():continue
+        if any(a<pd.Timestamp(y) and pd.Timestamp(x)<b for x,y in state.get('_coaching_closed_windows',[])):continue
         ids=[eid for eid,mask in eligible.items() if mask[window].all() and not blocked.get(eid,np.zeros(n,bool))[window].any()]
         capacity=min(len(ids),int(available[window].min()))
         if capacity:

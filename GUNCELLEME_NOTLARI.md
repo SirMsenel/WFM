@@ -1,3 +1,33 @@
+# 12 Kasım 2026 — Mola, Koçluk ve Statü Yönetimi (Faz 4.3)
+
+## Otomatik mola
+- Tercih edilen mola parçası varsayılan 10 dakikadır; günlük hakkın tamamı dağıtılır. Kalan süre için daha kısa parçalar kullanılabilir, tek/kesintisiz mola üst sınırı 15 dakikadır. Bir saatlik mola sınırı ve vardiyanın ilk/son saat koruması korunur.
+- Varsayılan Akademi 4 / 4,5 / 5 saat vardiyalarında toplam 30 dakika mola ve 30 dakika yemek test edildi. Örneğin 4 saatte saatlik sınıra göre 10+10+5+5, 5 saatte 10+10+10 mola yerleşebilir. Kullanıcının farklı tanımladığı toplam hak değiştirilmez.
+- Eşleşmeyen/boş/çakışan mola kuralı artık 0 hak sayılmaz; personel ve süreyle hata gösterilir, yayın engellenir. Açıkça tanımlanmış 0 dakika korunur. Alt sınır dahil, üst sınır hariçtir. Akademi 4 / 4,5 / 5 saat hakları kural ekranında hızlı kontrol satırında görünür.
+- Tek 30 dakika mola veya bitişik 15+15 dakika kayıtlarla üst sınırı aşma yayın kontrolünden geçemez. Eski mola önbelleği yeni sürümde yeniden hesaplanır.
+
+## Takım lideri ajandası
+- Personeli seçince kendi ajandası, personelin vardiyası ve planlı statüleriyle uyumlu 15 dakikalık saatler kutu kutu sunulur. Saat seçilip Onayla ve Ajandaya Ekle denince görüşme liderin ajandasına, personelin Takip takvimine ve bildirimlerine düşer.
+- Takım lideri kontenjan/kapasite sayılarını görmez. Planlama ve yönetim kapasite raporlarına erişir. Önceki haftalık tek/çoklu koçluk seçimi ile aylık üst süre, ekip kapsamı, çakışma ve eşzamanlı rezervasyon kontrolleri korunur.
+
+## Hak ve dağıtım raporu
+- Plan Yayın Onayları ve Güncel Takip Analizi → Statü Dağılımları: yemek/mola hakkı olan kişi-vardiya, dağıtım yapılan kişi-vardiya, hakkı tamamlanan kişi-vardiya, gereken/dağıtılan/eksik/fazla dakika gösterilir. Aynı kişinin üç adet 10 dakikalık molası günlük özette üç kişi değil bir kişi sayılır.
+- Yarım saatlik tablo ve grafikler tekil kişi adedidir; 10 dakika mola kullanan bir kişi 1 sayılır. Süre grafikleri ayrıca açılır detayda korunur. Gece yarısından sonraki gerçekleşmeler ilgili vardiya gününe bağlanır. Gerçekleşen veri yoksa başarı ölçülemediği açıkça belirtilir.
+- Koçlukta toplam, atanmış, açık/atanmamış ve iptal edilmiş 15 dakikalık görüşme kontenjanları ayrı gösterilir. Yarım saatte başlayan iki ayrı 15 dakikalık görüşme iki adet sayılır; bu aynı anda iki kişi anlamına gelmez. Geçmişte açık kalmış saatler yeniden seçilemez.
+- Yeni onay/yayın kayıtları özgün kişi/gün statü haklarını saklar. Denetimli vardiya düzeltmesindeki hak güncellemeleri sürüm olarak eklenir. Tarihsel hak sürümü olmayan eski/örnek kayıtlarda güncel kurallarla yaklaşık hesap yapıldığı belirtilir; geçmiş kurallar uydurulmaz.
+
+## Onay Merkezi → Statü Yönetimi
+- Yalnızca Planlama ve yönetim; personel, gün ve statü seçip zorunlu gerekçeyle yemek/mola/koçluk iptali yapabilir. Açık koçluk saatleri de kapatılabilir. Takım lideri ve temsilci bu işlemi yapamaz.
+- Kimin, hangi kaydı, ne zaman, neden iptal ettiği ve önceki değerler saklanır. Toplu işlem atomiktir; çakışan/stale seçim veya hatalı kayıt bütün işlemi geri alır. Tamamlanmış/geçmiş statü iptal edilemez.
+- Başlamış statüde geçen planlı bölüm korunur; yalnızca kalan süre iptal edilir. Gerçek telefon/statü tüketim verisi değiştirilmez. Kurumun telefon sistemine dış komut gönderilmez; bu uygulama içi plan yönetimidir.
+- Haklar silinmez. Operasyonel iptal kişi/dakika ve eksik süre olarak raporda görünür. İptal edilen koçluk takvimlerden kaldırılır; kapasite kendiliğinden tekrar açılmaz. İlgili kişiye uygulama içi bildirim düşer, bekleyen ilgili yemek/mola değişim talepleri geçersizleşir.
+- İptal edilen aralığa aynı personel için yeniden koçluk atanamaz. Yayın hücresi düzeltmesi iptal kararını sessizce geri alamaz; iptal bulunan personel/gün bu otomatik statü yenilemesinden korunur. Diğer kişilerin düzeltmesinde kapatılan koçluk aralıkları ve operasyon için korunan süre gözetilir.
+
+## Güncelleme
+Mevcut geçmiş/yayınlar kendiliğinden değiştirilmez. Yeni mola dağıtımı yeni/yeniden oluşturulan taslaklarda kullanılır. Eski iki veritabanını kopyalayarak taşıma ve süreçleri yeniden başlatma adımları ILK-OKU.txt içindedir. Yeni status_cancellations tablosu ihtiyaçta otomatik eklenir; sıfırdan veritabanı gerekmez. Önceki görsel düzenlemeler, tahmin/interval, talepler ve yayın onay kuralları korunur.
+
+---
+
 # 12 Kasım 2026 — Görsel Düzenlemeler (Faz 4.2)
 
 - Onay Merkezi → Plan Yayın Onayları ve Vardiya Planı → Yayın Onayları aynı ortak görünümü kullanır. Fazla personel tablosu artık yeşil yoğunluk skalasıyla gösterilir; eksik personel kırmızı kalır. Değerler ve onay koşulları değişmedi.

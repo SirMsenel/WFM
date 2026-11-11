@@ -14,17 +14,29 @@ def coaching_used(state):
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='coaching_openings'").fetchone():reserved=[r[0] for r in db.execute("SELECT payload FROM coaching_openings WHERE status='Açık'")]
         for row in list(db.execute('SELECT payload FROM planned_breaks'))+[(r,) for r in reserved]:
             p=loads(row[0])
-            if p.get('kind')!='Koçluk':continue
+            if p.get('kind')!='Koçluk' or p.get('status')=='İptal':continue
             a,b=pd.Timestamp(p['start']),pd.Timestamp(p['end']);k=(str(p['employee_id']),a.strftime('%Y-%m'));used[k]=used.get(k,0)+(b-a).total_seconds()/60
     return used
 
 
+class MolaKuralHatasi(ValueError):
+    """Vardiyanın mola hakkı kuraldan belirlenemiyor; sıfır kabul edilmez."""
+
+
 def allowance(rule,hours):
+    import math
     rules=rule.get('break_rules')
     if rules is not None:
-        choices=[r for r in rules if float(r['min_hours'])<=hours<float(r['max_hours'])]
-        return max([int(r['minutes']) for r in choices],default=0)
-    return int(rule.get('break_total_minutes',rule.get('break_minutes',15)))
+        try:choices=[r for r in rules if float(r['min_hours'])<=hours<float(r['max_hours'])]
+        except (KeyError,TypeError,ValueError):raise MolaKuralHatasi('Mola tablosundaki çalışma alt/üst sınırlarını ve süreleri doldurun.')
+        if not choices:raise MolaKuralHatasi(f'{hours:g} saatlik vardiya için mola kuralı bulunamadı. Alt sınır dahildir, üst sınır hariçtir; bu süreyi kapsayan satır tanımlayın. Mola yoksa 0 dakika açıkça girilmelidir.')
+        if len(choices)>1:raise MolaKuralHatasi(f'{hours:g} saatlik vardiya için birden fazla mola kuralı eşleşiyor; aralıkları düzeltin.')
+        value=choices[0].get('minutes')
+    else:value=rule.get('break_total_minutes',rule.get('break_minutes',15))
+    try:minutes=float(value)
+    except (TypeError,ValueError):raise MolaKuralHatasi('Toplam mola süresi boş olamaz; dakika cinsinden tam sayı girin.')
+    if not math.isfinite(minutes) or minutes<0 or not minutes.is_integer():raise MolaKuralHatasi('Toplam mola süresi negatif olmayan tam dakika olmalı.')
+    return int(minutes)
 
 
 def net_capacity(gross,loss,rate):
@@ -60,7 +72,16 @@ def plan(state,rows,coverage,people,used=None):
             finish=t+pd.Timedelta(minutes=duration)
             if any(t<pd.Timestamp(x['end']) and pd.Timestamp(x['start'])<finish for x in by_person.get(eid,[])):continue
             if kind=='Mola':
-                limit=int(rule.get('break_per_hour_max',15));buckets={x.floor('h'):0 for x in pd.date_range(t,finish-pd.Timedelta(seconds=1),freq='5min')}
+                limit=int(rule.get('break_per_hour_max',15));
+                maximum=min(15,max(1,int(rule.get('break_minutes',15))));left,right=t,finish
+                while True:
+                    before_span=(left,right)
+                    for old in by_person.get(eid,[]):
+                        x,y=pd.Timestamp(old['start']),pd.Timestamp(old['end'])
+                        if old['kind']=='Mola' and x<=right and left<=y:left,right=min(left,x),max(right,y)
+                    if (left,right)==before_span:break
+                if (right-left).total_seconds()/60>maximum:continue
+                buckets={x.floor('h'):0 for x in pd.date_range(t,finish-pd.Timedelta(seconds=1),freq='5min')}
                 for bucket in buckets:buckets[bucket]=max(0,(min(finish,bucket+pd.Timedelta(hours=1))-max(t,bucket)).total_seconds()/60)
                 if any(hour_use.get((eid,k),0)+v>limit for k,v in buckets.items()):continue
             overlap=np.maximum(0,(np.minimum(np.datetime64(finish),local_stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(t),local_stamps))/np.timedelta64(30,'m'))
@@ -68,7 +89,8 @@ def plan(state,rows,coverage,people,used=None):
             after=np.maximum(0,local_need-net_capacity(local_gross,local_loss+overlap,local_rates));cost=float(((after-before)*counted).sum())
             if not mandatory and cost>1e-8:continue
             # Prefer middle of shift; capacity always has precedence.
-            candidate=(cost,abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds()),t,finish,overlap)
+            preference_penalty=max(0,(right-left).total_seconds()/60-min(maximum,max(1,int(rule.get('break_preferred_minutes',10))))) if kind=='Mola' else 0
+            candidate=(cost,preference_penalty*1e9+abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds()),t,finish,overlap)
             if best is None or candidate[:2]<best[:2]:best=candidate
         if best is None:
             if probe:return False
@@ -98,8 +120,10 @@ def plan(state,rows,coverage,people,used=None):
         for row,a,b,rule,hours in working:
             night=(row.get('shift_code')=='GECE')
             night_rules=(state.get('shift_rules') or {}).get('night',{})
-            remaining=int(night_rules.get('break_total_minutes',60)) if night and hours>=8 else allowance(rule,hours)
-            chunk=min(15,max(5,int(rule.get('break_minutes',15))))
+            try:remaining=int(night_rules.get('break_total_minutes',60)) if night and hours>=8 else allowance(rule,hours)
+            except MolaKuralHatasi as exc:
+                issues.append({'employee_id':str(row['employee_id']),'date':row['date'],'Sorun':str(exc),'severity':'error','override_required':False});continue
+            maximum=min(15,max(1,int(rule.get('break_minutes',15))));chunk=min(maximum,max(1,int(rule.get('break_preferred_minutes',10))))
             while remaining>0:
                 candidates=range(min(chunk,remaining),0,-1)
                 placed=False

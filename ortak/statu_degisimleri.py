@@ -16,6 +16,7 @@ def init(path):
 
 
 def validate(state,a,b,people,existing):
+    if a.get('status')=='İptal' or b.get('status')=='İptal':raise ValueError('İptal edilmiş statü değiştirilemez.')
     if a['kind'] not in {'Yemek','Mola'} or a['kind']!=b['kind']:raise ValueError('Aynı statü türünü seçin: yemek ↔ yemek veya mola ↔ mola.')
     if str(a['employee_id'])==str(b['employee_id']):raise ValueError('Farklı bir personel seçin.')
     if a['start'][:10]!=b['start'][:10]:raise ValueError('Aynı gün içindeki statüler değiştirilebilir.')

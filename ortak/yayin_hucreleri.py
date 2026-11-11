@@ -10,10 +10,13 @@ def reconcile_statuses(db,state,after,current,change_id):
     keys={(str(r['employee_id']),r['date']) for r in after};dates={r['date'] for r in after};pubs={r.get('publication_id') for r in after if r.get('publication_id')}
     roster=[r for r in current if not pubs or r.get('publication_id') in pubs];ids={str(r['employee_id']) for r in roster}
     people=[p for p in state.get('employees_cache',[]) if str(p['employee_id']) in ids];languages={p.get('language') or 'tr' for p in people}
-    existing=[(r['id'],r['publication_id'],loads(r['payload'])) for r in db.execute('SELECT * FROM planned_breaks')];affected=[r for r in existing if (str(r[2]['employee_id']),r[2].get('date',r[2]['start'][:10])) in keys]
+    existing=[(r['id'],r['publication_id'],loads(r['payload'])) for r in db.execute('SELECT * FROM planned_breaks') if loads(r['payload']).get('status')!='İptal'];affected=[r for r in existing if (str(r[2]['employee_id']),r[2].get('date',r[2]['start'][:10])) in keys]
     for opening in db.execute("SELECT * FROM coaching_openings WHERE status='Açık'").fetchall():
         item=loads(opening['payload'])
         if item['date'] in dates and ((pubs and opening['publication_id'] in pubs) or (not pubs and (item.get('pool') or str(item['employee_id']) in ids))):db.execute("UPDATE coaching_openings SET status='İptal' WHERE id=?",(opening['id'],))
+    from ortak.statu_iptalleri import events
+    cancellations=events(state,db)
+    if any((r.get('employee_id'),str(r.get('before',{}).get('date') or r['start'][:10])) in keys and r.get('source')!='coaching_openings' for r in cancellations):raise ValueError('Bu personel/gün için operasyonel statü iptali var; otomatik statü yenilemesi iptal kararını geri alamaz.')
     kept=[]
     for item in affected:
         if item[2]['kind']=='Koçluk':
@@ -30,7 +33,7 @@ def reconcile_statuses(db,state,after,current,change_id):
         for i,r in coverage.iterrows():
             a=pd.Timestamp(r['Tarih'])+pd.Timedelta(minutes=(int(r['Slot'])-1)*30);b=a+pd.Timedelta(minutes=30);coverage.at[i,'Atanan']=sum(max(0,(min(b,pd.Timestamp(span[1]))-max(a,pd.Timestamp(span[0]))).total_seconds()/1800) for x in roster if (span:=bounds(x)))
         coverage['Eksik']=(coverage['İhtiyaç']-coverage.Atanan).clip(lower=0);coverage['Fazla']=(coverage.Atanan-coverage['İhtiyaç']).clip(lower=0)
-        check=dict(state);check['_status_fixed_baseline']=[r[2] for r in existing if r not in affected and str(r[2]['employee_id']) in ids];check['_coaching_roster']=roster;check['status_rules']={**state['status_rules'],'coaching_by_leader':True}
+        check=dict(state);check['_status_fixed_baseline']=[r[2] for r in existing if r not in affected and str(r[2]['employee_id']) in ids];check['_coaching_roster']=roster;check['_status_call_reserve_windows']=[(r['employee_id'],r['start'],r['end']) for r in cancellations if r.get('source')!='coaching_openings' and (not pubs or r.get('publication_id') in pubs)];check['_coaching_closed_windows']=[(r['start'],r['end']) for r in cancellations if r.get('source')=='coaching_openings' and (not pubs or r.get('publication_id') in pubs)];check['status_rules']={**state['status_rules'],'coaching_by_leader':True}
         used={}
         for _,__,item in existing:
             if item.get('kind')!='Koçluk' or any(item is deleted[2] for deleted in affected):continue
@@ -49,5 +52,12 @@ def reconcile_statuses(db,state,after,current,change_id):
         pub=next((x.get('publication_id') for x in after if str(x['employee_id'])==r['employee_id'] and x['date']==r['date']),None)
         if r['kind']=='Koçluk Alanı':db.execute('INSERT INTO coaching_openings VALUES(?,?,?,?,?)',(change_id+'-ST-'+str(n),next(iter(pubs),'LEGACY'),str(r['employee_id']),'Açık',dumps(r)))
         else:db.execute('INSERT INTO planned_breaks VALUES(?,?,?)',(change_id+'-ST-'+str(n),pub,dumps(r)))
+    if state.get('status_rules',{}).get('enabled') and pubs:
+        from ortak.statu_kapasite_raporu import entitlement_snapshot
+        for pub in pubs:
+            stored=db.execute('SELECT payload FROM publication_batches WHERE id=?',(pub,)).fetchone() if db.execute("SELECT 1 FROM sqlite_master WHERE name='publication_batches'").fetchone() else None
+            if not stored:continue
+            batch=loads(stored[0]);rights=entitlement_snapshot(state,[r for r in after if r.get('publication_id')==pub],list(state.get('employees_cache',[])))
+            batch.setdefault('status_rights_updates',[]).append({'change_id':change_id,'rights':rights});db.execute('UPDATE publication_batches SET payload=? WHERE id=?',(dumps(batch),pub))
     from ortak.roller_ve_yetkiler import append_audit
     append_audit(db,'Vardiyaya bağlı statüler yeniden planlandı',state['profile'],{'change_id':change_id,'before':[{'id':i,**p} for i,_,p in affected],'after':planned,'kept_coaching':[p for _,_,p in kept]})
