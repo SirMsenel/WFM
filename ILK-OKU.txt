@@ -1,4 +1,4 @@
-WFM — 12 KASIM 2026 / FAZ 4.1 — MOLA VE AJANDA DÜZELTMESİ — macOS
+WFM — 12 KASIM 2026 / FAZ 4.2 — GÖRSEL DÜZENLEMELER — macOS
 
 1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
 2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
@@ -97,3 +97,6 @@ MOLA / AJANDA YAMASI
 - Mola seçimi kaldırıldı; haklar tamamen otomatik dağıtılır.
 - Statü Kuralları > Koçluk: operasyon rezervi ve grup bazlı haftalık çoklu görüşme seçimi.
 - Eski yayınları yeniden oluşturmaz; yeni taslaklarda güncel dağıtım kullanılır.
+
+FAZ 4.2: Onaylarda fazla personel yeşil; Similasyon senaryoları aylık kartlar;
+Takip statüleri ilgili vardiyanın altında kompakt kartlar. Yeni veritabanı gerekmez.

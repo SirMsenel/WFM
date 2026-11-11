@@ -548,11 +548,11 @@ def render():
             label='Çalışma'
         output.append({'Tarih':r['date'],'Gün':DAY_NAMES[pd.Timestamp(r['date']).weekday()],'Durum':label,'Başlangıç':r.get('start') or '—','Bitiş':r.get('end') or '—','Saat':f'{round(hours*60)//60:02d}:{round(hours*60)%60:02d}'})
     from ortak.takvim_gorunumu import render_calendar
+    from ortak.mola_servisi import records as status_records
+    statuses=[x for x in status_records(st.session_state) if str(x['employee_id'])==str(target['employee_id']) and str(start)<=str(x.get('date') or x['start'][:10])<=str(end) and x['status']!='İptal']
     for month in pd.period_range(start,end,freq='M'):
         left=max(start,month.start_time.date());right=min(end,month.end_time.date());st.markdown(f'#### {month.year} · {month.month:02d}')
-        render_calendar(records,[target],left,right,key='my_published_roster_'+str(month))
-    from ortak.mola_servisi import records as status_records
-    statuses=[x for x in status_records(st.session_state) if str(x['employee_id'])==str(target['employee_id']) and str(start)<=x['start'][:10]<=str(end) and x['status']!='İptal']
-    if statuses:
-        from ortak.statu_kartlari import render_status_list
-        render_status_list(statuses)
+        while left<=right:
+            week_end=min(right,left+timedelta(days=6-left.weekday()))
+            render_calendar(records,[target],left,week_end,key='my_published_roster_'+str(left),statuses=statuses)
+            left=week_end+timedelta(days=1)

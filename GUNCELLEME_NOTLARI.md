@@ -1,3 +1,12 @@
+# 12 Kasım 2026 — Görsel Düzenlemeler (Faz 4.2)
+
+- Onay Merkezi → Plan Yayın Onayları ve Vardiya Planı → Yayın Onayları aynı ortak görünümü kullanır. Fazla personel tablosu artık yeşil yoğunluk skalasıyla gösterilir; eksik personel kırmızı kalır. Değerler ve onay koşulları değişmedi.
+- Similasyon senaryoları seçilen aya göre güncellenen İyi / Normal / Kötü kartlarıyla sunulur. Kartlarda gerekli/mevcut personel, çağrı, simüle servis seviyesi, hedef farkı, alım ihtiyacı ve tepe çağrı görünür. Mevcut grafikler ve aksiyon kayıt akışı korunur. Ham senaryo listesi kaldırıldı; bütün aylar CSV olarak indirilebilir. Hesaplama formülleri değişmedi.
+- Takip → Benim Vardiyam altında ayrı ve uzun Planlanan Statülerim listesi kaldırıldı. Aylar haftalık shift satırlarına bölünür; yemek, mola, koçluk ve diğer statüler ilgili tarihli vardiya hücresinin altında kompakt renkli kartlar olarak gösterilir. Gece yarısından sonraki statü bağlı olduğu vardiyanın altında kalır ve gerçek başlangıç tarihi ayrıca görünür. İptal kayıtları gösterilmez; personel/tarih filtreleri korunur.
+- Otomatik mola, operasyon rezervi, koçluk kontenjanları, haftalık tek/çoklu koçluk kuralı, yayın düzenleme ve diğer önceki akışlar korunur. Yeni tablo veya veri dönüşümü eklenmedi.
+
+---
+
 # 12 Kasım 2026 — Mola ve Ajanda Düzeltmesi (Faz 4.1)
 
 Bu yama önceki Faz 4 üzerine uygulanır. Çağrı tahmini, interval profilleri, talepler, dil ayrımı, yayın onayları ve diğer ekranların akışları korunur. Eski yayınlar kendiliğinden yeniden planlanmaz.

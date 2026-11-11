@@ -34,8 +34,11 @@ def render():
     try:table,meta=simulate(load_calls(False,s['workspace_db_path']),start,months,headcount,aht,shrink/100,sl/100,seconds,growth=growth/100,attrition=attrition/100,days=days,hours=hours,peak_share=peak_share,forecast=byid[selected]['frame'] if selected!='history' else None)
     except ValueError as e:st.info(str(e));return
     metric_cards([('Geçmiş gün',meta['history_days']),('Ölçülen geçmiş hata',f"%{meta['wape']:.1f}"),('Senaryo farkı',f"±%{meta['spread']:.1f}")]);st.caption(f"Geçmiş: {meta['history_start']} – {meta['history_end']}. İyi senaryoda çağrı/ayrılma daha düşük, kötüde daha yüksektir. Aralık geçmiş hata oranından türetilir; güven aralığı değildir.")
+    from ortak.senaryo_kartlari import render_scenarios
+    render_scenarios(table,sl)
     fig=px.line(table,x='Ay',y='Gerekli personel',color='Senaryo',markers=True,color_discrete_map={'İyi':'#269d89','Normal':'#6983bb','Kötü':'#c96f72'});st.plotly_chart(fig,use_container_width=True)
-    fig=px.line(table,x='Ay',y='Simüle SL (%)',color='Senaryo',markers=True);fig.add_hline(y=sl,line_dash='dash',annotation_text='Hedef SL');st.plotly_chart(fig,use_container_width=True);st.dataframe(table,hide_index=True,use_container_width=True)
+    fig=px.line(table,x='Ay',y='Simüle SL (%)',color='Senaryo',markers=True);fig.add_hline(y=sl,line_dash='dash',annotation_text='Hedef SL');st.plotly_chart(fig,use_container_width=True)
+    st.download_button('Tüm Senaryo Aylarını CSV İndir',table.to_csv(index=False).encode('utf-8-sig'),'simulasyon_senaryolari.csv','text/csv',key='sim_scenarios_csv')
     st.caption('08–24 hizmet penceresi için ortalama kapasite senaryosudur; gerçek vardiya optimizasyonunun yerini almaz. Kayıtlı tahmin olmayan tarihler geçmişten tamamlanır. Alım önerileri otomatik İK emri değildir.')
     rows=table.to_dict('records');path=s['workspace_db_path']
     with connect(path) as db:db.execute('CREATE TABLE IF NOT EXISTS simulation_actions(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')

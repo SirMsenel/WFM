@@ -19,7 +19,7 @@ def render():
         a,b=st.columns(2)
         with a:st.markdown('**Eksik personel**');st.dataframe(styled_shortage_matrix(shortage_matrix(result['coverage'],chosen)),use_container_width=True,height=300)
         with b:
-            extra=result['coverage'].copy();extra['Eksik']=extra['Fazla'];st.markdown('**Fazla personel**');st.dataframe(styled_shortage_matrix(shortage_matrix(extra,chosen)),use_container_width=True,height=300)
+            extra=result['coverage'].copy();extra['Eksik']=extra['Fazla'];st.markdown('**Fazla personel**');st.dataframe(styled_shortage_matrix(shortage_matrix(extra,chosen),excess=True),use_container_width=True,height=300)
     with st.expander('Yemek, Mola ve Koçluk Dağılımı',expanded=False):
         from modules.statu_analizi import render_data
         render_data(result.get('breaks',[]),result['period']['start'],result['period']['end'],'approval_statuses')

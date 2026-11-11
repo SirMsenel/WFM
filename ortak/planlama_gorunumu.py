@@ -79,10 +79,12 @@ def shortage_matrix(coverage,start,signed=False):
     table.index.name='Yarım saat';return table
 
 
-def styled_shortage_matrix(matrix):
+def styled_shortage_matrix(matrix,excess=False):
     peak=float(matrix.max().max()) if matrix.notna().any().any() else 0
     def color(value):
         if pd.isna(value):return 'background-color:#eef2f6;color:#64748b;text-align:center'
+        if excess and value>=0:
+            intensity=min(1.,float(value)/max(1.,peak));return f'background-color:rgb({int(235-205*intensity)},{int(250-120*intensity)},{int(240-150*intensity)});color:{"white" if intensity>.5 else "#17533d"};text-align:center'
         if value<0:
             intensity=min(1.,abs(float(value))/max(1.,abs(float(matrix.min().min()))));return f'background-color:rgb({int(220-190*intensity)},{int(245-115*intensity)},{int(225-135*intensity)});color:{"white" if intensity>.5 else "#17533d"};text-align:center'
         ratio=min(1,float(value)/peak) if peak else 0
