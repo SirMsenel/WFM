@@ -1,6 +1,6 @@
 # WFM
 
-**Faz 4 / 10. güncelleme:** gün ve yarım saat bazlı geçmiş kayıp önerisi, altı aylık sentetik tahmin arşivi, gece molası, koçluk kapasite alanları ve haftalık ajanda, yayın takviminde hücre düzenleme. Ayrıntılar [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
+**12 Kasım / Faz 4.1 düzeltmesi:** yemek ve tüm molalar otomatik, ardından operasyon rezervi ve ortak koçluk kontenjanı; grup bazlı haftalık tek/çoklu koçluk kuralı ve renkli shift ajandası. Önceki Faz 4 akışları korunur. Ayrıntılar [GUNCELLEME_NOTLARI.md](GUNCELLEME_NOTLARI.md).
 
 Güncel kurulum: [ILK-OKU.txt](ILK-OKU.txt). Türkçe kaynaklar: [DOSYA_HARITASI.md](DOSYA_HARITASI.md). Kurum API/veritabanı hazırlığı ve sınırları: [KURUMSAL_BAGLANTI.md](KURUMSAL_BAGLANTI.md). Eski İngilizce Python dosyaları geriye uyumluluk yönlendirmeleridir.
 

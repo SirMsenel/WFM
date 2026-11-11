@@ -46,6 +46,14 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
     _ring(c,'Personel açığı bulunan yarım saat',str(slots),slots/total if total else 0,'#dc7760')
     _ring(d,'Fazladan planlanan kişi-saat',f'{excess/2:,.1f}',excess/(needed+excess) if needed+excess else 0,'#8574bf')
     if excess:st.info('Yeşil + hücreler ihtiyacın üzerinde planlanan kapasiteyi gösterir. Yeni otomatik atamalar tanımlı fazla personel sınırını korur.')
+    if result.get('breaks') is not None and result.get('staff'):
+        from ortak.statu_haklari import balance
+        from ortak.modern_kartlar import metric_cards
+        rights=balance(st.session_state,result.get('plan',[]),result['staff'],result['breaks'])
+        st.markdown('#### Yemek → Tüm Molalar → Operasyon Rezervi → Koçluk')
+        metric_cards([('Yemek / mola eksik hakkı',f"{sum(r['Eksik (dk)'] for r in rights):.0f} dk"),('Operasyon rezervi',f"{coverage.get('Operasyon rezervi',pd.Series(dtype=float)).sum()*.5:.2f} kişi-saat"),('Açık koçluk kontenjanı',sum(int(x.get('remaining_capacity',1)) for x in result['breaks'] if x['kind']=='Koçluk Alanı'))])
+        missing_rights=[r for r in rights if r['Eksik (dk)'] or r['Fazla (dk)']]
+        if missing_rights:st.dataframe(pd.DataFrame(missing_rights).drop(columns=['employee_id']).rename(columns={'date':'Tarih'}),hide_index=True,use_container_width=True)
     if 'Shrinkage statü bütçesi' in coverage and 'Mola kaybı' in coverage:
         from ortak.modern_kartlar import metric_cards
         budget=float(coverage['Shrinkage statü bütçesi'].sum())*.5;planned=float(coverage['Mola kaybı'].sum())*.5

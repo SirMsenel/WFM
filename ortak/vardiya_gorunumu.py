@@ -6,7 +6,7 @@ import pandas as pd
 from modules.vardiya_plani.vardiya_motoru import bounds
 from ortak.planlama import SHIFT_LABELS
 
-STATUS_COLORS={'OFF':('#edf2f7','#475569'),'Yıllık izin':('#fce7f3','#9d174d'),'Evlilik izni':('#ffedd5','#9a3412'),
+STATUS_COLORS={'Koçluk':('#ede9fe','#5b21b6'),'Kontenjan':('#dcfce7','#166534'),'OFF':('#edf2f7','#475569'),'Yıllık izin':('#fce7f3','#9d174d'),'Evlilik izni':('#ffedd5','#9a3412'),
  'Mazeret izni':('#e0f2fe','#075985'),'Rapor':('#fee2e2','#991b1b'),'Ücretsiz izin':('#f1e8df','#784d2c'),
  'Doğum izni':('#f5d0fe','#86198f'),'Bayram izni':('#dcfce7','#166534'),'Sınav':('#fef3c7','#92400e'),'Ders':('#ede9fe','#5b21b6')}
 WINDOWS=[('Sabah','08:00–13:00',8,13,'#dff2ff','#075985'),('İkindi','13:00–17:00',13,17,'#fff0ce','#92400e'),

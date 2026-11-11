@@ -3,7 +3,7 @@ from datetime import datetime,date,time
 from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
-from ortak.mola_servisi import records,availability,request,cancel
+from ortak.mola_servisi import records
 from ortak.personel_karti import pick_person,render_person
 from ortak.sabit_demo import history_rows
 from ortak.takvim_gorunumu import render_calendar
@@ -25,18 +25,7 @@ def render_today():
         from modules.statu_degisimi import render_personal,render_requests
         render_personal(s,day)
         with st.expander('Statü değişim taleplerim'):render_requests(s)
-    duration=min(15,int(s.get('status_rules',{}).get('groups',{}).get(person['work_type'],{}).get('break_minutes',15)))
-    if profile.get('position')!='agent':st.info('Mola talebi personelin kendi hesabından yapılır.');return
-    a,b=st.columns(2);clock=a.time_input('Mola başlangıcı',value=time(12),step=300,key='break_start');duration=b.number_input('Mola süresi (dk)',min_value=1,max_value=max(1,duration),value=max(1,duration),step=1,key='break_request_minutes')
-    if st.button('Mola Talep Et',key='request_break'):
-        try:request(s,datetime.combine(day,clock),duration);st.success('Kapasite uygun; mola ayrıldı.');st.rerun()
-        except ValueError as e:st.warning(str(e))
-    choices={r['id']:r for r in reserved if r['status']=='Onaylı'}
-    if choices:
-        ident=st.selectbox('İptal edilecek mola',list(choices),key='break_cancel_pick')
-        if st.button('Mola Talebini İptal Et'):
-            try:cancel(s,ident);st.rerun()
-            except ValueError as e:st.error(str(e))
+    st.caption('Yemek ve mola saatlerin sistem tarafından vardiya hakkının tamamına göre otomatik planlanır. Değişiklik gerekirse karşılıklı statü değişimi kullanılır.')
 
 
 def render_insights():

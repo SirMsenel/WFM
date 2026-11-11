@@ -38,7 +38,7 @@ class StatusPlacementTests(Base):
   cov=self.setup_status();rule=self.s['status_rules']['groups']['fulltime'];rule.update(meal_disabled=True,break_rules=[{'min_hours':0,'max_hours':24,'minutes':10}])
   items,_,_=meal_plan(self.s,[row()],cov,[emp()]);self.assertEqual(sum((pd.Timestamp(x['end'])-pd.Timestamp(x['start'])).total_seconds()/60 for x in items if x['kind']=='Mola'),10)
  def test_coaching_is_reserved_not_assigned_and_budgeted(self):
-  cov=self.setup_status();items,out,_=meal_plan(self.s,[row()],cov,[emp()]);openings=[x for x in items if x['kind']=='Koçluk Alanı'];self.assertTrue(openings);self.assertFalse(any(x['kind']=='Koçluk' for x in items));self.assertAlmostEqual(out['Mola kaybı'].sum()*.5,sum((pd.Timestamp(x['end'])-pd.Timestamp(x['start'])).total_seconds()/3600 for x in items))
+  cov=self.setup_status();self.s['status_rules']['operation_reserve_rate']=0.;items,out,_=meal_plan(self.s,[row()],cov,[emp()]);openings=[x for x in items if x['kind']=='Koçluk Alanı'];self.assertTrue(openings);self.assertFalse(any(x['kind']=='Koçluk' for x in items));self.assertAlmostEqual(out['Mola kaybı'].sum()*.5,sum((pd.Timestamp(x['end'])-pd.Timestamp(x['start'])).total_seconds()/3600 for x in items))
 
 class CoachingOpeningTests(Base):
  def setUp(self):

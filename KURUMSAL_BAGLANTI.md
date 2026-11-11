@@ -79,3 +79,8 @@ Yeni tahmin kayıtlarının metadata.staffing_parameters alanı özgün Erlang a
 `coaching_openings(id,publication_id,employee_id,status,payload)` yayınlanmış fakat henüz lidere atanmış görüşme olmayan koçluk kapasite alanlarını tutar. Açık alan lider atamasıyla Atandı olur; atama `manager_agenda` ve `planned_breaks` içine yazılır. İptal/yeniden planlama durumları arşivlenir. Alanlar vardiya tarih/saatinden bağımsız gerçek görüşme sayılmamalıdır. Kurum takvimi entegrasyonu ayrıca gerekir.
 
 Gün bazlı `slot_shrinkage` kuralı örneği: `{"weekdays":[5,6],"start_slot":17,"end_slot":34,"rate":0.15}` (Pazartesi=0). Son eşleşen satır uygulanır. Geriye dönük sentetik tahminler metadata.forecast.synthetic/retrospective alanlarıyla ayırt edilir; kayıt zamanı üretim anıdır.
+
+
+## 12 Kasım / Faz 4.1
+Yeni ortak `coaching_openings` payload'ı `pool=true`, `employee_id="*"`, `eligible_employee_ids`, `capacity` (ilk kontenjan), `remaining_capacity`, `languages`, `operation_reserve_count` alanlarını içerir. Bir kayıt bir zaman aralığına ait birden çok koltuğu temsil edebilir. Atama `BEGIN IMMEDIATE` içinde kontenjanı bir azaltır ve `planned_breaks`/`manager_agenda` kayıtlarını oluşturur. Kalan 0 olunca durum Atandı olur. Önceki kişiye bağlı kayıtlar desteklenir. Aylık kullanılan süreye açık kontenjanlar değil, atanmış Koçluk kayıtları girer.
+Grup kuralı `coaching_multiple_per_week=false` ise aynı personelin Pazartesi–Pazar içinde ikinci ataması reddedilir. `status_rules.operation_reserve_rate` varsayılan 0.05, `coaching_slot_minutes` varsayılan 15'tir.

@@ -14,7 +14,7 @@ def coaching_used(state):
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='coaching_openings'").fetchone():reserved=[r[0] for r in db.execute("SELECT payload FROM coaching_openings WHERE status='Açık'")]
         for row in list(db.execute('SELECT payload FROM planned_breaks'))+[(r,) for r in reserved]:
             p=loads(row[0])
-            if p.get('kind') not in {'Koçluk','Koçluk Alanı'}:continue
+            if p.get('kind')!='Koçluk':continue
             a,b=pd.Timestamp(p['start']),pd.Timestamp(p['end']);k=(str(p['employee_id']),a.strftime('%Y-%m'));used[k]=used.get(k,0)+(b-a).total_seconds()/60
     return used
 
@@ -35,6 +35,7 @@ def net_capacity(gross,loss,rate):
 def plan(state,rows,coverage,people,used=None):
     cfg=state.get('status_rules') or {};lookup={str(p['employee_id']):p for p in people};scheduled=[];issues=[]
     if not cfg.get('enabled'):return scheduled,coverage,issues
+    cfg={**cfg,'automatic':True}
     out=coverage.copy();out['Mola kaybı']=0.;dates=pd.to_datetime(out.Tarih);stamps=(dates+pd.to_timedelta((out.Slot-1)*30,unit='m')).to_numpy(dtype='datetime64[ns]')
     need=out['İhtiyaç'].to_numpy(float);gross=out.Atanan.to_numpy(float);loss=np.zeros(len(out));rates=np.zeros(len(out));included=bool(cfg.get('shrinkage_included'))
     if included:
@@ -42,7 +43,10 @@ def plan(state,rows,coverage,people,used=None):
         params=state.get('staffing_parameters',{});fallback=float(params.get('shrinkage',.3));source=state.get('sp_staffing_result_df');mapping={}
         if source is not None and 'Shrinkage (%)' in source:mapping={(str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])):float(r['Shrinkage (%)'])/100 for r in source.to_dict('records')}
         rates=np.array([mapping.get((str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])),shrinkage_for(state,r['Tarih'],int(r['Slot']),fallback)) for r in out.to_dict('records')])
-    net_need=need*(1-rates);coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
+    net_need=need*(1-rates)
+    if included and 'Net Agent' in out:
+        measured=pd.to_numeric(out['Net Agent'],errors='coerce').to_numpy(float);net_need=np.maximum(net_need,np.where(np.isfinite(measured),measured,net_need))
+    coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
     for item in state.get('_status_fixed_baseline',[]):
         a,b=pd.Timestamp(item['start']),pd.Timestamp(item['end']);overlap=np.maximum(0,(np.minimum(np.datetime64(b),stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(a),stamps))/np.timedelta64(30,'m'));loss[:]+=overlap;by_person.setdefault(str(item['employee_id']),[]).append(item)
     def place(row,kind,duration,a,b,mandatory=False,probe=False):
@@ -52,7 +56,7 @@ def plan(state,rows,coverage,people,used=None):
         local_stamps=stamps[indices];local_need=net_need[indices];local_gross=gross[indices];local_rates=rates[indices];local_loss=loss[indices]
         counted=out['Sayaca Dahil'].to_numpy(bool)[indices] if 'Sayaca Dahil' in out else np.ones(len(indices),bool)
         before=np.maximum(0,local_need-net_capacity(local_gross,local_loss,local_rates))
-        for t in pd.date_range(a,b-pd.Timedelta(minutes=duration),freq='15min'):
+        for t in pd.date_range(a,b-pd.Timedelta(minutes=duration),freq='5min'):
             finish=t+pd.Timedelta(minutes=duration)
             if any(t<pd.Timestamp(x['end']) and pd.Timestamp(x['start'])<finish for x in by_person.get(eid,[])):continue
             if kind=='Mola':
@@ -97,21 +101,27 @@ def plan(state,rows,coverage,people,used=None):
             remaining=int(night_rules.get('break_total_minutes',60)) if night and hours>=8 else allowance(rule,hours)
             chunk=min(15,max(5,int(rule.get('break_minutes',15))))
             while remaining>0:
-                candidates=sorted(set([min(chunk,remaining)]+[x for x in (10,5) if x<=min(chunk,remaining)]),reverse=True)
+                candidates=range(min(chunk,remaining),0,-1)
                 placed=False
                 for duration in candidates:
-                    if place(row,'Mola',duration,a+pd.Timedelta(minutes=rule.get('break_first_minutes',60)),b-pd.Timedelta(minutes=rule.get('break_last_minutes',60)),probe=True):
+                    if place(row,'Mola',duration,a+pd.Timedelta(minutes=rule.get('break_first_minutes',60)),b-pd.Timedelta(minutes=rule.get('break_last_minutes',60)),mandatory=True,probe=True):
                         remaining-=duration;placed=True;break
                 if not placed:
-                    issues.append({'employee_id':str(row['employee_id']),'date':row['date'],'Sorun':f'Mola: {remaining} dakika için uygun kapasite/pencere yok.','severity':'warning','override_required':False});break
-        for row,a,b,rule,hours in working:
-            eid=str(row['employee_id']);month=a.strftime('%Y-%m');target=int(rule.get('coaching_monthly_minutes',60));chunk=max(5,int(rule.get('coaching_chunk_minutes',15)));remaining=target-coached.get((eid,month),0)
-            if remaining<=0:continue
-            # At most one coaching fragment per working day; never crosses month end.
-            finish=min(b,(a+pd.offsets.MonthBegin(1)).normalize());duration=int(min(chunk,remaining))
-            if place(row,'Koçluk Alanı' if cfg.get('coaching_by_leader') else 'Koçluk',duration,a+pd.Timedelta(minutes=60),finish-pd.Timedelta(minutes=60),probe=bool(cfg.get('coaching_by_leader'))):coached[(eid,month)]=coached.get((eid,month),0)+duration
-    out['Brüt Atanan']=out['Atanan'];out['Mola kaybı']=loss;out['Shrinkage statü bütçesi']=gross*rates
+                    issues.append({'employee_id':str(row['employee_id']),'date':row['date'],'Sorun':f'Mola hakkı tamamlanamadı: {remaining} dakika eksik. Vardiya süresi, ilk/son saat ve saatlik mola sınırını düzenleyin.','severity':'error','override_required':False});break
+        if cfg.get('coaching_by_leader',False):
+            from ortak.kocluk_kapasitesi import reserve_pool
+            pools,reserve,pool_loss=reserve_pool(state,rows,coverage,people,scheduled,net_need,by_person,coached,allow=not any(x.get('severity')=='error' for x in issues))
+            scheduled.extend(pools);loss+=pool_loss
+        else:
+            reserve=np.zeros(len(out))
+            for row,a,b,rule,hours in (working if (state.get('status_rules') or {}).get('automatic') else []):
+                eid=str(row['employee_id']);month=a.strftime('%Y-%m');remaining=int(rule.get('coaching_monthly_minutes',60))-coached.get((eid,month),0)
+                if remaining<=0:continue
+                duration=int(min(max(5,int(rule.get('coaching_chunk_minutes',15))),remaining));finish=min(b,(a+pd.offsets.MonthBegin(1)).normalize())
+                if place(row,'Koçluk',duration,a+pd.Timedelta(minutes=60),finish-pd.Timedelta(minutes=60),probe=True):coached[(eid,month)]=coached.get((eid,month),0)+duration
+    else:reserve=np.zeros(len(out))
+    out['Brüt Atanan']=out['Atanan'];out['Mola kaybı']=loss;out['Shrinkage statü bütçesi']=gross*rates;out['Operasyon rezervi']=reserve
     # Keep the existing gross-need units throughout planning/approval counters.
-    out['Atanan']=np.round(np.maximum(0,net_capacity(gross,loss,rates)/(1-rates)),8);out['Eksik']=(out['İhtiyaç']-out.Atanan).clip(lower=0);out['Fazla']=(out.Atanan-out['İhtiyaç']).clip(lower=0)
+    out['Atanan']=np.round(np.maximum(0,net_capacity(gross,loss+reserve,rates)/(1-rates)),8);out['Eksik']=(out['İhtiyaç']-out.Atanan).clip(lower=0);out['Fazla']=(out.Atanan-out['İhtiyaç']).clip(lower=0)
     if 'Sayaca Dahil' in out:out.loc[~out['Sayaca Dahil'],['Eksik','Fazla']]=0
     return scheduled,out,issues

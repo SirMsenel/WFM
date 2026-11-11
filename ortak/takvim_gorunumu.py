@@ -24,6 +24,6 @@ def modern_grid(grid,key):
     for _,r in shown.iterrows():
         cells=[]
         for i,value in enumerate(r):
-            text=escape(str(value));cells.append('<td>'+text+'</td>' if i==0 else '<td><span class="shift-pill" style="'+cell_style(value)+'">'+text+'</span></td>')
+            text=escape(str(value)).replace("\n","<br>");cells.append('<td>'+text+'</td>' if i==0 else '<td><span class="shift-pill" style="'+cell_style(value)+'">'+text+'</span></td>')
         rows.append('<tr>'+''.join(cells)+'</tr>')
     st.markdown(css+'<div class="roster-shell"><table class="modern-roster"><thead><tr>'+head+'</tr></thead><tbody>'+''.join(rows)+'</tbody></table></div>',unsafe_allow_html=True)

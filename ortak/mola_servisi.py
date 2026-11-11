@@ -52,18 +52,20 @@ def availability(state,eid,start,minutes,db=None,kind="Mola"):
         if demand.empty:raise ValueError('Seçilen saat için ihtiyaç verisi yok; kapasite teyit edilemiyor.')
         workers={str(r['employee_id']) for r in roster if (span:=bounds(r)) and pd.Timestamp(span[0])<=t<pd.Timestamp(span[1])}
         on_break={str(r['employee_id']) for r in existing if str(r['employee_id']) in workers and pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end'])}
-        reserved=sum(1 for r in openings if r['id']!=claim and pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end']) and languages.get(people.get(str(r['employee_id']),{}).get('language') or 'tr',True))
+        reserved=sum(max(0,int(r.get('remaining_capacity',1))-(1 if r['id']==claim else 0)) for r in openings if pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end']) and (any(languages.get(lang,True) for lang in r.get('languages',[])) if r.get('pool') else languages.get(people.get(str(r['employee_id']),{}).get('language') or 'tr',True)))
+        reserve=max([float(r.get('operation_reserve_count',0)) for r in openings if pd.Timestamp(r['start'])<=t<pd.Timestamp(r['end'])],default=0.)
         if state.get('status_rules',{}).get('shrinkage_included'):
             from ortak.statuler import shrinkage_for
             rate=float(demand['Shrinkage (%)'].iloc[0])/100 if 'Shrinkage (%)' in demand else shrinkage_for(state,t,slot,float(state.get('staffing_parameters',{}).get('shrinkage',.3)))
             net=float(demand['Net Agent'].max()) if 'Net Agent' in demand else float(demand['Planlanan Agent'].max())*(1-rate)
             # Extra simultaneous statuses may use the already-funded shrinkage budget.
-            spare.append(max(0,len(workers)-len(on_break)-reserved-net) if len(workers)*(1-rate)>=net else 0)
-        else:spare.append(len(workers-on_break)-reserved-float(demand['Planlanan Agent'].max()))
+            spare.append(max(0,len(workers)-len(on_break)-reserved-reserve-net) if len(workers)*(1-rate)>=net else 0)
+        else:spare.append(len(workers-on_break)-reserved-reserve-float(demand['Planlanan Agent'].max()))
     return min(spare)
 
 
 def request(state,start,minutes):
+    if state.get('status_rules',{}).get('automatic'):raise ValueError('Mola hakkının tamamı otomatik planlanır; elle mola seçimi kapalıdır.')
     from ortak.personel import get_people
     from ortak.talep_servisi import now
     profile=state.get('profile') or {}
@@ -79,6 +81,7 @@ def request(state,start,minutes):
             raw=db.execute('SELECT payload FROM work_state WHERE key=?',(key,)).fetchone()
             if raw:check[key]=loads(raw[0])
         check['employees_cache']=[p for p in people if p.get('position')=='agent']
+        if check.get('status_rules',{}).get('automatic'):raise ValueError('Mola hakkının tamamı otomatik planlanır; elle mola seçimi kapalıdır.')
         maximum=check.get('status_rules',{}).get('groups',{}).get(person['work_type'],{}).get('break_minutes',15)
         if minutes>maximum:raise ValueError('Mola hakkı değişti; ekranı yenileyin.')
         rule=check.get('status_rules',{}).get('groups',{}).get(person['work_type'],{})

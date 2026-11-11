@@ -15,6 +15,8 @@ def init_publications(path):
 
 
 def publish_plan(state,result,approval_ticket=None):
+    from ortak.statu_haklari import assert_complete
+    assert_complete(state,result)
     gated=state.get("shift_rules",{}).get("publication_approvals",{}).get("enabled",False)
     if gated and not approval_ticket:raise ValueError("Önce iki Planlama onayı; eksik %5 üzerindeyse Planlama Yöneticisi onayı gerekli.")
     from ortak.donem_kilitleri import assert_can_plan

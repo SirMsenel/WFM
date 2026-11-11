@@ -1,4 +1,4 @@
-WFM — 11 KASIM 2026 / FAZ 4 (10. GÜNCELLEME) — macOS
+WFM — 12 KASIM 2026 / FAZ 4.1 — MOLA VE AJANDA DÜZELTMESİ — macOS
 
 1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
 2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
@@ -92,3 +92,8 @@ FAZ 3
 - Demo Yönetici Yardımcısı: yonetici_yardimcisi / 1234. Kurumsal modda üretilmez.
 - İlk açılışta sentetik statü geçmişi eklenmesi birkaç saniye sürebilir.
 - Detaylı varsayımlar ve kural farkları GUNCELLEME_NOTLARI.md içindedir.
+
+MOLA / AJANDA YAMASI
+- Mola seçimi kaldırıldı; haklar tamamen otomatik dağıtılır.
+- Statü Kuralları > Koçluk: operasyon rezervi ve grup bazlı haftalık çoklu görüşme seçimi.
+- Eski yayınları yeniden oluşturmaz; yeni taslaklarda güncel dağıtım kullanılır.

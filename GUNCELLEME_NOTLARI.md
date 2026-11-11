@@ -1,3 +1,20 @@
+# 12 Kasım 2026 — Mola ve Ajanda Düzeltmesi (Faz 4.1)
+
+Bu yama önceki Faz 4 üzerine uygulanır. Çağrı tahmini, interval profilleri, talepler, dil ayrımı, yayın onayları ve diğer ekranların akışları korunur. Eski yayınlar kendiliğinden yeniden planlanmaz.
+
+- İzleme ekranındaki elle mola saati/süresi seçimi ve yeni mola talep düğmesi kaldırıldı. Önceden planlanmış statüleri görme ve onaylı karşılıklı yemek/mola değişimi korunur.
+- Yemek ve molalar vardiya oluşturulurken zorunlu hak olarak tamamen dağıtılır. Kapasite azsa mola hakkı eksik bırakılmaz; en az açık yaratacak saatler seçilir ve oluşan ihtiyaç farkı raporlanır. İlk/son saat, tek mola en fazla 15 dakika ve saatlik kullanım sınırı korunur; daha kısa parçalar kullanılabilir.
+- Vardiya/kurallar yüzünden hak fiziksel olarak sığmıyorsa kişi, tarih ve eksik dakika gösterilir. Eksik yemek/mola hakkı olan plan onaya/yayına gönderilemez; “eksikleri kabul et” bunu geçersiz kılamaz. Yayın hücresi düzeltmesinde aynı kontroller çalışır.
+- Yemek ve tüm molalardan sonra kalan kapasiteden küçük operasyon rezervi ayrılır. Varsayılan kalan kapasitenin %5'i; Statü Kuralları → Koçluk altında değiştirilebilir. Bu, toplam shrinkage oranından farklı bir ayardır. Ayrılan süre yarım saatlik kapasiteye dahil edilir; shrinkage içinde zaten bütçelenen kayıp ikinci kez düşülmez.
+- Geri kalan uygun kapasite ortak koçluk kontenjanıdır. Kontenjan belirli kişiye önceden atanmaz; zaman aralığı, uygun personeller ve kalan koltuk sayısı saklanır. Lider kendi çalışmasına ve personelin vardiya/statülerine uyan aralığı seçer. Aylık koçluk üst süresi atama sırasında korunur. Kontenjan atandıkça bir azalır; farklı liderler aynı kontenjanı aşamaz.
+- Grup bazında “Aynı hafta birden fazla koçluk yapılabilir” seçeneği eklendi (varsayılan kapalı). Kapalıysa Pazartesi–Pazar içinde ikinci görüşme ajandada gösterilmez ve veri tabanı işlemi sırasında da reddedilir. Açık olması aylık üst süreyi kaldırmaz. Sonradan değişen kural atama anında yeniden okunur.
+- Ajanda ana görünümü artık diğer vardiyalardaki ortak renkli shift matrisi: liderin çalışma/görüşme takvimi, seçilen personelin vardiyası ve tarih/saat bazlı açık kontenjanlar. Ham haftalık tablo yerine açılır düzenleme alanında gün kartları ve giriş/çıkış saatleri kullanılır.
+- Önceki planlarda ayrılmış kişiye bağlı eski koçluk alanları okunabilir; yeni planlarda ortak kontenjan üretilir. Geçmişte atanmış görüşmeler ve kayıtlar silinmez. Yayın geri alma ve denetimli hücre düzeltmesi ilgili kontenjanları da aynı işlemde günceller.
+
+Kurulum ve eski iki veritabanını kopyalayarak taşıma adımları ILK-OKU.txt içinde.
+
+---
+
 # WFM — Faz 4 / 11 Kasım 2026 / 10. güncelleme
 
 ## Geçmiş veri ve personel hesabı

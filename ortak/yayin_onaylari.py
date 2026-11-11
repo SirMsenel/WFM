@@ -19,6 +19,8 @@ def proposals(state):
 
 
 def submit(state,result):
+    from ortak.statu_haklari import assert_complete
+    assert_complete(state,result)
     if (state.get('profile') or {}).get('position')!='wfm':raise ValueError('Yayına Planlama gönderir.')
     if state.get('planning_result_fingerprint')!=fingerprint(state):raise ValueError('Taslak değişti; yeniden kontrol edin.')
     from ortak.planlama_gorunumu import blocking_issues

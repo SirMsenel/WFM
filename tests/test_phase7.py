@@ -70,7 +70,7 @@ class AdditionalPhase7Tests(Base):
   from ortak.statuler import defaults,meal_plan
   cfg=dict(defaults(),enabled=True);cfg['groups']['fulltime'].update(after_start=3,before_start=6)
   a=demand(slots=range(1,49));b=a.copy();b['Tarih']=DAY+timedelta(days=1);coverage=pd.concat([a,b],ignore_index=True);coverage['İhtiyaç']=1;coverage['Atanan']=3;coverage['Eksik']=0;coverage['Fazla']=2
-  meals,out,issues=meal_plan({'status_rules':cfg},[row(start='22:00',end='07:00')],coverage,[emp()]);self.assertFalse(issues);self.assertAlmostEqual(out['Mola kaybı'].sum(),1.);self.assertEqual(pd.Timestamp(meals[0]['start']).date(),DAY+timedelta(days=1))
+  meals,out,issues=meal_plan({'status_rules':cfg},[row(start='22:00',end='07:00')],coverage,[emp()]);self.assertFalse(issues);self.assertAlmostEqual(out['Mola kaybı'].sum(),2.);self.assertEqual(pd.Timestamp(next(x for x in meals if x['kind']=='Yemek')['start']).date(),DAY+timedelta(days=1))
 
 class CapacityTests(Base):
  def test_slot_shrinkage_changes_only_configured_slots(self):
@@ -95,7 +95,7 @@ class CapacityTests(Base):
  def test_meals_fit_night_shift_and_reduce_coverage(self):
   from ortak.statuler import meal_plan,defaults
   s={'status_rules':dict(defaults(),enabled=True)};coverage=demand(slots=range(1,49));coverage['İhtiyaç']=1;coverage['Atanan']=3;coverage['Eksik']=0;coverage['Fazla']=2
-  meals,result,issues=meal_plan(s,[row(code='GECE',start='00:00',end='08:00')],coverage,[emp()]);self.assertFalse(issues);self.assertEqual(len(meals),1);self.assertLessEqual(pd.Timestamp(meals[0]['end']),pd.Timestamp(DAY)+pd.Timedelta(hours=8));self.assertAlmostEqual(result['Mola kaybı'].sum(),1.)
+  meals,result,issues=meal_plan(s,[row(code='GECE',start='00:00',end='08:00')],coverage,[emp()]);self.assertFalse(issues);self.assertEqual(len([x for x in meals if x['kind']=='Yemek']),1);self.assertTrue(all(pd.Timestamp(x['end'])<=pd.Timestamp(DAY)+pd.Timedelta(hours=8) for x in meals));self.assertAlmostEqual(result['Mola kaybı'].sum(),3.)
  def test_class_default_buffer_and_transport(self):
   from modules.vardiya_plani.planlama_verileri import collect_inputs
   s=self.s;s['employees_cache'][0]['work_type']='akademi';s['acad_schedules']={'u1':{'2026-Güz':{'Saat':['08:00-12:00'],'Pazartesi':['Ders']}}}

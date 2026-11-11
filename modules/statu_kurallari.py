@@ -10,6 +10,7 @@ from ortak.calisma_alani_deposu import save_keys
 
 
 def validate(cfg):
+    if not 0<=float(cfg.get('operation_reserve_rate',.05))<=.5:raise ValueError('Operasyon rezervi %0–50 arasında olmalı.')
     for group,r in cfg['groups'].items():
         for key in ['meal_minutes','break_minutes','coaching_monthly_minutes','coaching_chunk_minutes']:
             value=r.get(key,0)
@@ -25,7 +26,8 @@ def validate(cfg):
 
 
 def render():
-    s=st.session_state;cfg=deepcopy(s.get('status_rules_edit') or s.get('status_rules') or defaults());cfg.update(automatic=True,shrinkage_included=True);cfg['enabled']=st.toggle('Yemek, mola ve koçluğu otomatik planla',value=cfg.get('enabled',True),key='status_enabled')
+    s=st.session_state;cfg=deepcopy(s.get('status_rules_edit') or s.get('status_rules') or defaults());cfg.update(automatic=True,shrinkage_included=True,coaching_by_leader=True);cfg['enabled']=True
+    st.info('Yemek ve mola hakları vardiya oluşturulurken tamamen ve otomatik dağıtılır. Koçluk kalan kapasiteden ayrılır.')
     def panel(kind):
         cols=st.columns(3)
         for col,group in zip(cols,['fulltime','akademi','dis_kaynak']):
@@ -43,15 +45,18 @@ def render():
                         rule['meal_day_overrides']=[{'weekdays':selected,'minutes':duration}] if selected else []
                 elif kind=='Mola':
                     rule['break_first_minutes']=number('Vardiya başlangıcından sonra mola yasak (dk)',0,180,int(rule.get('break_first_minutes',60)),15,key='break_first_'+group);rule['break_last_minutes']=number('Vardiya bitiminden önce mola yasak (dk)',0,180,int(rule.get('break_last_minutes',60)),15,key='break_last_'+group)
-                    rule['break_minutes']=number('Tek mola en fazla (dk)',5,60,int(rule.get('break_minutes',15)),5,key='break_d_'+group);rule['break_per_hour_max']=number('Bir saat içinde en fazla mola (dk)',5,60,int(rule.get('break_per_hour_max',15)),5,key='break_hour_'+group)
+                    rule['break_minutes']=number('Tek mola en fazla (dk)',1,15,min(15,int(rule.get('break_minutes',15))),5,key='break_d_'+group);rule['break_per_hour_max']=number('Bir saat içinde en fazla mola (dk)',5,60,int(rule.get('break_per_hour_max',15)),5,key='break_hour_'+group)
                     rules=rule.get('break_rules',[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':24,'minutes':30}]);df=pd.DataFrame(rules).rename(columns={'min_hours':'Çalışma alt sınırı','max_hours':'Çalışma üst sınırı','minutes':'Toplam mola (dk)'})
                     table=st.data_editor(df,num_rows='dynamic',hide_index=True,key='break_rules_'+group,column_config={c:st.column_config.NumberColumn(required=True,min_value=0,step=5 if c=='Toplam mola (dk)' else .5) for c in df})
                     rule['break_rules']=table.rename(columns={'Çalışma alt sınırı':'min_hours','Çalışma üst sınırı':'max_hours','Toplam mola (dk)':'minutes'}).to_dict('records')
                 else:
+                    rule['coaching_multiple_per_week']=st.checkbox('Aynı hafta birden fazla koçluk yapılabilir',value=rule.get('coaching_multiple_per_week',False),key='coach_multiple_'+group)
                     rule['coaching_monthly_minutes']=number('Aylık kişi başı koçluk (dk)',0,480,int(rule.get('coaching_monthly_minutes',60)),15,key='coach_month_'+group);rule['coaching_chunk_minutes']=number('Her görüşme parçası (dk)',5,60,int(rule.get('coaching_chunk_minutes',15)),5,key='coach_chunk_'+group)
         if kind=='Mola':st.caption('Alt sınır dahil, üst sınır hariçtir. Sistem molaları grup hakkını ve bir saatlik sınırı aşmadan uygun kapasiteye dağıtır.')
-        if kind=='Koçluk':cfg['coaching_by_leader']=st.toggle('Koçlukları takım lideri ajandasından atasın',value=cfg.get('coaching_by_leader',True),key='coaching_by_leader')
-        if kind=='Koçluk':st.caption('Aylık hedef önceki yayınlardaki görüşmeler düşülerek tamamlanır. Kapasite yoksa ertelenir; ertelenen süre plan kontrolünde görünür.')
+        if kind=='Koçluk':
+            cfg['operation_reserve_rate']=number('Yemek/mola sonrası kalan kapasiteden operasyon rezervi (%)',0.,50.,float(cfg.get('operation_reserve_rate',.05))*100,1.,key='operation_reserve_percent')/100
+            cfg['coaching_slot_minutes']=number('Açık koçluk kontenjanı süresi (dk)',5,60,int(cfg.get('coaching_slot_minutes',15)),5,key='coaching_slot_minutes')
+        if kind=='Koçluk':st.caption('Önce yemek ve mola haklarının tamamı dağıtılır. Kalan kapasiteden operasyon rezervi korunur; geri kalanı ortak koçluk kontenjanıdır. Takım lideri kendi vardiyası ve kişinin uygunluğuna göre atar; aylık kişi sınırı atama sırasında korunur.')
         if kind=='Yemek':st.caption('Yemek saatlerini sistem vardiya içinde hat durumuna göre seçer; yayınlandığında personelin takvimine düşer.')
     kind=st.segmented_control('Statü',['Yemek','Mola','Koçluk','Cuma'],default='Yemek',key='status_kind') or 'Yemek'
     if kind=='Cuma':

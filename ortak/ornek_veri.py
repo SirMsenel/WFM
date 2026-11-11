@@ -177,7 +177,11 @@ def bootstrap(state, path=DEFAULT_DB):
     from ortak.statuler import defaults
     state.setdefault("status_rules",dict(defaults(),enabled=True))
     state["status_rules"]["shrinkage_included"]=True
-    state["status_rules"].setdefault("automatic",True)
+    state["status_rules"]["enabled"]=True
+    state["status_rules"]["automatic"]=True
+    state["status_rules"]["coaching_by_leader"]=True
+    state["status_rules"].setdefault("operation_reserve_rate",.05)
+    state["status_rules"].setdefault("coaching_slot_minutes",15)
     state["status_rules"].setdefault("coaching_by_leader",True)
     from copy import deepcopy
     for group,settings in defaults()["groups"].items():

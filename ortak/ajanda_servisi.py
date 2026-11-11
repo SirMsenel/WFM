@@ -59,18 +59,29 @@ def add_coaching(state,eid,start,minutes=15,opening_id=None):
             opening=db.execute("SELECT * FROM coaching_openings WHERE id=? AND status='Açık'",(opening_id,)).fetchone()
             if not opening:raise ValueError('Koçluk alanı artık uygun değil; listeyi yenileyin.')
             slot=loads(opening['payload'])
-            if str(opening['employee_id'])!=eid or pd.Timestamp(slot['start'])!=a or pd.Timestamp(slot['end'])!=b:raise ValueError('Seçilen personel ve saat ayrılmış alanla eşleşmiyor.')
+            from ortak.kocluk_alanlari import accepts
+            if not accepts(slot,eid) or pd.Timestamp(slot['start'])!=a or pd.Timestamp(slot['end'])!=b:raise ValueError('Seçilen personel ve saat ayrılmış alanla eşleşmiyor.')
             check['_claim_coaching_opening']=opening_id
+        if check.get('status_rules',{}).get('automatic') and not opening_id:raise ValueError('Koçluğu planlamada ayrılan kontenjandan seçin.')
         if availability(check,eid,a,minutes,db,kind="Koçluk")<1:raise ValueError('Bu dilimde görüşme için hat kapasitesi yetersiz.')
         cfg=check.get('status_rules',{}).get('groups',{}).get(person['work_type'],{});target=int(cfg.get('coaching_monthly_minutes',60));used=0
         for record in db.execute('SELECT payload FROM planned_breaks'):
             r=loads(record[0])
             if str(r['employee_id'])==eid and r.get('kind')=='Koçluk' and r['start'][:7]==str(a)[:7]:used+=(pd.Timestamp(r['end'])-pd.Timestamp(r['start'])).total_seconds()/60
+        if not cfg.get('coaching_multiple_per_week',False):
+            week=a.normalize()-pd.Timedelta(days=a.weekday());week_end=week+pd.Timedelta(days=7)
+            for record in db.execute('SELECT payload FROM planned_breaks'):
+                other=loads(record[0])
+                if str(other['employee_id'])==eid and other.get('kind')=='Koçluk' and week<=pd.Timestamp(other['start'])<week_end:raise ValueError('Bu personel aynı hafta zaten koçluk aldı. Grup kuralı ikinci görüşmeye izin vermiyor.')
         if used+minutes>target:raise ValueError('Personelin aylık koçluk hedefi aşılır; başka dönem veya süre seçin.')
         payload={'employee_id':eid,'date':str(a.date()),'kind':'Koçluk','start':str(a),'end':str(b),'status':'Planlı','leader':p['username'],**({'opening_id':opening_id} if opening_id else {})}
         db.execute('INSERT INTO manager_agenda VALUES(?,?,?,?,?,?,?)',(ident,p['username'],eid,str(a),str(b),'Koçluk',dumps({'name':person['full_name'],**({'opening_id':opening_id} if opening_id else {})})))
         db.execute('INSERT INTO planned_breaks VALUES(?,?,?)',(ident,'AGENDA',dumps(payload)))
-        if opening_id:db.execute("UPDATE coaching_openings SET status='Atandı' WHERE id=? AND status='Açık'",(opening_id,))
+        if opening_id:
+            remaining=int(slot.get('remaining_capacity',1))-1
+            if remaining<0:raise ValueError('Koçluk kontenjanı doldu; listeyi yenileyin.')
+            slot['remaining_capacity']=remaining
+            db.execute("UPDATE coaching_openings SET status=?,payload=? WHERE id=? AND status='Açık'",('Açık' if remaining else 'Atandı',dumps(slot),opening_id))
         append_audit(db,'Koçluk atandı',p,payload)
     return ident
 
