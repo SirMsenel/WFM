@@ -29,7 +29,8 @@ def render_requests(state):
             owner=people.get(str(a['employee_id']),{}).get('full_name',a['employee_id']);peer=people.get(str(b['employee_id']),{}).get('full_name',b['employee_id'])
             left.markdown(f'<div style="border-left:4px solid #7c69b0;padding:10px 13px;background:#f5f1ff;border-radius:10px"><small>DEĞİŞİMİ İSTEYEN</small><br><b>{owner}</b><br>{a["kind"]} · {pd.Timestamp(a["start"]):%d.%m · %H:%M}–{pd.Timestamp(a["end"]):%H:%M}</div>',unsafe_allow_html=True)
             right.markdown(f'<div style="border-left:4px solid #258f94;padding:10px 13px;background:#eefafa;border-radius:10px"><small>KARŞILIKLI PERSONEL</small><br><b>{peer}</b><br>{b["kind"]} · {pd.Timestamp(b["start"]):%d.%m · %H:%M}–{pd.Timestamp(b["end"]):%H:%M}</div>',unsafe_allow_html=True)
-            st.markdown(f'**Durum:** {r["status"]}');st.caption('Gerekçe: '+(r.get('reason') or 'Belirtilmedi'))
+            status_color={'Karşı personel onayı':'#b98434','Takım Lideri onayı':'#6578b1','Uygulandı':'#2f8b69','Reddedildi':'#bd6262','İptal':'#7d8790'}.get(r['status'],'#66869c')
+            st.markdown(f'<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:10px"><div style="padding:10px 12px;border-radius:11px;background:{status_color}14;border:1px solid {status_color}35"><small style="color:{status_color}">DURUM</small><br><b style="color:{status_color}">{r["status"]}</b></div><div style="padding:10px 12px;border-radius:11px;background:#f5f7f9;border:1px solid #e1e7eb"><small style="color:#687c88">GEREKÇE</small><br><b>{r.get("reason") or "Belirtilmedi"}</b></div></div>',unsafe_allow_html=True)
             if r['status'] in {'Karşı personel onayı','Takım Lideri onayı'}:
                 x,y=st.columns(2)
                 for col,label,value in [(x,'Onayla',True),(y,'Reddet',False)]:

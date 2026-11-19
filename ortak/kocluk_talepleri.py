@@ -23,11 +23,22 @@ def eligible_slots(state,eid):
     from ortak.mola_servisi import records
     eid=str(eid);person=_person(state,eid)
     if not person:return []
-    upcoming=[];busy=records(state);current=pd.Timestamp.now(tz='Europe/Istanbul').tz_localize(None)
+    upcoming=[];busy=records(state)
+    from ortak.demo_zamani import now as active_now
+    current=pd.Timestamp(active_now(state))
+    from ortak.personel import get_people
+    leader=next((p for p in get_people(state) if p.get('position')=='tl' and p.get('full_name')==person.get('team_lead')),None)
+    if not leader:return []
+    from ortak.ajanda_servisi import init as init_agenda
+    init_agenda(state['workspace_db_path'])
+    with connect(state['workspace_db_path']) as db:
+        agenda=[dict(row) for row in db.execute('SELECT start,end,kind FROM manager_agenda WHERE owner=?',(leader['username'],))]
     rule=state.get('status_rules',{}).get('groups',{}).get(person.get('work_type'),{})
     for opening in read(state):
         a,b=pd.Timestamp(opening['start']),pd.Timestamp(opening['end'])
         if a<current or b-a!=pd.Timedelta(minutes=15) or not accepts(opening,eid):continue
+        if not any(row['kind']=='Çalışma' and pd.Timestamp(row['start'])<=a and b<=pd.Timestamp(row['end']) for row in agenda):continue
+        if any(row['kind']=='Koçluk' and a<pd.Timestamp(row['end']) and pd.Timestamp(row['start'])<b for row in agenda):continue
         if any(str(item.get('employee_id'))==eid and item.get('status')!='İptal' and a<pd.Timestamp(item['end']) and pd.Timestamp(item['start'])<b for item in busy):continue
         month_used=sum((pd.Timestamp(item['end'])-pd.Timestamp(item['start'])).total_seconds()/60 for item in busy if str(item.get('employee_id'))==eid and item.get('kind')=='Koçluk' and item.get('status')!='İptal' and item.get('start','')[:7]==str(a)[:7])
         if month_used+15>int(rule.get('coaching_monthly_minutes',60)):continue

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from ortak.varsayilan_kurallar import default_shift_rules
-from ortak.calisma_alani_deposu import DEFAULT_DB, connect, dumps, init_db, load_calls, save_keys, put_request, hydrate
+from ortak.calisma_alani_deposu import DEFAULT_DB, connect, dumps, loads, init_db, load_calls, save_keys, put_request, hydrate
 
 
 def employees():
@@ -180,6 +180,9 @@ def trim_demo_history_to_completed_week(path=DEFAULT_DB, today=None):
         marker=con.execute("SELECT value FROM metadata WHERE key='synthetic'").fetchone()
         if not marker or marker[0]!='true':
             return False
+        aligned=con.execute("SELECT value FROM metadata WHERE key='demo_completed_week_end'").fetchone()
+        if aligned and aligned[0]==str(end):
+            return False
         tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         changed=False
         for table,column in [('calls_daily','tarih'),('calls_interval','tarih'),('interval_operations','tarih')]:
@@ -196,6 +199,7 @@ def trim_demo_history_to_completed_week(path=DEFAULT_DB, today=None):
             # sonraki bootstrap'te uyumlu tarih aralığıyla yeniden oluşturulur.
             con.execute("DELETE FROM metadata WHERE key='faz4_status_history'")
         con.execute("INSERT INTO metadata VALUES('history_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(end),))
+        con.execute("INSERT INTO metadata VALUES('demo_completed_week_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(end),))
     return changed
 
 
@@ -220,6 +224,13 @@ def bootstrap(state, path=DEFAULT_DB):
         from ortak.sabit_demo import directory
         from ortak.demo_zamani import today as demo_today
         directory(state)
+        # Kalıcı demo saati bootstrap'tan önce okunur. Aksi halde uygulama ilk
+        # açılışta önce gerçek tarihe, sonraki rerun'da seçilen tarihe göre iki
+        # kez büyük sentetik tarih eşlemesi yapıyordu.
+        init_db(path)
+        with connect(path) as db:
+            for row in db.execute("SELECT key,payload FROM work_state WHERE key IN ('demo_clock_enabled','demo_clock_date','demo_clock_time')"):
+                if row['key'] not in state:state[row['key']]=loads(row['payload'])
         effective_today=demo_today(state)
         ensure_demo(path,effective_today)
         trim_demo_history_to_completed_week(path,effective_today)

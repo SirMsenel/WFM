@@ -78,7 +78,7 @@ def render():
         for col,choice in zip(st.columns(4),windows[offset:offset+4]):
             selected=s.get('agenda_coach_choice')==choice;a,b=map(pd.Timestamp,choice)
             with col.container(border=True):
-                st.markdown(f'**{a:%H:%M} → {b:%H:%M}**');st.caption('15 dakika')
+                st.markdown(f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><div style="background:#edf7f8;border-radius:9px;padding:7px;text-align:center"><small>Başlangıç</small><br><b>{a:%H:%M}</b></div><div style="background:#f2eef9;border-radius:9px;padding:7px;text-align:center"><small>Bitiş</small><br><b>{b:%H:%M}</b></div></div><div style="margin:7px 0;background:#f7f4ea;border-radius:9px;padding:6px;text-align:center"><small>Süre</small> · <b>{(b-a).total_seconds()/60:.0f} dakika</b></div>',unsafe_allow_html=True)
                 if show_capacity:st.caption(f"Açık kontenjan: {sum(int(r.get('remaining_capacity',1)) for r in groups[choice])}")
                 if st.button('✓ Seçildi' if selected else 'Seç',type='primary' if selected else 'secondary',key='agenda_slot_'+eid+'_'+str(a.value),use_container_width=True):s['agenda_coach_choice']=choice;st.rerun()
     choice=s.get('agenda_coach_choice')

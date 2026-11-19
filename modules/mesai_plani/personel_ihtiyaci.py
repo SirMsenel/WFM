@@ -153,7 +153,9 @@ def render():
     # ======================================================
     st.markdown("### ⚙️ Parametreler")
 
-    active_slot_rules=bool(st.session_state.get('slot_shrinkage'))
+    default_mode='30 dk kuralları' if st.session_state.get('slot_shrinkage') else 'Genel oran'
+    shrinkage_mode=st.segmented_control('Shrinkage kaynağı',['Genel oran','30 dk kuralları','Geçmiş öneri'],default=st.session_state.get('staffing_shrinkage_mode',default_mode),key='staffing_shrinkage_mode') or default_mode
+    active_slot_rules=shrinkage_mode!='Genel oran'
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         aht = st.slider("AHT (sn)", 60, 600, 300, 5)
@@ -194,6 +196,7 @@ def render():
                 st.caption('Öneri yalnızca kayıtlı statü kullanımını kapsar. Eğitim, devamsızlık ve benzeri dış kayıplar kurum verisiyle ayrıca eklenmelidir. Öneriyi aşağıdaki yarım saatlik kurallara aktarabilir, sonra istediğin dilimi elle değiştirebilirsin.')
                 if st.button('Öneriyi Dilim Oranlarına Aktar',disabled=overall is None,key='shrinkage_adopt'):
                     st.session_state['slot_shrinkage']=[{'start_slot':int(r['Slot']),'end_slot':int(r['Slot']),'rate':min(.95,float(r['Shrinkage (%)'])/100),**({'weekdays':[int(r['Haftanın günü'])]} if 'Haftanın günü' in r else {})} for r in table.to_dict('records') if pd.notna(r['Shrinkage (%)'])];st.session_state.pop('slot_loss_editor_clock',None)
+                    st.session_state['staffing_shrinkage_mode']='Geçmiş öneri'
                     from ortak.calisma_alani_deposu import save_keys
                     save_keys(st.session_state);st.rerun()
     with st.expander('30 dakikalık shrinkage kuralları'):
@@ -212,8 +215,9 @@ def render():
                     if not 1<=a<=b<=48 or not 0<=rate<1:raise ValueError('Bitiş başlangıçtan sonra, kayıp %0–99 arasında olmalı.')
                     rows.append({'start_slot':a,'end_slot':b,'rate':rate,**({'weekdays':[list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES).index(r['Gün'])]} if r['Gün']!='Tüm günler' else {})})
                 st.session_state['slot_shrinkage']=rows
+                st.session_state['staffing_shrinkage_mode']='30 dk kuralları'
                 from ortak.calisma_alani_deposu import save_keys
-                save_keys(st.session_state);st.success('Dilim kayıpları kaydedildi.')
+                save_keys(st.session_state);st.success('Dilim kayıpları kaydedildi. Genel shrinkage oranı devre dışı bırakıldı.');st.rerun()
             except ValueError as e:st.error(str(e))
     occ_percent = st.slider("Doluluk / Occupancy Hedefi (%)", 50, 95, 85, 5)
     st.caption("Doluluk = Trafik (Erlang) / Agent. Hedef %85 ise, sistem doluluk %85’i aşmayacak şekilde agent artırır.")
@@ -247,8 +251,9 @@ def render():
         if popup(st.session_state,start,end):return
         try:
             with st.spinner("Personel ihtiyacı hesaplanıyor..."):
+                active_rules=st.session_state.get("slot_shrinkage",[]) if shrinkage_mode!='Genel oran' else []
                 result_df=calculate_staffing(forecast_df,ratio_df,aht=float(aht),target_sl=target_sl,
-                                            target_time=float(target_time),shrinkage=shrinkage,occ_target=occ_target,slot_shrinkage=st.session_state.get("slot_shrinkage",[]))
+                                            target_time=float(target_time),shrinkage=shrinkage,occ_target=occ_target,slot_shrinkage=active_rules)
             st.session_state["staffing_parameters"]={"aht":float(aht),"target_sl":target_sl,"target_time":float(target_time),"shrinkage":shrinkage,"occ_target":occ_target}
             st.session_state["sp_staffing_result_df"] = result_df
             from ortak.interval_servisi import record_used_profile
@@ -288,135 +293,41 @@ def render():
         date_labels.append(label)
         date_map2[label] = d
 
-    left, right = st.columns([1.25, 2.75], vertical_alignment="top")
+    with st.container(border=True):
+        a,b,c=st.columns([1.45,2.2,1.2],vertical_alignment='bottom')
+        picked_label=a.selectbox('İncelenecek gün',date_labels,index=0,key='sp_staff_pick_date')
+        picked_date=date_map2[picked_label]
+        metric_choice=b.segmented_control('Ana grafik metriği',['Planlanan Agent','Net Agent','Tahmin Çağrı'],default='Planlanan Agent',key='sp_staff_metric_choice') or 'Planlanan Agent'
+        show_calls_overlay=c.toggle('Çağrıyı birlikte göster',value=True,key='sp_staff_show_calls_overlay')
 
-    # ---------------- SOL: Seçimler + Gün Özeti ----------------
-    with left:
+    dff=df_all[df_all['Tarih'].dt.date==picked_date].copy().sort_values('Slot')
+    if dff.empty:
+        st.info('Seçilen tarihte veri yok.');return
+    dff['SlotLabel']=dff['Aralık'].astype(str)
+    total_calls=float(dff['Tahmin Çağrı'].sum());max_plan=int(dff['Planlanan Agent'].max());max_net=int(dff['Net Agent'].max())
+    avg_occ=float(dff['Doluluk (%)'].mean());avg_sl=float(dff['SL (model) (%)'].mean());peak=dff.sort_values('Planlanan Agent',ascending=False).iloc[0]
+    from html import escape
+    cards=[('Toplam çağrı',f'{total_calls:,.0f}','Günlük tahmin','#247f91'),('Tepe planlanan',str(max_plan),str(peak['Aralık']),'#6c68a9'),('Tepe net ihtiyaç',str(max_net),'Erlang C','#327e67'),('Ortalama doluluk',f'%{avg_occ:.1f}','Occupancy','#b67b36'),('Ortalama SL',f'%{avg_sl:.1f}','Servis seviyesi','#b05d72')]
+    for col,(label,value,note,color) in zip(st.columns(5),cards):
+        col.markdown(f'<div style="min-height:116px;padding:16px 17px;border:1px solid {color}35;border-top:4px solid {color};border-radius:17px;background:linear-gradient(145deg,{color}12,#fff);color:#294d5e"><small style="font-weight:750;color:{color}">{escape(label.upper())}</small><div style="font-size:26px;font-weight:800;margin:9px 0 2px">{escape(value)}</div><span style="font-size:12px;color:#6a7f8a">{escape(note)}</span></div>',unsafe_allow_html=True)
+
+    graph_tab,table_tab=st.tabs(['Gün İçi Grafik','30 Dakikalık Detay'])
+    with graph_tab:
         with st.container(border=True):
-            st.markdown("#### Görünüm Seçimi")
-
-            picked_label = st.selectbox(
-                "Tarih seç",
-                options=date_labels,
-                index=0,
-                key="sp_staff_pick_date",
-            )
-            picked_date = date_map2[picked_label]
-
-            metric_choice = st.radio(
-                "Grafik metriği",
-                ["Planlanan Agent", "Net Agent", "Tahmin Çağrı"],
-                index=0,
-                horizontal=False,
-                key="sp_staff_metric_choice",
-            )
-
-            show_calls_overlay = st.checkbox(
-                "Çağrı overlay göster (ikincil eksen)",
-                value=True,
-                key="sp_staff_show_calls_overlay",
-            )
-
-        with st.container(border=True):
-            st.markdown("#### Seçilen Gün Özeti")
-
-            dff_kpi = df_all[df_all["Tarih"].dt.date == picked_date].copy()
-
-            if dff_kpi.empty:
-                st.info("Seçilen tarihte veri yok.")
-            else:
-                total_calls = float(dff_kpi["Tahmin Çağrı"].sum())
-                max_plan = int(dff_kpi["Planlanan Agent"].max())
-                max_net = int(dff_kpi["Net Agent"].max())
-                avg_occ = float(dff_kpi["Doluluk (%)"].mean())
-                avg_sl = float(dff_kpi["SL (model) (%)"].mean())
-                peak_slot = int(dff_kpi.sort_values("Planlanan Agent", ascending=False).iloc[0]["Slot"])
-
-                r1c1, r1c2 = st.columns([2, 1])
-                r1c1.metric("Toplam Tahmin Çağrı", f"{total_calls:,.0f}")
-                from ortak.saat_etiketleri import slot_label
-                r1c2.metric("En yoğun saat aralığı", slot_label(peak_slot))
-
-                r2c1, r2c2 = st.columns([2, 1])
-                r2c1.metric("Max Planlanan Agent", f"{max_plan}")
-                r2c2.metric("Max Net Agent", f"{max_net}")
-
-                r3c1, r3c2 = st.columns([2, 1])
-                r3c1.metric("Ort. Doluluk (%)", f"{avg_occ:.1f}")
-                r3c2.metric("Ort. SL (%)", f"{avg_sl:.1f}")
-
-    # ---------------- SAĞ: Grafik + Detay Tablo ----------------
-    with right:
-        with st.container(border=True):
-            st.markdown("#### 📋 Seçilen Gün Detayı")
-
-            dff = df_all[df_all["Tarih"].dt.date == picked_date].copy().sort_values("Slot")
-
-            if dff.empty:
-                st.info("Seçilen tarihte veri yok.")
-            else:
-                dff["SlotLabel"] = dff["Aralık"].astype(str)
-
-                # Grafik
-                try:
-                    import plotly.graph_objects as go
-                    from plotly.subplots import make_subplots
-
-                    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-                    if metric_choice == "Planlanan Agent":
-                        y_main = dff["Planlanan Agent"].values
-                        y_name = "Planlanan Agent"
-                    elif metric_choice == "Net Agent":
-                        y_main = dff["Net Agent"].values
-                        y_name = "Net Agent"
-                    else:
-                        y_main = dff["Tahmin Çağrı"].values
-                        y_name = "Tahmin Çağrı"
-
-                    fig.add_trace(
-                        go.Scatter(
-                            x=dff["SlotLabel"],
-                            y=y_main,
-                            mode="lines+markers",
-                            name=y_name,
-                        ),
-                        secondary_y=False,
-                    )
-
-                    if show_calls_overlay and metric_choice != "Tahmin Çağrı":
-                        fig.add_trace(
-                            go.Bar(
-                                x=dff["SlotLabel"],
-                                y=dff["Tahmin Çağrı"].values,
-                                name="Tahmin Çağrı",
-                                opacity=0.35,
-                            ),
-                            secondary_y=True,
-                        )
-
-                    fig.update_layout(
-                        height=340,
-                        margin=dict(l=10, r=10, t=40, b=10),
-                        title=f"{picked_label} — Gün İçi Kapasite ve Çağrı Tahmini",
-                        xaxis_title="Yarım saat aralığı",
-                    )
-                    fig.update_yaxes(title_text=y_name, secondary_y=False)
-                    fig.update_yaxes(title_text="Tahmin Çağrı", secondary_y=True)
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-                except Exception:
-                    fallback = dff[["Slot", "Planlanan Agent", "Net Agent", "Tahmin Çağrı"]].set_index("Slot")
-                    st.line_chart(fallback, height=320)
-
-                # Detay tablo
-                show_cols = [
-                    "Tarih", "Gün", "Aralık",
-                    "Tahmin Çağrı", "Trafik (Erlang)", "Doluluk (%)", "SL (model) (%)",
-                    "Net Agent", "Planlanan Agent",
-                ]
-                st.dataframe(dff[show_cols], use_container_width=True, hide_index=True, height=360)
+            import plotly.graph_objects as go
+            from plotly.subplots import make_subplots
+            fig=make_subplots(specs=[[{'secondary_y':True}]])
+            colors={'Planlanan Agent':'#5c6fb1','Net Agent':'#248b78','Tahmin Çağrı':'#c07c38'};main_color=colors[metric_choice]
+            fig.add_trace(go.Scatter(x=dff['SlotLabel'],y=dff[metric_choice],mode='lines',line=dict(color=main_color,width=3,shape='spline'),fill='tozeroy',fillcolor=main_color+'20',name=metric_choice,hovertemplate='%{x}<br>%{y:.2f}<extra></extra>'),secondary_y=False)
+            if show_calls_overlay and metric_choice!='Tahmin Çağrı':fig.add_trace(go.Bar(x=dff['SlotLabel'],y=dff['Tahmin Çağrı'],name='Tahmin Çağrı',marker_color='#d9a55b',opacity=.32),secondary_y=True)
+            fig.update_layout(height=410,margin=dict(l=18,r=18,t=48,b=30),title=dict(text=f'{picked_label} · Kapasite Eğrisi',font=dict(size=18)),plot_bgcolor='#fbfdfe',paper_bgcolor='rgba(0,0,0,0)',legend=dict(orientation='h',y=1.12),hovermode='x unified')
+            fig.update_xaxes(title='Yarım saat aralığı',tickangle=-45,showgrid=False,nticks=16)
+            fig.update_yaxes(title=metric_choice,gridcolor='#e8eef2',secondary_y=False);fig.update_yaxes(title='Tahmin çağrı',showgrid=False,secondary_y=True)
+            st.plotly_chart(fig,use_container_width=True)
+    with table_tab:
+        show_cols=['Aralık','Tahmin Çağrı','Trafik (Erlang)','Doluluk (%)','SL (model) (%)','Net Agent','Shrinkage (%)','Planlanan Agent']
+        styled=dff[show_cols].style.format({'Tahmin Çağrı':'{:.2f}','Trafik (Erlang)':'{:.2f}','Doluluk (%)':'{:.2f}','SL (model) (%)':'{:.2f}','Shrinkage (%)':'{:.2f}'}).background_gradient(subset=['Planlanan Agent'],cmap='PuBu').background_gradient(subset=['SL (model) (%)'],cmap='BuGn')
+        st.dataframe(styled,use_container_width=True,hide_index=True,height=520)
 
     # ======================================================
     # Tüm Sonuç Tablosu (Search + Sayfalama)

@@ -96,14 +96,23 @@ def plan(state,rows,coverage,people,used=None):
             if overlap.sum()+1e-8<duration/30:continue
             after=np.maximum(0,local_need-net_capacity(local_gross,local_loss+overlap,local_rates));cost=float(((after-before)*counted).sum())
             if not mandatory and cost>1e-8:continue
-            # Prefer middle of shift; capacity always has precedence.
+            # Önce hat kapasitesi, sonra mola parçalarını vardiyaya yayma
+            # tercih edilir. Böylece eşdeğer iki seçenekten önceki molaya
+            # yapışan değil, en geniş çalışma aralığı bırakan seçilir.
             preference_penalty=max(0,(right-left).total_seconds()/60-min(maximum,max(1,int(rule.get('break_preferred_minutes',10))))) if kind=='Mola' else 0
-            candidate=(cost,preference_penalty*1e9+abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds()),t,finish,overlap)
-            if best is None or candidate[:2]<best[:2]:best=candidate
+            previous_breaks=[old for old in by_person.get(eid,[]) if old.get('kind')=='Mola'] if kind=='Mola' else []
+            spread=min((max(0,(t-pd.Timestamp(old['end'])).total_seconds()/60,(pd.Timestamp(old['start'])-finish).total_seconds()/60) for old in previous_breaks),default=(b-a).total_seconds()/60)
+            center=abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds())
+            # Shrinkage butcesi icindeki birden fazla secenek ayni maliyete
+            # sahip olabilir. Bu durumda mevcut kaybi en az yogunlastiran
+            # aralik secilir; ekip molalari tek bir saate yigmaz.
+            concentration=float(np.square(local_loss+overlap).sum())
+            candidate=(cost,concentration,preference_penalty,-spread,center,t,finish,overlap)
+            if best is None or candidate[:5]<best[:5]:best=candidate
         if best is None:
             if probe:return False
             issues.append({'employee_id':eid,'date':row['date'],'Sorun':kind+' için uygun kapasite/pencere yok; '+('vardiyayı veya ihtiyacı düzenleyin' if mandatory else 'uygun başka döneme ertelendi'),'severity':'error' if mandatory else 'warning','override_required':False});return False
-        _,__,t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
+        _,__,___,____,_____,t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
         if kind=='Mola':
             for bucket in pd.date_range(t.floor('h'),(finish-pd.Timedelta(seconds=1)).floor('h'),freq='h'):hour_use[(eid,bucket)]=hour_use.get((eid,bucket),0)+(min(finish,bucket+pd.Timedelta(hours=1))-max(t,bucket)).total_seconds()/60
         return True

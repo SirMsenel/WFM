@@ -19,14 +19,12 @@ def render():
         st.caption('Kırmızı: eksik kişi · Yeşil +: ihtiyacın üzerinde planlanan kişi · 0: ihtiyaç karşılanmış · —: sayaca dahil değil.')
         matrix=shortage_matrix(result['coverage'],chosen,signed=True)
         st.dataframe(styled_shortage_matrix(matrix,human=True),use_container_width=True,height=430)
-    from ortak.statu_kapasite_raporu import entitlement_snapshot,render_capacity_report
+    from ortak.statu_kapasite_raporu import entitlement_snapshot,render_approval_capacity
     rights=result.get('status_rights')
     if rights is None:
         rights=entitlement_snapshot(s,result['plan'],result['staff']);st.caption('Bu eski onay kaydında tarihsel hak sürümü yok; hak özeti mevcut statü kurallarına göre hesaplanır.')
-    render_capacity_report(s,rights,result.get('breaks',[]),[r for r in result.get('breaks',[]) if r['kind']=='Koçluk Alanı'],result['period']['start'],result['period']['end'],'approval_rights',include_cancellations=False)
-    with st.expander('Yemek, Mola ve Koçluk Dağılımı',expanded=False):
-        from modules.statu_analizi import render_data
-        render_data(result.get('breaks',[]),result['period']['start'],result['period']['end'],'approval_statuses')
+    st.markdown('### Yemek, Mola ve Açık Koçluk')
+    render_approval_capacity(rights,result.get('breaks',[]),[r for r in result.get('breaks',[]) if r['kind']=='Koçluk Alanı'],result['period']['start'],result['period']['end'],'approval_rights')
     st.info('Son gerekli onay verildiğinde vardiyalar otomatik yayınlanır; Tüm Vardiyalar ve Takip ekranlarında görünür.')
     approvals=item['votes']+([item['manager']] if item.get('manager') else [])
     if approvals:

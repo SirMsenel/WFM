@@ -155,3 +155,23 @@ def render_capacity_report(state,rights,items,openings,start,end,key,actual=Fals
         if column in table:
             styled=styled.map(lambda _value,bg=background,fg=foreground:f'background-color:{bg}20;color:{fg};font-weight:600',subset=[column])
     st.dataframe(styled,use_container_width=True,height=420)
+
+
+def render_approval_capacity(rights,items,openings,start,end,key):
+    """Yayın kararı için yalnızca üç kritik kapasiteyi gösterir."""
+    import streamlit as st
+    report=fulfillment(rights,items,start,end)
+    valid=[r for r in openings if pd.Timestamp(r['end'])-pd.Timestamp(r['start'])==pd.Timedelta(minutes=15) and str(start)<=r['start'][:10]<=str(end)]
+    open_count=sum(int(r.get('remaining_capacity',r.get('capacity',1))) for r in valid)
+    cards=[('Yemek',report['Yemek']['complete_people'],report['Yemek']['required_people'],report['Yemek']['missing_minutes'],'#258f94'),
+           ('Mola',report['Mola']['complete_people'],report['Mola']['required_people'],report['Mola']['missing_minutes'],'#7c69b0')]
+    cols=st.columns(3)
+    for col,(label,done,total,missing,color) in zip(cols[:2],cards):
+        rate=100*done/total if total else 100
+        col.markdown(f'<div style="padding:17px;border-radius:16px;border:1px solid {color}3d;border-top:4px solid {color};background:{color}0d;min-height:145px"><b style="color:{color}">{label.upper()}</b><div style="font-size:27px;font-weight:800;margin:10px 0">{done} / {total}</div><div style="height:7px;background:{color}22;border-radius:7px"><div style="height:7px;width:{min(100,rate):.1f}%;background:{color};border-radius:7px"></div></div><small style="display:block;margin-top:9px">Tamamlanma %{rate:.1f} · Eksik {missing:.0f} dk</small></div>',unsafe_allow_html=True)
+    cols[2].markdown(f'<div style="padding:17px;border-radius:16px;border:1px solid #3a8d6040;border-top:4px solid #3a8d60;background:#3a8d600d;min-height:145px"><b style="color:#3a8d60">AÇIK KOÇLUK</b><div style="font-size:27px;font-weight:800;margin:10px 0">{open_count} adet</div><div style="font-size:13px;color:#506d5b">15 dakikalık atanabilir alan</div><small>{open_count*15} dakika açık kapasite</small></div>',unsafe_allow_html=True)
+    days=list(pd.date_range(start,end));day=st.selectbox('Dağılım günü',days,format_func=lambda t:t.strftime('%d.%m.%Y'),key=key+'_day') if len(days)>1 else pd.Timestamp(start)
+    table=slot_capacity(items,openings,day)[['Yemek kullanan kişi','Mola kullanan kişi','Açık koçluk kontenjanı']]
+    table.index=[f'{t:%H:%M}–{t+pd.Timedelta(minutes=30):%H:%M}' for t in table.index];table.index.name='Saat aralığı'
+    styled=table.style.format('{:.0f}').background_gradient(subset=['Yemek kullanan kişi'],cmap='BuGn').background_gradient(subset=['Mola kullanan kişi'],cmap='Purples').background_gradient(subset=['Açık koçluk kontenjanı'],cmap='Greens')
+    st.dataframe(styled,use_container_width=True,height=430)

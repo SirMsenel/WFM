@@ -19,27 +19,43 @@ def render_today():
     st.markdown(f'<div style="padding:20px;background:linear-gradient(120deg,#e0f4f4,#ede9fb);border-radius:18px;color:#295365"><small>BUGÜN · {today:%d.%m.%Y} · {DAY_NAMES[today.weekday()]}</small><h3 style="margin:6px 0">Vardiyam ve Planlanan Statülerim</h3><span>Takvimde çalışma saatlerin, altında bugün sana ayrılan yemek, mola ve görüşme saatlerin yer alır.</span></div>',unsafe_allow_html=True)
     st.divider();day=today;eid=str(person['employee_id']);rows=[r for r in history_rows(s,day,day) if str(r['employee_id'])==eid]
     render_calendar(rows,[person],day,day,height=150,key='personal_break_calendar')
-    reserved=[r for r in records(s) if str(r['employee_id'])==eid and pd.Timestamp(r['start']).date()==day]
-    if reserved:
-        from ortak.statu_kartlari import render_status_cards
-        render_status_cards([r for r in reserved if r['status']!='İptal'])
+    reserved=[r for r in records(s) if str(r['employee_id'])==eid and pd.Timestamp(r['start']).date()==day and r['status']!='İptal']
     if profile.get('position')=='agent':
         from ortak.kocluk_talepleri import eligible_slots,submit,pending
-        with st.expander('Takım liderimden koçluk talep et'):
+        from modules.statu_degisimi import render_personal,render_requests
+        left,middle,right=st.columns(3,vertical_alignment='top')
+        with left:
+            st.markdown('### Planlanan Statülerim')
+            from ortak.statu_kartlari import render_status_panel
+            render_status_panel(reserved)
+        with middle:
+            st.markdown('### Yeni Talep')
+            st.markdown('#### Takım liderimden koçluk')
             openings=eligible_slots(s,eid)
             if not openings:
-                st.info('Yakın tarihlerde vardiyana uygun, planlamada ayrılmış bir koçluk alanı yok.')
+                st.info('Vardiyan, ayrılan kapasite ve takım liderinin ajandasıyla eşleşen saat yok.')
             else:
-                labels={row['id']:f"{pd.Timestamp(row['start']):%d.%m · %H:%M}–{pd.Timestamp(row['end']):%H:%M}" for row in openings}
-                choice=st.selectbox('Uygun gördüğün 15 dakikalık saat',list(labels),format_func=labels.get,key='agent_coaching_request_slot')
-                if st.button('Koçluk Talebi Gönder',key='agent_coaching_request'):
+                for opening in openings[:6]:
+                    a,b=pd.Timestamp(opening['start']),pd.Timestamp(opening['end']);selected=s.get('agent_coaching_request_slot')==opening['id']
+                    with st.container(border=True):
+                        st.markdown(f'<div style="font-size:12px;font-weight:750;color:#477080;margin-bottom:8px">{a:%d.%m.%Y}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><div style="background:#edf7f8;border-radius:9px;padding:7px;text-align:center"><small>Başlangıç</small><br><b>{a:%H:%M}</b></div><div style="background:#f2eef9;border-radius:9px;padding:7px;text-align:center"><small>Bitiş</small><br><b>{b:%H:%M}</b></div></div><div style="margin-top:7px;background:#f7f4ea;border-radius:9px;padding:6px;text-align:center"><small>Süre</small> · <b>{(b-a).total_seconds()/60:.0f} dakika</b></div>',unsafe_allow_html=True)
+                        if st.button('✓ Seçildi' if selected else 'Seç',type='primary' if selected else 'secondary',key='agent_coaching_pick_'+opening['id'],use_container_width=True):s['agent_coaching_request_slot']=opening['id'];st.rerun()
+                choice=s.get('agent_coaching_request_slot')
+                if st.button('Koçluk Talebi Gönder',key='agent_coaching_request',disabled=choice not in {row['id'] for row in openings},type='primary',use_container_width=True):
                     try:submit(s,choice);st.success('Talebin takım liderine iletildi.');st.rerun()
                     except ValueError as exc:st.warning(str(exc))
-                waiting=pending(s)
-                if waiting:st.caption('Bekleyen taleplerin: '+', '.join(f"{pd.Timestamp(row['start']):%d.%m %H:%M}" for row in waiting))
-        from modules.statu_degisimi import render_personal,render_requests
-        render_personal(s,day)
-        with st.expander('Statü değişim taleplerim'):render_requests(s)
+            render_personal(s,day)
+        with right:
+            st.markdown('### Taleplerim')
+            waiting=pending(s)
+            if waiting:
+                for row in waiting:
+                    a,b=pd.Timestamp(row['start']),pd.Timestamp(row['end'])
+                    st.markdown(f'<div style="padding:10px 12px;margin:7px 0;border-left:4px solid #c18e44;background:#fff8e9;border-radius:10px"><b>Koçluk · Bekliyor</b><br><small>{a:%d.%m.%Y} · {a:%H:%M}–{b:%H:%M}</small></div>',unsafe_allow_html=True)
+            render_requests(s)
+    elif reserved:
+        from ortak.statu_kartlari import render_status_cards
+        render_status_cards(reserved)
     st.caption('Yemek ve mola saatlerin sistem tarafından vardiya hakkının tamamına göre otomatik planlanır. Değişiklik gerekirse karşılıklı statü değişimi kullanılır.')
 
 

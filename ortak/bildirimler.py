@@ -12,13 +12,8 @@ def items(state):
     profile=state.get('profile') or {};username=profile.get('username');path=state.get('workspace_db_path')
     if not username or not path:return []
     init(path);role=profile.get('position');eid=str(profile.get('employee_id'));output=[]
-    # Bildirim türü, kullanıcıyı doğrudan ilgili iş akışına götürür.
-    destinations={'Talep':'📋 Talepler','Yayın onayı':'🗓️ Vardiya Planı','Vardiya':'👥 Tüm Vardiyalar',
-                  'Statü değişimi':'📊 İzleme','Statü iptali':'🗓️ Vardiya Planı','Koçluk':'📅 Ajanda',
-                  'Vardiya değişimi':'👥 Tüm Vardiyalar','Uygulama':'⚙️ Ayarlar'}
     def add(ident,title,content,when,category):
-        output.append({'id':ident,'Başlık':title,'İçerik':content,'Tarih':when,'Konu':category,
-                       'Hedef ekran':destinations.get(category)})
+        output.append({'id':ident,'Başlık':title,'İçerik':content,'Tarih':when,'Konu':category})
     with connect(path) as db:
         read={r[0] for r in db.execute('SELECT id FROM notification_reads WHERE username=?',(username,))}
         tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -51,6 +46,11 @@ def items(state):
             for row in db.execute('SELECT payload FROM shift_change_batches ORDER BY rowid DESC LIMIT 100'):
                 r=loads(row[0])
                 if any(str(x['employee_id'])==eid for x in r['after']):add('CHANGE-'+str(r.get('id') or r['date']),'Vardiyan güncellendi · '+r['type'],r['reason'],r['date'],'Vardiya değişimi')
+        if role in {'wfm','planning_manager','manager','assistant_manager','moderator'} and 'simulation_actions' in tables:
+            for row in db.execute('SELECT id,payload FROM simulation_actions ORDER BY id DESC LIMIT 80'):
+                r=loads(row['payload'])
+                if r.get('status') in {'Onay bekliyor','Açık'}:
+                    add('SIM-'+str(row['id'])+'-'+str(r.get('status')),'Simülasyon aksiyonu · '+str(r.get('status')),f"{r.get('month','—')} · {r.get('kind','Aksiyon')} · {r.get('reason','')}",r.get('created_at',''),'Simülasyon')
     # Anonymous complaints retain owner-scoped tracking without leaking sender names.
     from ortak.gorusler import records
     for item in records(state):

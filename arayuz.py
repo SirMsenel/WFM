@@ -257,7 +257,7 @@ PAGES = [
     "📆 Ajanda",
     "📥 Onay Merkezi",
     "📑 Raporlar",
-    "🔮 Similasyon",
+    "🧮 Similasyon",
     "🧾 Fatura Mutabakat",
     "👥 Personel Takip",
     "📌 Takip",
@@ -403,7 +403,7 @@ elif main == "📊 İzleme":
     from modules.mola_izleme import render as render_monitor
     render_monitor()
 
-elif main == "🔮 Similasyon":
+elif main == "🧮 Similasyon":
     from modules.similasyon import render
     render()
 elif main == "🧾 Fatura Mutabakat":

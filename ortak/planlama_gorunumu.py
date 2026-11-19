@@ -23,29 +23,36 @@ def coverage_controls(state):
     save_keys(state)
 
 
-def _ring(column,label,value,portion,color):
+def _ring(column,label,value,portion,color,note=''):
     import altair as alt
     with column:
         from html import escape
-        st.markdown('<div style="text-align:center;font-weight:600">'+escape(label)+'</div>',unsafe_allow_html=True)
+        st.markdown('<div style="text-align:center;font-weight:700;font-size:14px;min-height:40px;display:flex;align-items:center;justify-content:center">'+escape(label)+'</div>',unsafe_allow_html=True)
         portion=max(0.,min(1.,portion))
         data=pd.DataFrame({'Tür':['Değer','Kalan'],'Pay':[portion,1-portion]})
-        arc=alt.Chart(data).mark_arc(innerRadius=45,outerRadius=59).encode(theta='Pay:Q',color=alt.Color('Tür:N',scale=alt.Scale(domain=['Değer','Kalan'],range=[color,'#e9eef4']),legend=None))
-        text=alt.Chart(pd.DataFrame({'Değer':[value]})).mark_text(fontSize=19,fontWeight='bold',color='#24445b').encode(text='Değer:N')
-        st.altair_chart((arc+text).properties(height=145),use_container_width=True)
+        arc=alt.Chart(data).mark_arc(innerRadius=40,outerRadius=53).encode(theta='Pay:Q',color=alt.Color('Tür:N',scale=alt.Scale(domain=['Değer','Kalan'],range=[color,'#e9eef4']),legend=None))
+        text=alt.Chart(pd.DataFrame({'Değer':[value]})).mark_text(fontSize=17,fontWeight='bold',color='#24445b').encode(text='Değer:N')
+        st.altair_chart((arc+text).properties(height=128),use_container_width=True)
+        if note:st.markdown('<div style="text-align:center;color:#70828e;font-size:11px;min-height:30px">'+escape(note)+'</div>',unsafe_allow_html=True)
 
 
 def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
     coverage=result['coverage']
     if 'Sayaca Dahil' in coverage:coverage=coverage[coverage['Sayaca Dahil']]
-    needed=float(coverage['İhtiyaç'].sum());left=float(coverage['Eksik'].sum())
-    excess=float(coverage.Fazla.sum());slots=int((coverage.Eksik>0).sum());excess_slots=int((coverage.Fazla>0).sum());total=len(coverage)
+    needed=float(pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0).clip(lower=0).sum())
+    assigned=pd.to_numeric(coverage['Atanan'],errors='coerce').fillna(0).clip(lower=0)
+    required=pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0).clip(lower=0)
+    served=float(pd.concat([assigned,required],axis=1).min(axis=1).sum());left=max(0.,needed-served)
+    excess=float((assigned-required).clip(lower=0).sum());missing=(required-assigned).clip(lower=0);active=required>1e-8
+    slots=int(((missing>1e-8)&active).sum());excess_slots=int(((assigned-required)>1e-8).sum());covered_slots=int(((missing<=1e-8)&active).sum());total=int(active.sum());rate=served/needed if needed else 1.
     st.markdown('### '+title)
-    a,b,c,d=st.columns(4)
-    _ring(a,'Karşılanan ihtiyaç',f'%{100*(needed-left)/needed:.0f}' if needed else '%100',1-left/needed if needed else 1,'#14977f')
-    _ring(b,'Eksik kapasite',f'{math.ceil(left/2)} kişi-saat',left/needed if needed else 0,'#e8a33d')
-    _ring(c,'Açık bulunan yarım saat',f'{slots} dilim',slots/total if total else 0,'#dc7760')
-    _ring(d,'Fazladan planlanan',f'{excess_slots} dilim · {math.ceil(excess/2)} kişi-saat',excess/(needed+excess) if needed+excess else 0,'#3d9a6b')
+    first=st.columns(3);second=st.columns(3)
+    _ring(first[0],'İhtiyaç karşılama oranı',f'%{100*rate:.1f}',rate,'#14977f','Karşılanan / gereken personel-dilim')
+    _ring(first[1],'Karşılanan kapasite',f'{served:.0f} kişi-dilim',rate,'#287f9c',f'{served/2:.1f} kişi-saat')
+    _ring(first[2],'Eksik kapasite',f'{left:.0f} kişi-dilim',left/needed if needed else 0,'#d86c60',f'{left/2:.1f} kişi-saat')
+    _ring(second[0],'Tam karşılanan yarım saat',f'{covered_slots} dilim',covered_slots/total if total else 1,'#5588b0',f'Toplam {total} dilim')
+    _ring(second[1],'Eksik yarım saat',f'{slots} dilim',slots/total if total else 0,'#e8a33d',f'En yüksek eksik {missing.max():.0f} kişi' if total else '')
+    _ring(second[2],'Fazladan planlanan',f'{excess:.0f} kişi-dilim',excess/(needed+excess) if needed+excess else 0,'#3d9a6b',f'{excess_slots} dilim · {excess/2:.1f} kişi-saat')
     if excess:st.info('Yeşil + hücreler ihtiyacın üzerinde planlanan kapasiteyi gösterir. Yeni otomatik atamalar tanımlı fazla personel sınırını korur.')
     if result.get('breaks') is not None and result.get('staff'):
         from ortak.statu_haklari import balance
@@ -85,16 +92,18 @@ def shortage_matrix(coverage,start,signed=False):
 
 
 def styled_shortage_matrix(matrix,excess=False,human=False):
-    peak=float(matrix.max().max()) if matrix.notna().any().any() else 0
+    positive=float(matrix.where(matrix>0).max().max()) if (matrix>0).any().any() else 0
+    negative=abs(float(matrix.where(matrix<0).min().min())) if (matrix<0).any().any() else 0
     def color(value):
         if pd.isna(value):return 'background-color:#eef2f6;color:#64748b;text-align:center'
-        if excess and value>=0:
-            intensity=min(1.,float(value)/max(1.,peak));return f'background-color:rgb({int(235-205*intensity)},{int(250-120*intensity)},{int(240-150*intensity)});color:{"white" if intensity>.5 else "#17533d"};text-align:center'
+        if abs(float(value))<1e-9:return 'background-color:#f4f6f8;color:#657681;text-align:center;font-weight:600'
+        if excess and value>0:
+            intensity=min(1.,float(value)/max(1.,positive));return f'background-color:rgb({int(235-205*intensity)},{int(250-120*intensity)},{int(240-150*intensity)});color:{"white" if intensity>.5 else "#17533d"};text-align:center'
         if value<0:
-            intensity=min(1.,abs(float(value))/max(1.,abs(float(matrix.min().min()))));return f'background-color:rgb({int(220-190*intensity)},{int(245-115*intensity)},{int(225-135*intensity)});color:{"white" if intensity>.5 else "#17533d"};text-align:center'
-        ratio=min(1,float(value)/peak) if peak else 0
+            intensity=min(1.,abs(float(value))/max(1.,negative));return f'background-color:rgb({int(228-190*intensity)},{int(248-115*intensity)},{int(232-135*intensity)});color:{"white" if intensity>.5 else "#17533d"};text-align:center;font-weight:650'
+        ratio=min(1,float(value)/positive) if positive else 0
         red=255;green=int(247-120*ratio);blue=int(245-120*ratio)
-        return f'background-color:rgb({red},{green},{blue});color:#6d2424;text-align:center'
+        return f'background-color:rgb({red},{green},{blue});color:{"white" if ratio>.58 else "#6d2424"};text-align:center;font-weight:650'
     styles=matrix.map(color)
     # Staffing is shown as whole people in screens. The optional legacy format
     # stays available for exports/tests that explicitly rely on raw decimals.

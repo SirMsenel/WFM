@@ -22,4 +22,4 @@ def render_scenarios(table,target_sl):
 <div style="height:8px;border-radius:8px;background:{color}20;overflow:hidden"><div style="height:100%;width:{fill:.2f}%;background:{color};border-radius:8px"></div></div>
 <div style="font-size:11px;margin:6px 0 15px;color:#65798a">Hedef %{target_sl:.0f} · Fark {delta:+.2f} yüzde puan</div>
 <div style="padding:9px 10px;border-radius:10px;background:{badge_color}14;color:{badge_color};font-weight:650;font-size:13px">{badge}</div>
-<div style="font-size:11px;color:#65798a;margin-top:12px">Tepe yarım saat: {int(row['Tepe yarım saat çağrı']):,} çağrı</div></div>''',unsafe_allow_html=True)
+<div style="font-size:11px;color:#65798a;margin-top:12px">Tepe yarım saat: {int(row['Tepe yarım saat çağrı']):,} · Hedef SL ile taşınabilir: {int(row.get('Hedef SL ile taşınabilir tepe çağrı',0)):,} çağrı</div></div>''',unsafe_allow_html=True)
