@@ -1,0 +1,111 @@
+WFM — 12 KASIM 2026 / FAZ 4.3 — MOLA, KOÇLUK VE STATÜ YÖNETİMİ — macOS
+
+1. Eski backend ve Streamlit terminallerini Ctrl+C ile durdur.
+2. ZIP'i YENİ bir klasöre çıkar, klasörü VS Code ile aç.
+3. Mevcut kayıtlarını korumak için eski data/wfm_demo.db ve data/auth_demo.db
+   dosyalarının KOPYALARINI yeni klasörün data dizinine aktar. Eski dosyaları silme.
+   Şema ilk girişte güncellenir; mevcut kayıtlar sıfırlanmaz.
+4. Proje klasörünün terminalinde (Python 3.12 önerilir):
+
+   python3 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install -r requirements.txt
+
+5. İlk terminalde:
+   python -m uvicorn sunucu:app --host 127.0.0.1 --port 8001
+
+6. İkinci terminalde:
+   source .venv/bin/activate
+   python -m streamlit run arayuz.py --server.port 8501
+
+7. http://localhost:8501 adresini aç. Demo hesap: moderator / 1234
+   Sadece tarayıcıyı yenilemek eski klasörden çalışan kodu güncellemez.
+   Windows ortam etkinleştirmesi: .venv\Scripts\activate
+
+FAZ 4 İÇİN
+- Geçmiş kayıp önerisini Personel Hesap ekranından inceleyip gün bazlı aktarabilirsin.
+- Koçluk alanları yeni planlarda ayrılır; eski yayınlar kendiliğinden değişmez.
+- Ajandada haftalık çalışma saatlerini kaydet, personeli seç, uygun alana ata.
+- Yayın Yönetimi takvim hücresini değiştir; gerekçe girip kaydet.
+- Ayrıntılı değişiklik listesi: GUNCELLEME_NOTLARI.md
+
+YENİ AKIŞLAR
+- Mesai Planı > Tahmin Kaynağı > Kayıtlı tahmin seç: yıllık/dönemsel günlük tahmini
+  tekrar kullan. Personel Hesap'ta intervalin uygulanacağı tarihleri seç.
+- Tüm Vardiyalar > Değişim Alanı: personel/karşı personel/günleri seç, önizlemeyi
+  kontrol et, gerekçeyi yaz ve gönder. Erken/geç girişte saat hücresini düzenle.
+- Planlama > aynı ekran > Talep ve Onay Takibi: incele, Onayla ve Takvime Uygula.
+  MT talepleri önce ilgili TL'ye, sonra Planlama'ya gider. Son uygulama Planlama'dadır.
+- İzleme: tarih filtresiyle erken/geç giriş, rapor, yıllık izin ve değişim sayılarını gör.
+- Veri ve Kayıt Merkezi: günlük tahminler, interval, açıklanan vardiyalar ve geçmiş.
+  Tahmin/profil/yayın başlığını ilgili kayıttan düzenleyebilirsin.
+- Mesai Kuralları: haftalık OFF hakkını gruplara göre seç. Soft uyarıları yayın
+  öncesinde incele; Hard ihlaller düzeltilmeden yayınlanamaz.
+
+DOSYALAR
+GUNCELLEME_NOTLARI.md: yapılan düzenlemeler ve değişim kuralları.
+DOSYA_HARITASI.md: Türkçe asıl kaynak dosyaları. Eski yollar uyumluluk içindir.
+KURUMSAL_BAGLANTI.md: API/veritabanı hazırlığı ve beklenen alanlar.
+Şirket/kıdem kartları personelin company ve employment_start alanlarından beslenir.
+Örnek çalışma veritabanı yoksa ilk girişte oluşturulur. Gerçek kurum bağlantısı
+henüz yapılmamıştır; kurumsal modda sentetik veri üretimi kapatılır.
+
+7. GÜNCELLEME
+- İlk açılışta sabit örnek geçmiş eklenir: 1 Ocak–9 Kasım 2026 vardiyaları,
+  9 Kasım dahil çağrı/AHT/SL verileri. Mevcut yayınlarını ve taleplerini korur.
+- Moderatör hesabında sol panel > Kullanıcı Görünümü · Moderatör > rol/kullanıcı
+  seç > Bu Kullanıcı Görünümüne Geç. İşlemler gerçek veriye yazılır. Geri dönüş
+  düğmesi aynı alandadır. Hesap geçişi bağımsız ikinci planlamacı onayı sayılmaz.
+- Demo onay hesapları: planlama2 / 1234, planlama3 / 1234,
+  planlama_yoneticisi / 1234. İki ayrı Planlama onayı gerekir; açık %5 üstünde
+  ayrıca Planlama Yöneticisi onayı gerekir. Yayın Onayları sekmesini kullan.
+- Yemek/mola: Vardiya Planı > Vardiya Kuralları > Statü Kuralları.
+  Saat bazlı shrinkage: Mesai Planı > Personel Hesap.
+- Kişisel vardiya/mola: İzleme. Eski işlem özeti: Takip > İşlem Özeti.
+- Kurum bağlantısı henüz bağlanmış değildir; ayrıntılar KURUMSAL_BAGLANTI.md.
+- Tüm yeni akışlar ve varsayımlar GUNCELLEME_NOTLARI.md içindedir.
+
+FAZ 2 KULLANIMI
+- Statü Kuralları: Yemek/Mola/Koçluk/Cuma sekmelerinde grup haklarını belirle.
+  Saatleri sistem seçer. Yemek ve mola artık toplam shrinkage oranına dahildir.
+- Mola çalışma saati aralıklarında alt sınır dahil, üst sınır hariçtir.
+- Yayın Onayları: onaylayanlar ve son durum listelenir. Son gerekli onayda
+  vardiya otomatik yayınlanır. Aynı dönem/dilde ikinci bekleyen plan açılamaz.
+- Eski bekleyen taslak yeni hesapla güncelliğini kaybetmişse reddedip yeniden
+  oluştur. Geçmiş günleri içeren yayın geri alınamaz.
+- Güncel Takip Analizi > Canlı İzleme: Servis Seviyesi İzleme/Tahmin İzleme.
+  Kabul edilen farkı üstten belirle; renkler bu eşiğe göre değişir.
+- Bildirim kutusu sol menüde ve Ayarlar > Bildirimler altında.
+
+FAZ 3
+- Onay Merkezi ve Ajanda yeni ana ekranlardır.
+- Takım lideri önce Ajanda'ya çalışma saatini girer, sonra uygun personeline
+  koçluk atar. Koçluk aylık hedeften düşer; personelin İzleme ekranında görünür.
+- Yemek/mola değişimi: İzleme > Yemek / Mola Değişimi İste. Önce karşı personel,
+  sonra lider onaylar. İlk/son saat mola kuralı varsayılan 60/60 dakikadır.
+- Yemek Yok, farklı gün yemek süresi ve Cuma tercihleri Statü Kuralları'ndadır.
+- Mesai Planı > Personel Hesap: geçmiş statülerden örnek shrinkage önerisi.
+- Güncel Takip Analizi > Statü Dağılımları: plan/gerçek, canlı/geçmiş dağılımları.
+- Yabancı Dil Planı: dile özel ihtiyacı kaydedip planla; diğer yayınlar korunur.
+- Yayın Yönetimi: Planlama hücreyi gerekçeyle değiştirir; statüler yeniden
+  planlanır ve personele bildirim düşer.
+- Demo Yönetici Yardımcısı: yonetici_yardimcisi / 1234. Kurumsal modda üretilmez.
+- İlk açılışta sentetik statü geçmişi eklenmesi birkaç saniye sürebilir.
+- Detaylı varsayımlar ve kural farkları GUNCELLEME_NOTLARI.md içindedir.
+
+MOLA / AJANDA YAMASI
+- Mola seçimi kaldırıldı; haklar tamamen otomatik dağıtılır.
+- Statü Kuralları > Koçluk: operasyon rezervi ve grup bazlı haftalık çoklu görüşme seçimi.
+- Eski yayınları yeniden oluşturmaz; yeni taslaklarda güncel dağıtım kullanılır.
+
+FAZ 4.2: Onaylarda fazla personel yeşil; Similasyon senaryoları aylık kartlar;
+Takip statüleri ilgili vardiyanın altında kompakt kartlar. Yeni veritabanı gerekmez.
+
+FAZ 4.3: Statü Kuralları > Mola altında Akademi hızlı kontrol satırı vardır.
+Kural eksikse toplam hak sıfır sayılmaz. Eski yayınlar kendiliğinden değiştirilmez.
+
+FAZ 4.3 SON AKIŞ
+- Mola tercihi 10 dk; toplam hak tamamlanır, gerekirse daha kısa parçalar kullanılır.
+- Lider: 15 dk kutuyu seç > Onayla ve Ajandaya Ekle. Kapasite adedi gösterilmez.
+- Planlama/yönetim: Onay Merkezi ve Statü Dağılımları içinde kişi/adet raporu.
+- Onay Merkezi > Statü Yönetimi: gerekçeli statü iptali ve geçmişi.
