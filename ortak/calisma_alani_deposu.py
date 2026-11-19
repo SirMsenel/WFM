@@ -1,7 +1,7 @@
 # Ortak / Calisma Alani Deposu — bu ekranın / servisin uygulama kodu.
 """Local SQLite workbench. Requests use optimistic versions across sessions."""
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, time
 import hashlib
 import io
 import json
@@ -25,6 +25,8 @@ STATE_KEYS = ("planning_demand_language","language_demands","slot_shrinkage","st
 def _encode(value):
     if isinstance(value, pd.DataFrame):
         return {"__frame__": value.to_json(orient="table", date_format="iso", index=False)}
+    if isinstance(value, time):
+        return {"__time__": value.isoformat()}
     if isinstance(value, (date, datetime)):
         return {"__date__": value.isoformat(), "datetime": isinstance(value, datetime)}
     if isinstance(value, np.generic):
@@ -37,6 +39,8 @@ def _decode(value):
         return pd.read_json(io.StringIO(value["__frame__"]), orient="table")
     if "__date__" in value:
         return datetime.fromisoformat(value["__date__"]) if value.get("datetime") else date.fromisoformat(value["__date__"])
+    if "__time__" in value:
+        return time.fromisoformat(value["__time__"])
     return value
 
 
