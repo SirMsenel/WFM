@@ -153,6 +153,7 @@ def render():
     # ======================================================
     st.markdown("### ⚙️ Parametreler")
 
+    active_slot_rules=bool(st.session_state.get('slot_shrinkage'))
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         aht = st.slider("AHT (sn)", 60, 600, 300, 5)
@@ -161,7 +162,10 @@ def render():
     with c3:
         target_time = st.slider("Hedef Süre (sn)", 5, 60, 20, 5)
     with c4:
-        shrinkage_percent = st.slider("Shrinkage (%)", 0, 50, 30, 5)
+        configured=[float(item.get('rate',0))*100 for item in st.session_state.get('slot_shrinkage',[])]
+        fallback=max(0,min(50,int(round(sum(configured)/len(configured))) if configured else 30))
+        shrinkage_percent = st.slider("Shrinkage (%)", 0, 50, fallback, 5,disabled=active_slot_rules)
+        if active_slot_rules:st.caption('Yarım saatlik shrinkage kuralları aktif; genel oran yalnızca kuralı olmayan dilimlerde yedek değerdir.')
 
     with st.expander('Geçmiş statü kullanımına göre Shrinkage önerisi'):
         from datetime import date,timedelta
@@ -260,7 +264,7 @@ def render():
     # Slot Bazlı Görünüm (Seçim + Özet + Grafik + Tablo)
     # ======================================================
     st.markdown("---")
-    st.subheader("📈 Slot Bazlı Görünüm (Kısa Grafik + Tablo)")
+    st.subheader("📈 Gün İçi Personel Görünümü")
 
     df_all = st.session_state.get("sp_staffing_result_df")
     if df_all is None or not isinstance(df_all, pd.DataFrame) or df_all.empty:
@@ -289,8 +293,7 @@ def render():
     # ---------------- SOL: Seçimler + Gün Özeti ----------------
     with left:
         with st.container(border=True):
-            st.markdown("#### 🎛️ Seçimler")
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            st.markdown("#### Görünüm Seçimi")
 
             picked_label = st.selectbox(
                 "Tarih seç",
@@ -314,11 +317,8 @@ def render():
                 key="sp_staff_show_calls_overlay",
             )
 
-        st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
-
         with st.container(border=True):
-            st.markdown("#### 📌 Seçilen Gün Özeti")
-            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            st.markdown("#### Seçilen Gün Özeti")
 
             dff_kpi = df_all[df_all["Tarih"].dt.date == picked_date].copy()
 
@@ -355,11 +355,7 @@ def render():
             if dff.empty:
                 st.info("Seçilen tarihte veri yok.")
             else:
-                dff["SlotLabel"] = (
-                    dff["Slot"].astype(int).astype(str).str.zfill(2)
-                    + " • "
-                    + dff["Aralık"].astype(str)
-                )
+                dff["SlotLabel"] = dff["Aralık"].astype(str)
 
                 # Grafik
                 try:
@@ -402,8 +398,8 @@ def render():
                     fig.update_layout(
                         height=340,
                         margin=dict(l=10, r=10, t=40, b=10),
-                        title=f"{picked_label} — Slot Bazlı Görünüm",
-                        xaxis_title="Slot / Aralık",
+                        title=f"{picked_label} — Gün İçi Kapasite ve Çağrı Tahmini",
+                        xaxis_title="Yarım saat aralığı",
                     )
                     fig.update_yaxes(title_text=y_name, secondary_y=False)
                     fig.update_yaxes(title_text="Tahmin Çağrı", secondary_y=True)
@@ -416,7 +412,7 @@ def render():
 
                 # Detay tablo
                 show_cols = [
-                    "Tarih", "Gün", "Slot", "Aralık",
+                    "Tarih", "Gün", "Aralık",
                     "Tahmin Çağrı", "Trafik (Erlang)", "Doluluk (%)", "SL (model) (%)",
                     "Net Agent", "Planlanan Agent",
                 ]

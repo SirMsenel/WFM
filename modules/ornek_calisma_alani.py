@@ -1,5 +1,6 @@
 # Ornek Calisma Alani — bu ekranın / servisin uygulama kodu.
 from pathlib import Path
+from datetime import datetime, time
 import pandas as pd
 import streamlit as st
 
@@ -15,6 +16,17 @@ def render():
     st.title('Hazır Demo Veritabanı')
     if st.session_state.get('production_mode'):st.info('Kurumsal modda sentetik veri ve demo hesap işlemleri kapalı.');return
     st.info('Bu çalışma alanındaki çağrı, talep, okul ve vardiya kayıtları örnek veridir. Yaptığın işlemler SQLite veritabanına kaydedilir ve farklı demo hesaplarından görülebilir.')
+    with st.expander('Geçici Demo Zamanı',expanded=False):
+        st.caption('Test için uygulamanın “bugün”ünü değiştirir. Gerçek kurum verisine etki etmez; canlıya geçerken bu alan kaldırılabilir.')
+        state=st.session_state;enabled=st.toggle('Seçili tarih ve saati uygulamada aktif kullan',value=state.get('demo_clock_enabled',False),key='demo_clock_enabled')
+        a,b=st.columns(2)
+        selected_day=a.date_input('Aktif tarih',value=pd.Timestamp(state.get('demo_clock_date') or datetime.now()).date(),key='demo_clock_date',format='DD.MM.YYYY')
+        selected_time=b.time_input('Aktif saat',value=state.get('demo_clock_time') or time(10,0),key='demo_clock_time',step=900)
+        if st.button('Demo Zamanını Uygula',key='demo_clock_apply',type='primary'):
+            save_keys(state);st.success('Demo zamanı güncellendi. Yeniden açılan ekranlar seçili zamanı kullanır.');st.rerun()
+        if enabled:
+            from ortak.demo_zamani import now,completed_week_end
+            st.info(f'Aktif demo zamanı: {now(state):%d.%m.%Y %H:%M} · Sentetik gerçekleşen geçmiş: {completed_week_end(state):%d.%m.%Y} tarihine kadar.')
     path=st.session_state.get('workspace_db_path',str(DEFAULT_DB))
     with connect(path) as con:
         count_daily=con.execute('SELECT count(*) FROM calls_daily').fetchone()[0]

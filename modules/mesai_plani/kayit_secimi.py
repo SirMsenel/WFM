@@ -61,14 +61,15 @@ def _render_heatmap(profile_df: pd.DataFrame):
     df = df.sort_values(["Gün", "Slot"])
 
     piv = df.pivot_table(index="Gün", columns="Slot", values="Oran(%)", aggfunc="mean").reindex(order)
+    piv.columns=[f'{(int(slot)-1)//2:02d}:{((int(slot)-1)%2)*30:02d}–{int(slot)//2:02d}:{(int(slot)%2)*30:02d}' for slot in piv.columns]
 
     fig = px.imshow(
         piv.values,
         x=list(piv.columns),
         y=list(piv.index),
         aspect="auto",
-        labels={"x": "Slot (1-48)", "y": "Gün", "color": "Oran(%)"},
-        title="Gün × Slot Oran(%) Isı Haritası",
+        labels={"x": "Saat aralığı", "y": "Gün", "color": "Oran(%)"},
+        title="Gün × Yarım Saat Dağılımı",
     )
     fig.update_layout(height=420, margin=dict(l=20, r=20, t=50, b=20))
     st.plotly_chart(fig, use_container_width=True)
@@ -87,18 +88,18 @@ def _render_day_line(profile_df: pd.DataFrame, key_prefix: str = "sp_reg_line"):
     with c1:
         day_pick = st.selectbox("Gün seç", order, index=0, key=f"{key_prefix}_day")
     with c2:
-        st.caption("X: Slot (1–48) • Y: Oran(%)")
+        st.caption("X: yarım saat aralığı • Y: çağrı payı (%)")
 
     dfp = profile_df[profile_df["Gün"] == day_pick].copy().sort_values("Slot")
     fig = px.line(
         dfp,
-        x="Slot",
+        x="Aralık",
         y="Oran(%)",
         markers=True,
-        title=f"{day_pick} — Slot Bazlı Oran(%)",
+        title=f"{day_pick} — Gün İçi Çağrı Dağılımı",
     )
     fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=20))
-    fig.update_xaxes(dtick=2)
+    fig.update_xaxes(tickangle=-45)
     st.plotly_chart(fig, use_container_width=True)
 
 

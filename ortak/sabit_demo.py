@@ -3,6 +3,7 @@ from datetime import date,timedelta,datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 import sqlite3,random,math
+import pandas as pd
 from ortak.calisma_alani_deposu import connect,dumps,loads
 from ortak.personel_deposu import auth_path,ensure_identity
 END=datetime.now(ZoneInfo('Europe/Istanbul')).date()-timedelta(days=1)
@@ -55,7 +56,9 @@ def history_rows(state,start=None,end=None):
     return list(output.values())
 
 
-def prepare(state,path):
+def prepare(state,path,as_of=None):
+    # Tarih denetimi, demo ekranındaki geçici zamanla da çalışır.
+    end=(as_of or datetime.now(ZoneInfo('Europe/Istanbul')).date())-timedelta(days=(as_of or datetime.now(ZoneInfo('Europe/Istanbul')).date()).weekday()+1)
     init_history(path)
     with connect(path) as db:
         if not db.execute("SELECT 1 FROM metadata WHERE key='synthetic' AND value='true'").fetchone():return
@@ -69,7 +72,7 @@ def prepare(state,path):
         with connect(path) as db:
             last_value=db.execute('SELECT MAX(date) FROM roster_history').fetchone()[0]
             latest=date.fromisoformat(last_value) if last_value else date(2025,12,31)
-            if latest>=END:return
+            if latest>=end:return
             for day,total in db.execute('SELECT tarih,cagri_sayisi FROM calls_daily WHERE tarih>?',(str(latest),)).fetchall():
                 for slot,calls in db.execute('SELECT slot,cagri_sayisi FROM calls_interval WHERE tarih=?',(day,)).fetchall():
                     local=random.Random(20260101+date.fromisoformat(day).toordinal()+int(slot))
@@ -77,15 +80,15 @@ def prepare(state,path):
                     db.execute('INSERT OR IGNORE INTO interval_operations VALUES(?,?,?,?,?)',(day,slot,answered,within,max(1,round(calls*300/1800*1.2))))
             rows=[]
             for person in people:
-                eid=str(person['employee_id']);group=person['work_type'];off=int(person['employee_id'])%7;hire=date.fromisoformat(str(person.get('employment_start') or '2026-01-01')[:10]);exit=date.fromisoformat(person['employment_end']) if person.get('employment_end') else END+timedelta(days=1)
-                for d in pd.date_range(max(latest+timedelta(days=1),date(2026,1,1),hire),min(END,exit-timedelta(days=1))):
+                eid=str(person['employee_id']);group=person['work_type'];off=int(person['employee_id'])%7;hire=date.fromisoformat(str(person.get('employment_start') or '2026-01-01')[:10]);exit=date.fromisoformat(person['employment_end']) if person.get('employment_end') else end+timedelta(days=1)
+                for d in pd.date_range(max(latest+timedelta(days=1),date(2026,1,1),hire),min(end,exit-timedelta(days=1))):
                     d=d.date();free=d.weekday()==off or (group=='fulltime' and d.weekday()==(off+1)%7);code='OFF' if free else 'WORK'
                     if not free and d.day==20 and int(eid)%11==0:code='YILLIK_IZIN'
                     if not free and d.day==12 and int(eid)%17==0:code='RAPOR'
                     a,b=('08:00','18:00') if group=='dis_kaynak' else ('10:00','17:00') if group=='akademi' else ('08:00','17:00')
                     rows.append((eid,str(d),dumps({'employee_id':eid,'date':str(d),'shift_code':code,'start':a if code=='WORK' else None,'end':b if code=='WORK' else None,'language':person.get('language','tr'),'source':'demo_phase8'})))
             db.executemany('INSERT OR IGNORE INTO roster_history VALUES(?,?,?)',rows)
-            db.execute("INSERT INTO metadata VALUES('history_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(END),))
+            db.execute("INSERT INTO metadata VALUES('history_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(end),))
         return
     from scripts.ornek_kasim_haftasi import add_week
     add_week(path)
@@ -95,9 +98,9 @@ def prepare(state,path):
                 answered=round(calls*(.93+rng.random()*.06));within=round(answered*(.70+rng.random()*.26));db.execute('INSERT OR IGNORE INTO interval_operations VALUES(?,?,?,?,?)',(day,slot,answered,within,max(1,round(calls*300/1800*1.2))))
         rows=[]
         for person in people:
-            eid=str(person['employee_id']);group=person['work_type'];off=int(person['employee_id'])%7;hire=date.fromisoformat(str(person.get('employment_start') or '2026-01-01')[:10]);exit=date.fromisoformat(person['employment_end']) if person.get('employment_end') else END+timedelta(days=1)
+            eid=str(person['employee_id']);group=person['work_type'];off=int(person['employee_id'])%7;hire=date.fromisoformat(str(person.get('employment_start') or '2026-01-01')[:10]);exit=date.fromisoformat(person['employment_end']) if person.get('employment_end') else end+timedelta(days=1)
             d=max(date(2026,1,1),hire)
-            while d<=END and d<exit:
+            while d<=end and d<exit:
                 free=d.weekday()==off or (group=='fulltime' and d.weekday()==(off+1)%7);code='OFF' if free else 'WORK'
                 if not free and d.day==20 and int(eid)%11==0:code='YILLIK_IZIN'
                 if not free and d.day==12 and int(eid)%17==0:code='RAPOR'
@@ -106,5 +109,5 @@ def prepare(state,path):
                 rows.append((eid,str(d),dumps(record)));d+=timedelta(days=1)
         db.executemany('INSERT OR IGNORE INTO roster_history VALUES(?,?,?)',rows)
         db.execute("INSERT INTO metadata VALUES('directory_revision','phase7') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-        db.execute("INSERT INTO metadata VALUES('phase8_history',?)",('2026-01-01/'+str(END),))
-        db.execute("INSERT INTO metadata VALUES('history_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(END),))
+        db.execute("INSERT INTO metadata VALUES('phase8_history',?)",('2026-01-01/'+str(end),))
+        db.execute("INSERT INTO metadata VALUES('history_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(end),))

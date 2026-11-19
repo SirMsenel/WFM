@@ -38,7 +38,8 @@ def render():
     s=st.session_state
     from ortak.statu_kapasite_raporu import capacity_visible
     if not capacity_visible(s['profile']):st.info('Statü ve kapasite analizi Planlama ve yönetim içindir.');return
-    today=datetime.now(ZoneInfo('Europe/Istanbul')).date();st.subheader('Statü Kullanım Dağılımları');mode=st.segmented_control('İzleme',['Canlı','Geçmiş'],default='Canlı',key='status_analysis_mode') or 'Canlı'
+    from ortak.demo_zamani import today as active_today
+    today=active_today(s);st.subheader('Statü Kullanım Dağılımları');mode=st.segmented_control('İzleme',['Canlı','Geçmiş'],default='Canlı',key='status_analysis_mode') or 'Canlı'
     dates=(today,today) if mode=='Canlı' else st.date_input('Statü dönemi',(today.replace(day=1),today),key='status_analysis_range')
     if len(dates)!=2:return
     from ortak.personel_deposu import list_people

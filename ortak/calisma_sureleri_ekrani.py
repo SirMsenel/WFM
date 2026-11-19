@@ -16,10 +16,9 @@ def render_hours_summary(state,people):
         if initial.empty:st.info('Personel veya çalışma kaydı yok.');return
         options=list(initial.Grup.unique());preferred=state.get('hour_target_group')
         index=options.index(preferred) if preferred in options else 0
-        selected_group=st.selectbox('Grafiği gösterilecek grup',options,index=index,format_func=lambda g:WORK_LABELS.get(g,g),key='capacity_review_group')
-        chart=initial[initial.Grup==selected_group].set_index('Personel')['Toplam saat'].sort_values(ascending=False)
+        selected_group=st.selectbox('Kapasitesi incelenecek grup',options,index=index,format_func=lambda g:WORK_LABELS.get(g,g),key='capacity_review_group')
+        chart=initial.groupby('Grup')['Toplam saat'].mean().rename(index=WORK_LABELS).sort_values(ascending=False)
         st.bar_chart(chart,color='#2c98a2')
-        st.caption('Grafik, solda süre hedefi tanımlanan grupla aynı grubu seçtiğinizde o hedefe göre takip etmenizi sağlar.')
         dates=st.date_input('İncelenecek çalışma dönemi',(start,end),key='hours_history_range')
         if len(dates)!=2:return
         df=personnel_hours(state,agents,*dates,published_only=True)
@@ -36,7 +35,6 @@ def render_hours_summary(state,people):
 
 def render_targets(state):
     st.markdown('### Gruplara Çalışma Süresi Tanımla')
-    st.caption('Her hedef, gruptaki her kişi için dönem boyunca çalışma saati üst sınırıdır. Motor ihtiyacı aşmak için bu süreyi doldurmaz; kalan saatleri burada görürsün.')
     mode=st.radio('Hedef dönemi',['Aylık','Özel dönem'],horizontal=True,key='hour_target_mode')
     ctx=state.get('plan_ctx') or {};anchor=pd.Timestamp(ctx.get('start',pd.Timestamp.today())).date()
     if mode=='Aylık':

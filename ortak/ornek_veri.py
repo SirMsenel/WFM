@@ -25,7 +25,9 @@ def ensure_demo(path=DEFAULT_DB, today=None):
     # Demo history follows the day on which the application is opened; it is
     # deliberately not frozen to the original delivery date.
     today=today or datetime.now(ZoneInfo('Europe/Istanbul')).date()
-    end=today-timedelta(days=1)
+    # Gerçekleşen veri yalnızca tamamlanmış haftalara kadar üretilir. Böylece
+    # içinde bulunulan hafta tahmin/planlama için temiz bir test alanı kalır.
+    end=today-timedelta(days=today.weekday()+1)
     dates=pd.date_range(end-timedelta(days=729),end)
     rng=np.random.default_rng(20261107)
     daily,intervals=[],[]
@@ -137,7 +139,7 @@ def ensure_demo(path=DEFAULT_DB, today=None):
 def extend_demo_history_to_today(path=DEFAULT_DB, today=None):
     """Extend only missing synthetic call days; institutional data is never overwritten."""
     today=today or datetime.now(ZoneInfo('Europe/Istanbul')).date()
-    end=today-timedelta(days=1)
+    end=today-timedelta(days=today.weekday()+1)
     with connect(path) as con:
         marker=con.execute("SELECT value FROM metadata WHERE key='synthetic'").fetchone()
         if not marker or marker[0]!='true':
@@ -165,6 +167,38 @@ def extend_demo_history_to_today(path=DEFAULT_DB, today=None):
         con.execute("INSERT INTO metadata VALUES('history_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(end),))
 
 
+def trim_demo_history_to_completed_week(path=DEFAULT_DB, today=None):
+    """Keep only completed-week synthetic history without touching real data.
+
+    Older demo databases may have been created while the old fixture generated
+    data through the current day.  The source markers make this migration safe:
+    manually published records and later institution data are never deleted.
+    """
+    today=today or datetime.now(ZoneInfo('Europe/Istanbul')).date()
+    end=today-timedelta(days=today.weekday()+1)
+    with connect(path) as con:
+        marker=con.execute("SELECT value FROM metadata WHERE key='synthetic'").fetchone()
+        if not marker or marker[0]!='true':
+            return False
+        tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        changed=False
+        for table,column in [('calls_daily','tarih'),('calls_interval','tarih'),('interval_operations','tarih')]:
+            if table not in tables:continue
+            before=con.total_changes
+            con.execute(f'DELETE FROM {table} WHERE {column}>?',(str(end),))
+            changed|=con.total_changes>before
+        if 'roster_history' in tables:
+            before=con.total_changes
+            con.execute("DELETE FROM roster_history WHERE date>? AND (payload LIKE '%demo_phase%' OR payload LIKE '%\\\"source\\\": \\\"demo%')",(str(end),))
+            changed|=con.total_changes>before
+        if changed:
+            # Statü gerçekleşmeleri roster fixture'ından üretildiği için bir
+            # sonraki bootstrap'te uyumlu tarih aralığıyla yeniden oluşturulur.
+            con.execute("DELETE FROM metadata WHERE key='faz4_status_history'")
+        con.execute("INSERT INTO metadata VALUES('history_end',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(str(end),))
+    return changed
+
+
 def load_demo_history(state, interval=False, path=DEFAULT_DB):
     from ortak.calisma_modu import demo_enabled
     source='Hazır Demo Veritabanı' if demo_enabled() else 'Çağrı Veritabanı'
@@ -184,9 +218,12 @@ def bootstrap(state, path=DEFAULT_DB):
     demo=demo_enabled();state['production_mode']=not demo
     if demo:
         from ortak.sabit_demo import directory
+        from ortak.demo_zamani import today as demo_today
         directory(state)
-        ensure_demo(path)
-        extend_demo_history_to_today(path)
+        effective_today=demo_today(state)
+        ensure_demo(path,effective_today)
+        trim_demo_history_to_completed_week(path,effective_today)
+        extend_demo_history_to_today(path,effective_today)
     else:init_db(path)
     # Preserve a pre-database user session when adopting the new workbench.
     if not state.get('workspace_hydrated_path') and state.get('cf_all_df') is not None:
@@ -200,13 +237,14 @@ def bootstrap(state, path=DEFAULT_DB):
     hydrate(state,path)
     if demo:
         from ortak.sabit_demo import prepare
-        prepare(state,path)
+        prepare(state,path,effective_today)
         from ortak.statu_gecmisi import seed_demo
         seed_demo(state)
     from ortak.varsayilan_kurallar import enforce_current_rules
     if not state.get('shift_rules'):state['shift_rules']=default_shift_rules()
     if not state.get('plan_ctx'):
-        start=datetime.now(ZoneInfo('Europe/Istanbul')).date()+timedelta(days=(7-datetime.now(ZoneInfo('Europe/Istanbul')).date().weekday()))
+        current=(effective_today if demo else datetime.now(ZoneInfo('Europe/Istanbul')).date())
+        start=current+timedelta(days=(7-current.weekday()))
         state.update(plan_ctx={'start':start,'end':start+timedelta(days=6)},plan_ctx_confirmed=False)
     from ortak.statuler import defaults
     state.setdefault("status_rules",dict(defaults(),enabled=True))
@@ -220,13 +258,20 @@ def bootstrap(state, path=DEFAULT_DB):
     from copy import deepcopy
     for group,settings in defaults()["groups"].items():
         target=state["status_rules"].setdefault("groups",{}).setdefault(group,{})
+        # Standard eski demo aralığı [0,4) / [4,24) idi. Arayüzdeki yeni
+        # açık sözleşme (alt hariç, üst dahil) ile 4 saatlik hakkın aynı
+        # kalması için yalnızca bu dokunulmamış varsayılanı dönüştürüyoruz.
+        old_default=[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':24,'minutes':30}]
+        if target.get('break_rules')==old_default:
+            target['break_rules']=deepcopy(settings['break_rules'])
         for field,value in settings.items():
             if field=='break_preferred_minutes':value=min(value,max(1,int(target.get('break_minutes',15))))
             target.setdefault(field,deepcopy(value))
     enforce_current_rules(state)
     state["shift_rules"].setdefault("friday",{"prefer_women_midday":True,"block_men_midday":False})
     state["shift_rules"].setdefault("publication_approvals",{"enabled":True})
-    state["shift_rules"].setdefault("capacity",{"max_overstaff":2,"min_overtime_hours":4})
+    state["shift_rules"].setdefault("capacity",{"max_overstaff":2,"recommendation_overstaff_limit":5,"min_overtime_hours":4})
+    state["shift_rules"]["capacity"].setdefault("recommendation_overstaff_limit",5)
     from ortak.gunluk_tahmin_deposu import capture_daily
     for option in state.get('cf_forecast_options',[]):
         if not option.get('daily_record_id'):option['daily_record_id']=capture_daily(state,option['frame'],option['meta'])

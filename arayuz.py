@@ -349,6 +349,8 @@ if st.session_state.get('navigation_history'):
 st.markdown('<style>.stMainBlockContainer{padding-top:2.1rem!important}h1{padding-top:.15rem!important}</style>',unsafe_allow_html=True)
 from ortak.arayuz_tasarimi import APP_CSS
 st.markdown(APP_CSS,unsafe_allow_html=True)
+from ortak.tema import css as theme_css
+st.markdown(theme_css(st.session_state.get('ui_palette','Okyanus')),unsafe_allow_html=True)
 main = st.session_state["main_page"]
 
 

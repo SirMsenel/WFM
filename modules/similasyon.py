@@ -21,12 +21,11 @@ def render():
     from ortak.senaryolar import simulate
     from ortak.calisma_alani_deposu import load_calls
     from ortak.modern_kartlar import metric_cards
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
     import plotly.express as px
     s=st.session_state;st.title('🔮 Similasyon')
     st.markdown('<div style="padding:20px 24px;margin:6px 0 18px;border-radius:20px;background:linear-gradient(110deg,#e6f4f6,#edf0fb);border:1px solid #d5e4ec"><div style="font-size:12px;font-weight:800;letter-spacing:.11em;color:#367783">KAPASİTE SENARYO LABORATUVARI</div><div style="font-size:24px;font-weight:800;color:#214c61;margin:6px 0">Çağrı, AHT, shrinkage ve servis seviyesini birlikte simüle et</div><div style="color:#58717d">Senaryolar, gelecek aylardaki iş gücü ihtiyacını görünür kılar; yayınlanmış vardiya planını değiştirmez.</div></div>',unsafe_allow_html=True)
-    people=[p for p in get_people(s) if p.get('position')=='agent'];a,b,c=st.columns(3);groups=a.multiselect('Çalışma grupları',list(WORK_LABELS),default=list(WORK_LABELS));months=b.slider('Gelecek ay sayısı',1,24,12);today=datetime.now(ZoneInfo('Europe/Istanbul')).date();start=c.date_input('Senaryo başlangıcı',value=(pd.Timestamp(today)+pd.offsets.MonthBegin(1)).date())
+    from ortak.demo_zamani import today as active_today
+    people=[p for p in get_people(s) if p.get('position')=='agent'];a,b,c=st.columns(3);groups=a.multiselect('Çalışma grupları',list(WORK_LABELS),default=list(WORK_LABELS));months=b.slider('Gelecek ay sayısı',1,24,12);today=active_today(s);start=c.date_input('Senaryo başlangıcı',value=(pd.Timestamp(today)+pd.offsets.MonthBegin(1)).date())
     staff=sum(p['work_type'] in groups for p in people)
     group_rows=[]
     from ortak.calisma_sureleri import personnel_hours

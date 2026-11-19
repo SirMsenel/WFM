@@ -12,7 +12,9 @@ from ortak.takvim_gorunumu import render_calendar
 def render_today():
     s=st.session_state;profile=s['profile'];person=pick_person(s,profile,'break_monitor')
     if not person:return
-    render_person(person);today=datetime.now(ZoneInfo('Europe/Istanbul')).date()
+    render_person(person)
+    from ortak.demo_zamani import today as active_today
+    today=active_today(s)
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     st.markdown(f'<div style="padding:20px;background:linear-gradient(120deg,#e0f4f4,#ede9fb);border-radius:18px;color:#295365"><small>BUGÜN · {today:%d.%m.%Y} · {DAY_NAMES[today.weekday()]}</small><h3 style="margin:6px 0">Vardiyam ve Planlanan Statülerim</h3><span>Takvimde çalışma saatlerin, altında bugün sana ayrılan yemek, mola ve görüşme saatlerin yer alır.</span></div>',unsafe_allow_html=True)
     st.divider();day=today;eid=str(person['employee_id']);rows=[r for r in history_rows(s,day,day) if str(r['employee_id'])==eid]
@@ -46,7 +48,9 @@ def render_insights():
     from ortak.calisma_sureleri import personnel_hours
     s=st.session_state;person=pick_person(s,s['profile'],'personal_insights')
     if not person:return
-    render_person(person);today=datetime.now(ZoneInfo('Europe/Istanbul')).date();dates=st.date_input('İncelenecek dönem',(today.replace(day=1),today),key='insights_dates')
+    render_person(person)
+    from ortak.demo_zamani import today as active_today
+    today=active_today(s);dates=st.date_input('İncelenecek dönem',(today.replace(day=1),today),key='insights_dates')
     if len(dates)!=2:return
     eid=str(person['employee_id']);roster=[r for r in history_rows(s,*dates) if str(r['employee_id'])==eid];hours=personnel_hours(s,[person],*dates,published_only=True)
     assigned=[r for r in records(s) if str(r['employee_id'])==eid and r.get('status')!='İptal' and str(dates[0])<=r['start'][:10]<=str(dates[1])]
@@ -69,7 +73,9 @@ def render():
     if s['profile'].get('position') in {'tl','manager','assistant_manager','wfm','planning_manager','moderator'}:
         def team_plan():
             from ortak.personel import get_people,visible_people
-            people=visible_people(s['profile'],get_people(s));today=datetime.now(ZoneInfo('Europe/Istanbul')).date();dates=st.date_input('Ekip vardiya dönemi',(today,today+pd.Timedelta(days=6)),key='monitor_team_dates')
+            people=visible_people(s['profile'],get_people(s))
+            from ortak.demo_zamani import today as active_today
+            today=active_today(s);dates=st.date_input('Ekip vardiya dönemi',(today,today+pd.Timedelta(days=6)),key='monitor_team_dates')
             if len(dates)!=2:return
             from ortak.sabit_demo import history_rows
             rows=history_rows(s,*dates);ids={str(p['employee_id']) for p in people};render_calendar([row for row in rows if str(row['employee_id']) in ids],people,*dates,key='monitor_team_calendar',height=460)

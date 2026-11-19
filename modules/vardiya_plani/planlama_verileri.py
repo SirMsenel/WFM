@@ -11,7 +11,7 @@ from modules.vardiya_plani.vardiya_motoru import minutes
 from ortak.planlama import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("planning_demand_language","language_demands","status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("planning_demand_language","language_demands","status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "planning_allow_hour_target_override", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")

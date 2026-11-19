@@ -359,7 +359,8 @@ def render():
     missing_rows = df[df.isnull().any(axis=1)]
     if not missing_rows.empty:
         st.dataframe(
-            missing_rows.style.applymap(_highlight_missing),
+            # pandas 2.1+ Styler.applymap yerine Styler.map kullanır.
+            missing_rows.style.map(_highlight_missing),
             use_container_width=True,
             height=400,
         )

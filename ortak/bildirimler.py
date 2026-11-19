@@ -12,7 +12,13 @@ def items(state):
     profile=state.get('profile') or {};username=profile.get('username');path=state.get('workspace_db_path')
     if not username or not path:return []
     init(path);role=profile.get('position');eid=str(profile.get('employee_id'));output=[]
-    def add(ident,title,content,when,category):output.append({'id':ident,'Başlık':title,'İçerik':content,'Tarih':when,'Konu':category})
+    # Bildirim türü, kullanıcıyı doğrudan ilgili iş akışına götürür.
+    destinations={'Talep':'📋 Talepler','Yayın onayı':'🗓️ Vardiya Planı','Vardiya':'👥 Tüm Vardiyalar',
+                  'Statü değişimi':'📊 İzleme','Statü iptali':'🗓️ Vardiya Planı','Koçluk':'📅 Ajanda',
+                  'Vardiya değişimi':'👥 Tüm Vardiyalar','Uygulama':'⚙️ Ayarlar'}
+    def add(ident,title,content,when,category):
+        output.append({'id':ident,'Başlık':title,'İçerik':content,'Tarih':when,'Konu':category,
+                       'Hedef ekran':destinations.get(category)})
     with connect(path) as db:
         read={r[0] for r in db.execute('SELECT id FROM notification_reads WHERE username=?',(username,))}
         tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}

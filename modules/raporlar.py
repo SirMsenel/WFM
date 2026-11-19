@@ -19,7 +19,8 @@ def render():
     if profile.get('position') not in REPORT_ROLES:
         st.info('Raporlar yönetim ve planlama rolleri içindir.')
         return
-    today=datetime.now(ZoneInfo('Europe/Istanbul')).date()
+    from ortak.demo_zamani import today as active_today
+    today=active_today(state)
     a,b,c=st.columns([1,1,1.4])
     start=a.date_input('Rapor başlangıcı',value=today.replace(day=1),key='report_start')
     end=b.date_input('Rapor bitişi',value=today,key='report_end')

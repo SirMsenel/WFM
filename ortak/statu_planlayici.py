@@ -27,9 +27,9 @@ def allowance(rule,hours):
     import math
     rules=rule.get('break_rules')
     if rules is not None:
-        try:choices=[r for r in rules if float(r['min_hours'])<=hours<float(r['max_hours'])]
+        try:choices=[r for r in rules if float(r['min_hours'])<hours<=float(r['max_hours'])]
         except (KeyError,TypeError,ValueError):raise MolaKuralHatasi('Mola tablosundaki çalışma alt/üst sınırlarını ve süreleri doldurun.')
-        if not choices:raise MolaKuralHatasi(f'{hours:g} saatlik vardiya için mola kuralı bulunamadı. Alt sınır dahildir, üst sınır hariçtir; bu süreyi kapsayan satır tanımlayın. Mola yoksa 0 dakika açıkça girilmelidir.')
+        if not choices:raise MolaKuralHatasi(f'{hours:g} saatlik vardiya için mola kuralı bulunamadı. Alt sınır hariç, üst sınır dahildir; bu süreyi kapsayan satır tanımlayın. Mola yoksa 0 dakika açıkça girilmelidir.')
         if len(choices)>1:raise MolaKuralHatasi(f'{hours:g} saatlik vardiya için birden fazla mola kuralı eşleşiyor; aralıkları düzeltin.')
         value=choices[0].get('minutes')
     else:value=rule.get('break_total_minutes',rule.get('break_minutes',15))

@@ -47,25 +47,17 @@ def render():
                         duration=number('Seçili günlerde yemek (dk)',5,180,int(old[0].get('minutes',60)) if old else 60,5,key='meal_special_minutes_'+group) if selected else 0
                         rule['meal_day_overrides']=[{'weekdays':selected,'minutes':duration}] if selected else []
                 elif kind=='Mola':
-                    rule['break_first_minutes']=number('Vardiya başlangıcından sonra mola yasak (dk)',0,180,int(rule.get('break_first_minutes',60)),15,key='break_first_'+group);rule['break_last_minutes']=number('Vardiya bitiminden önce mola yasak (dk)',0,180,int(rule.get('break_last_minutes',60)),15,key='break_last_'+group)
+                    rule['break_first_minutes']=number('Mesai başlangıcından itibaren en erken mola süresi (dk)',0,180,int(rule.get('break_first_minutes',60)),15,key='break_first_'+group);rule['break_last_minutes']=number('Mesai bitiminden önce mola verilmeyecek süre (dk)',0,180,int(rule.get('break_last_minutes',60)),15,key='break_last_'+group)
                     rule['break_minutes']=number('Tek mola en fazla (dk)',1,15,min(15,int(rule.get('break_minutes',15))),5,key='break_d_'+group);rule['break_per_hour_max']=number('Bir saat içinde en fazla mola (dk)',5,60,int(rule.get('break_per_hour_max',15)),5,key='break_hour_'+group)
                     rule['break_min_gap_minutes']=number('İki mola arasında en az süre (dk)',0,180,int(rule.get('break_min_gap_minutes',15)),5,key='break_gap_'+group)
                     rule['break_preferred_minutes']=number('Tercih edilen mola parçası (dk)',1,min(15,int(rule['break_minutes'])),min(int(rule.get('break_preferred_minutes',10)),int(rule['break_minutes'])),1,key='break_preferred_'+group)
-                    rules=rule.get('break_rules',[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':24,'minutes':30}]);df=pd.DataFrame(rules).rename(columns={'min_hours':'Çalışma alt sınırı','max_hours':'Çalışma üst sınırı','minutes':'Toplam mola (dk)'})
+                    rules=rule.get('break_rules',[{'min_hours':0,'max_hours':3.5,'minutes':15},{'min_hours':3.5,'max_hours':24,'minutes':30}]);df=pd.DataFrame(rules).rename(columns={'min_hours':'Çalışma alt sınırı (hariç)','max_hours':'Çalışma üst sınırı (dahil)','minutes':'Toplam mola (dk)'})
                     table=st.data_editor(df,num_rows='dynamic',hide_index=True,key='break_rules_'+group,column_config={c:st.column_config.NumberColumn(required=True,min_value=0,step=5 if c=='Toplam mola (dk)' else .5) for c in df})
-                    rule['break_rules']=table.rename(columns={'Çalışma alt sınırı':'min_hours','Çalışma üst sınırı':'max_hours','Toplam mola (dk)':'minutes'}).to_dict('records')
+                    rule['break_rules']=table.rename(columns={'Çalışma alt sınırı (hariç)':'min_hours','Çalışma üst sınırı (dahil)':'max_hours','Toplam mola (dk)':'minutes'}).to_dict('records')
 
                 else:
                     rule['coaching_multiple_per_week']=st.checkbox('Aynı hafta birden fazla koçluk yapılabilir',value=rule.get('coaching_multiple_per_week',False),key='coach_multiple_'+group)
                     rule['coaching_monthly_minutes']=number('Aylık kişi başı koçluk (dk)',0,480,int(rule.get('coaching_monthly_minutes',60)),15,key='coach_month_'+group);rule['coaching_chunk_minutes']=number('Her görüşme parçası (dk)',5,60,int(rule.get('coaching_chunk_minutes',15)),5,key='coach_chunk_'+group)
-        if kind=='Mola':st.caption('Alt sınır dahil, üst sınır hariçtir. Sistem mola hakkının tamamını dağıtır; toplam hak tek parça mola değildir. Öncelik 10 dakikalık parçadır, saatlik sınıra göre daha kısa parçalar da kullanılır.')
-        if kind=='Mola':
-            from ortak.statu_planlayici import allowance,MolaKuralHatasi
-            values=[]
-            for hours in [4.,4.5,5.]:
-                try:values.append(f'{hours:g} saat → {allowance(cfg["groups"]["akademi"],hours)} dk mola')
-                except (MolaKuralHatasi,TypeError,ValueError):values.append(f'{hours:g} saat → kural eksik')
-            st.caption('Akademi hızlı kontrol: '+ ' · '.join(values))
         if kind=='Koçluk':
             cfg['operation_reserve_rate']=number('Yemek/mola sonrası kalan kapasiteden operasyon rezervi (%)',0.,50.,float(cfg.get('operation_reserve_rate',.05))*100,1.,key='operation_reserve_percent')/100
             cfg['coaching_slot_minutes']=15

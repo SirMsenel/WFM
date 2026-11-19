@@ -54,6 +54,9 @@ def render():
     people=planner_people(state)
     if state.get('publication_notice'):st.success(state.pop('publication_notice'))
     render_group_priority()
+    with st.expander('Otomatik vardiya motoru nasıl yerleştirir?'):
+        st.markdown('''Motor, önce kesin kayıtları (onaylı izin/talep, gece, ders-sınav ve elle girilmiş vardiya) korur. Ardından seçtiğin grup sırasına göre her personel için yarım saatlik ihtiyaç açığını en çok azaltan vardiyayı dener. Her denemede dil, çalışma grubu, işe giriş/ayrılış tarihi, 11 saat dinlenme, en fazla ardışık gün, haftalık OFF, ders/sınav, gece, Cuma kuralı, vardiya süresi ve dönem hedefleri kontrol edilir. Son aşamada yemek ve mola hakları otomatik dağıtılır; açıklar ile kural ihlalleri yayın öncesinde ayrıca gösterilir.''')
+        st.caption('Bu yaklaşım kural-temelli ve deterministiktir: aynı veri ve kuralla aynı sonucu üretir. Küresel matematiksel optimum garantisi yerine, uygulanabilir en yüksek yerel ihtiyaç kazanımını hedefler.')
     language=state.get('planning_languages',{'en':True,'ar':True})
     tr,en,ar=st.columns(3)
     turkish=tr.toggle('Türkçe personeller dahil',value=language.get('tr',True),key='planning_include_tr')
@@ -61,13 +64,12 @@ def render():
     arabic=ar.toggle('Arapça personeller dahil',value=language.get('ar',True),key='planning_include_ar')
     state['planning_languages']={'tr':turkish,'en':english,'ar':arabic}
     save_keys(state)
-    st.caption('Kapalı dilin personelleri bu taslağa ve ihtiyaç karşılama hesabına katılmaz. Önceden yayınlanan vardiyaları korunur. İhtiyaç tahmini ortak havuzdur; dilin ayrı talebi burada tahmin edilmez.')
-    st.caption(f"{len(people)} personel otomatik alındı · Ders dönemi tarihe göre seçilir. Sınav günleri önceliklidir; diğer günlerde ilgili Bahar/Güz programı kullanılır.")
     from ortak.donem_kilitleri import render_guard
     if not render_guard(state):return
     exam=st.toggle('Sınav gününde saat bilgisi varsa diğer uygun saatlere vardiya yaz',value=state.get('planning_exam_hours',False),key='planning_exam_hours_toggle')
     state['planning_exam_hours']=exam;save_keys(state)
-    st.caption('Sınav başlangıç ve bitişi varsa yalnızca o saatler kapanır. Bitiş bilinmiyorsa gün tamamen kapalı kalır.')
+    state['planning_allow_hour_target_override']=st.checkbox('Dönem çalışma süresi hedefi aşılsa da uygun personeli yerleştirmeye devam et',value=state.get('planning_allow_hour_target_override',False),key='planning_hour_target_override')
+    if state['planning_allow_hour_target_override']:st.warning('Bu taslakta hedef çalışma süresi aşılabilir. Yayın öncesinde aşan personeller kural kontrolünde ayrıca gösterilir.')
     ready=bool(state.get('plan_ctx_confirmed') and people and state.get('plan_group_priority')
                and len(state['plan_group_priority'])==len(state['shift_rules']['work_type'])
                and isinstance(state.get('sp_staffing_result_df'),pd.DataFrame) and not __import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state).empty)
@@ -80,7 +82,7 @@ def render():
                 staff,fixed,history,unavailable,source_issues=collect_inputs(state)
                 result=generate_plan(staff,__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state),state['shift_rules'],state['plan_group_priority'],
                                      context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
-                                     strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),
+                                     strict_capacity=True,hour_targets=() if state.get('planning_allow_hour_target_override') else state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),
                                      auto_night=state.get('shift_rules',{}).get('night',{}).get('auto_fill',True))
                 from ortak.statuler import meal_plan
                 meals,coverage,meal_issues=meal_plan(state,result['plan'],result['coverage'],staff)
@@ -131,7 +133,6 @@ def render():
     if stale:reasons.append('Kayıtlar değişti: Otomatik Vardiya Taslağı Oluştur düğmesine tekrar basın.')
     if hard:reasons.append(f'{len(hard)} kayıt/kural ihlali var. Yukarıdaki tabloda Mevcut vardiya ve Olması gereken sütunlarını karşılaştırarak düzeltin, sonra yeniden oluşturun.')
     if reasons:st.info('Yayınlamak için kalan adımlar:\n\n'+'\n\n'.join(reasons))
-    if has_gaps or warnings:st.caption('Plan, kalan ihtiyaç ve uyarılarla birlikte yayın onayına gönderilir. İki ayrı planlamacının onayı gerekir; eksik %5 üzerindeyse Planlama Yöneticisi de onaylar.')
     label='Taslağı Yayın Onayına Gönder' if state.get('shift_rules',{}).get('publication_approvals',{}).get('enabled') else ('Eksikleri Kabul Et ve Planı Yayınla' if has_gaps or warnings else 'Kontrol Edilen Planı Yayınla')
     if st.button(label,disabled=bool(reasons),key='planning_publish',type='primary'):
         try:

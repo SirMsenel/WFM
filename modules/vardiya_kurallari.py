@@ -43,6 +43,7 @@ def render():
     with st.container(border=True):
         st.markdown('#### Kapasite ve ek mesai');capacity=r.setdefault('capacity',{})
         capacity['max_overstaff']=number('Bir dilimde izin verilen fazla personel',0,100,int(capacity.get('max_overstaff',2)))
+        capacity['recommendation_overstaff_limit']=number('Uygun aksiyon önerilerinde izin verilen fazla personel',0,5,int(capacity.get('recommendation_overstaff_limit',5)),1)
         capacity['min_overtime_hours']=number('Yeni ek mesai bloğu en az saat',.5,10.,float(capacity.get('min_overtime_hours',4)),.5)
         capacity['bridge_gap_slots']=number('Eksik bloklar arasında birleştirilecek yarım saat',0,6,int(capacity.get('bridge_gap_slots',1)),key='bridge_gap_slots')
         school=r.setdefault('school',{});school['holiday_priority']=st.checkbox('Bayram önceliği',school.get('holiday_priority',True));school['summer_months']=st.multiselect('Ders uygulanmayan yaz ayları',list(range(1,13)),default=school.get('summer_months',[6,7,8]))

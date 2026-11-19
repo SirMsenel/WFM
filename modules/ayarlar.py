@@ -41,11 +41,25 @@ def render_feedback():
                 reply(state,ident,text);st.success('Yanıt kullanıcının bildirim kutusuna eklendi.')
             except ValueError as e:st.warning(str(e))
 
+
+def render_theme():
+    state=st.session_state
+    from ortak.tema import PALETTES
+    from ortak.calisma_alani_deposu import save_keys
+    st.subheader('Renk Paleti')
+    st.caption('Bu seçim yalnızca arayüz görünümünü değiştirir; planlama verisi ve diğer kullanıcıların tercihleri etkilenmez.')
+    current=state.get('ui_palette','Okyanus')
+    choice=st.radio('Palet',list(PALETTES),index=list(PALETTES).index(current) if current in PALETTES else 0,horizontal=True,key='settings_palette')
+    p=PALETTES[choice]
+    st.markdown(f'<div style="height:76px;border-radius:16px;background:linear-gradient(120deg,{p["primary"]},{p["dark"]});padding:18px;color:white"><b>{choice}</b><br><small>Başlık, aktif düğme ve bölüm vurgularında bu palet kullanılır.</small></div>',unsafe_allow_html=True)
+    if st.button('Renk Paletini Uygula',key='settings_palette_apply',type='primary'):
+        state['ui_palette']=choice;save_keys(state);st.rerun()
+
 _old_render=render
 
 def render():
     from ortak.gezinme import sections
     from modules.bildirim_kutusu import render as render_notices
-    pages={'Bildirimler':render_notices,'Görüş ve Talepler':render_feedback}
+    pages={'Görünüm':render_theme,'Bildirimler':render_notices,'Görüş ve Talepler':render_feedback}
     if (st.session_state.get('profile') or {}).get('position')=='wfm':pages={'Yetkilendirme':_old_render,**pages}
     sections('nav_settings',pages)

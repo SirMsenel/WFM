@@ -17,9 +17,8 @@ class AcademicBreakTests(unittest.TestCase):
  def test_gap_is_a_blocker_not_a_zero_minute_entitlement(self):
   s,p,plan,cov=self.setup_plan(4.5);s['status_rules']['groups']['akademi']['break_rules']=[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':5,'max_hours':24,'minutes':30}];items,_,issues=meal_plan(s,plan,cov,[p]);self.assertTrue(any(x['severity']=='error' and '4.5 saat' in x['Sorun'] for x in issues));rights=balance(s,plan,[p],items);self.assertIsNone(rights[0]['Hak (dk)']);self.assertTrue(rights[0]['Kural hatası'])
   with self.assertRaisesRegex(ValueError,'mola kuralı bulunamadı'):assert_complete(s,{'plan':plan,'staff':[p],'breaks':items})
- def test_upper_boundary_is_excluded_and_lower_boundary_included(self):
-  r={'break_rules':[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':5,'minutes':30}]};self.assertEqual(allowance(r,4),30)
-  with self.assertRaises(MolaKuralHatasi):allowance(r,5)
+ def test_lower_boundary_is_excluded_and_upper_boundary_included(self):
+  r={'break_rules':[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':5,'minutes':30}]};self.assertEqual(allowance(r,4),15);self.assertEqual(allowance(r,5),30)
  def test_empty_rules_and_overlaps_cannot_silently_return_zero(self):
   for rules in [[],[{'min_hours':0,'max_hours':5,'minutes':15},{'min_hours':4,'max_hours':6,'minutes':30}]]:
    with self.assertRaises(MolaKuralHatasi):allowance({'break_rules':rules},4.5)

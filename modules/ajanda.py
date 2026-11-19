@@ -15,7 +15,8 @@ from ortak.modern_kartlar import metric_cards
 def render():
     s=st.session_state;p=s['profile'];st.title('📆 Ajanda')
     if p.get('position') not in MANAGEMENT:st.info('Bu takvim yönetim rolleri içindir.');return
-    today=datetime.now(ZoneInfo('Europe/Istanbul')).date();chosen=st.date_input('Ajanda haftası',today,key='agenda_week',format='DD.MM.YYYY');week=pd.Timestamp(chosen)-pd.Timedelta(days=chosen.weekday());end=week+pd.Timedelta(days=6)
+    from ortak.demo_zamani import today as active_today
+    today=active_today(s);chosen=st.date_input('Ajanda haftası',today,key='agenda_week',format='DD.MM.YYYY');week=pd.Timestamp(chosen)-pd.Timedelta(days=chosen.weekday());end=week+pd.Timedelta(days=6)
     own=rows(s);work=[r for r in own if r['kind']=='Çalışma'];current=[r for r in own if pd.Timestamp(r['start'])<end+pd.Timedelta(days=1) and pd.Timestamp(r['end'])>week]
     st.markdown(f'<div style="padding:18px 22px;background:linear-gradient(110deg,#e1f4f4,#eee7fc);border:1px solid #d8e5ec;border-radius:18px;color:#305568;margin-bottom:18px"><b>HAFTALIK AJANDAM</b><div style="font-size:24px;font-weight:750;margin:8px 0">{week:%d.%m.%Y} → {end:%d.%m.%Y}</div><span>Çalışma saatlerin ve ekibinle planladığın görüşmeler tek takvimde.</span></div>',unsafe_allow_html=True)
     minutes=lambda r:max(0,(min(pd.Timestamp(r['end']),end+pd.Timedelta(days=1))-max(pd.Timestamp(r['start']),week)).total_seconds()/60)

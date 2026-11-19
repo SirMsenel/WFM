@@ -35,7 +35,8 @@ def render():
     state=st.session_state;profile=state.get('profile') or {};st.title('📊 İzleme')
     people=visible_people(profile,get_people(state));byid={str(p['employee_id']):p for p in people}
     if not byid:st.info('İzlenecek personel yok.');return
-    today=datetime.now(ZoneInfo('Europe/Istanbul')).date();a,b,c=st.columns([2,1,1])
+    from ortak.demo_zamani import today as active_today
+    today=active_today(state);a,b,c=st.columns([2,1,1])
     if profile.get('position')=='agent':selected=str(profile['employee_id']);a.markdown('**'+profile.get('full_name','Kendi kayıtlarım')+'**')
     else:selected=a.selectbox('Personel / ekip',['all']+list(byid),format_func=lambda i:'Görünür ekibin tamamı' if i=='all' else byid[i]['full_name'],key='monitor_person')
     start=b.date_input('Başlangıç',value=today.replace(day=1),key='monitor_start');end=c.date_input('Bitiş',value=today,key='monitor_end')

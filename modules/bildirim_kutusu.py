@@ -1,6 +1,7 @@
 import streamlit as st
 from html import escape
 from ortak.bildirimler import items,mark_read,mark_many_read
+from ortak.gezinme import navigate
 
 
 def render():
@@ -13,4 +14,9 @@ def render():
         color='#70859b' if p['Okundu'] else '#168d96'
         with st.container(border=True):
             st.markdown(f'<div style="display:flex;justify-content:space-between;gap:10px;color:{color}"><b>{escape(p["Başlık"])}</b><small>{escape(p["Tarih"][:16].replace("T"," "))}</small></div>',unsafe_allow_html=True);st.write(p['İçerik'])
-            if not p['Okundu'] and st.button('Okundu',key='read_'+p['id']):mark_read(s,p['id']);st.rerun()
+            left,right=st.columns(2)
+            if not p['Okundu'] and left.button('Okundu',key='read_'+p['id']):
+                mark_read(s,p['id']);st.rerun()
+            if p.get('Hedef ekran') and right.button('İlgili ekrana git',key='notice_go_'+p['id']):
+                if not p['Okundu']:mark_read(s,p['id'])
+                navigate(s,p['Hedef ekran']);st.rerun()
