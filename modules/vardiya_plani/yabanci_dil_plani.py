@@ -5,6 +5,9 @@ from ortak.calisma_alani_deposu import save_keys
 
 def render():
     s=st.session_state;st.subheader('Yabancı Dil Vardiya Planlaması');lang=st.segmented_control('Planlanacak dil',['en','ar'],default='en',format_func=lambda x:'İngilizce' if x=='en' else 'Arapça',key='foreign_plan_language') or 'en'
+    # Bu ekran yalnızca dile özel ihtiyacı düzenler. Önceki sürümde ekranı
+    # açmak, ana vardiya motorunun dil/personel seçimini sessizce değiştiriyordu.
+    if s.pop('planning_demand_language',None) is not None:save_keys(s)
     source=s.get('sp_staffing_result_df')
     if source is None:st.info('Önce Personel Hesap ekranında ihtiyaç hesaplayın.');return
     saved=s.setdefault('language_demands',{}).get(lang);base=source.copy() if saved is None else saved.copy()
@@ -25,8 +28,10 @@ def render():
                 lookup={(str(day.date()),slot):float(values.iloc[slot-1][label]) for label,day in labels.items() for slot in range(1,49)}
                 base['Planlanan Agent']=[lookup[(str(pd.Timestamp(day).date()),int(slot))] for day,slot in zip(base['Tarih'],base['Slot'])]
                 base['Net Agent']=base['Planlanan Agent']*(1-base['Shrinkage (%)']/100) if 'Shrinkage (%)' in base else base['Planlanan Agent']*.7;source_map=dict(s['language_demands']);source_map[lang]=base;s['language_demands']=source_map;save_keys(s);st.rerun()
-    if saved is None:st.info('Bu dilin ihtiyaçlarını kaydettikten sonra otomatik planlama açılır.');return
-    s['planning_languages']={x:x==lang for x in ['tr','en','ar']};s['planning_demand_language']=lang
-    for x in ['tr','en','ar']:s['planning_include_'+x]=x==lang
-    from modules.vardiya_plani.olustur_kontrol_yayinla import render as generate
-    generate()
+    if saved is None:st.info('Bu dilin ihtiyaçlarını kaydettikten sonra ana vardiya ihtiyacına dahil etme seçimi açılır.');return
+    inclusion=dict(s.get('language_demand_inclusion') or {});label='İngilizce' if lang=='en' else 'Arapça'
+    include=st.toggle(f'{label} ihtiyaç sayılarını ana vardiya ihtiyacına ekle',value=bool(inclusion.get(lang,False)),key='foreign_include_'+lang)
+    if inclusion.get(lang,False)!=include:
+        inclusion[lang]=include;s['language_demand_inclusion']=inclusion;save_keys(s);st.rerun()
+    color='#2d8b78' if include else '#71838c'
+    st.markdown(f'<div style="padding:13px 16px;border-radius:14px;border-left:5px solid {color};background:{color}10;color:#48616d"><b>{label} dil ihtiyacı {"ana hesaba dahil" if include else "ayrı tutuluyor"}.</b><br><small>Bu seçim yalnızca ihtiyaç sayılarını etkiler; bu ekran ana vardiya motorunu çalıştırmaz ve grup/dil seçimlerini değiştirmez.</small></div>',unsafe_allow_html=True)

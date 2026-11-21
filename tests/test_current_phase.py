@@ -69,4 +69,29 @@ class ThemeTests(unittest.TestCase):
         self.assertNotIn('button[aria-pressed="true"]',css());self.assertNotIn('button[kind="primary"]',css())
 
 
+class NavigationAndLanguageScopeTests(unittest.TestCase):
+    def test_section_can_be_changed_after_widget_without_mutating_widget_key(self):
+        from streamlit.testing.v1 import AppTest
+        at=AppTest.from_string('''
+import streamlit as st
+from ortak.gezinme import sections,select_section
+def first():
+    if st.button('Taslağa geç',key='go_draft'):
+        select_section(st.session_state,'nav_demo','Taslak')
+        st.rerun()
+sections('nav_demo',{'Oluştur':first,'Taslak':lambda:st.write('Taslak ekranı')},single_line=True)
+''',default_timeout=30)
+        at.run();at.button(key='go_draft').click().run()
+        self.assertFalse(at.exception);self.assertEqual(at.session_state['nav_demo'],'Taslak')
+
+    def test_foreign_language_need_is_added_only_when_explicitly_enabled(self):
+        from ortak.plan_ihtiyaci import demand
+        base=pd.DataFrame({'Tarih':[pd.Timestamp('2026-11-23')],'Slot':[1],'Planlanan Agent':[10.],'Net Agent':[7.]})
+        foreign=pd.DataFrame({'Tarih':[pd.Timestamp('2026-11-23')],'Slot':[1],'Planlanan Agent':[2.],'Net Agent':[1.4]})
+        state={'sp_staffing_result_df':base,'language_demands':{'en':foreign},'language_demand_inclusion':{'en':False}}
+        self.assertEqual(demand(state).iloc[0]['Planlanan Agent'],10)
+        state['language_demand_inclusion']['en']=True
+        self.assertEqual(demand(state).iloc[0]['Planlanan Agent'],12)
+
+
 if __name__=='__main__':unittest.main()

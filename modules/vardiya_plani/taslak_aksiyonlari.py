@@ -51,7 +51,8 @@ def render():
     st.caption('Aşağıdaki vardiyaları inceleyebilir; uygun aksiyonu uyguladıktan sonra güncel sonucu yeniden oluşturabilirsin.')
     _calendar(result)
     if st.button('Vardiya Hücrelerini Düzenle',key='draft_actions_open_shift_hours'):
-        state['nav_roster']='Vardiya Saatleri';state['nav_roster_control']='Vardiya Saatleri';st.rerun()
+        from ortak.gezinme import select_section
+        select_section(state,'nav_roster','Vardiya Saatleri');st.rerun()
     coverage_summary(result,'Taslağın İhtiyaç Sonucu')
     render_shortages(result,'draft_action_gaps')
     render_issues(result)

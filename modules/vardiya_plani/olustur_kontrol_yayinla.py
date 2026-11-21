@@ -21,13 +21,16 @@ def render_group_priority():
     st.session_state.setdefault('plan_group_priority',groups)
     selected=[g for g in st.session_state.get('plan_group_priority',groups) if g in groups]
     with st.container(border=True):
-        st.markdown('#### Yerleştirme Önceliği')
+        title,reset=st.columns([5,1],vertical_alignment='center')
+        title.markdown('#### Yerleştirme Önceliği')
+        if reset.button('Sıfırla',key='priority_reset',use_container_width=True):st.session_state['plan_group_priority']=[];st.rerun()
         cols=st.columns(len(groups))
         for col,group in zip(cols,groups):
-            rank=str(selected.index(group)+1)+' · ' if group in selected else '+ '
-            if col.button(rank+GROUP_LABELS.get(group,group),type='primary' if group in selected else 'secondary',key='priority_add_'+group,use_container_width=True):
+            rank=str(selected.index(group)+1) if group in selected else '+'
+            if col.button(rank+'  '+GROUP_LABELS.get(group,group),type='primary' if group in selected else 'secondary',key='priority_add_'+group,use_container_width=True):
                 st.session_state['plan_group_priority']=([g for g in selected if g!=group] if group in selected else selected+[group]);st.rerun()
-        if st.button('Sırayı Yeniden Seç',key='priority_reset'):st.session_state['plan_group_priority']=[];st.rerun()
+        order='  →  '.join(f'<b>{i+1}</b> {GROUP_LABELS.get(group,group)}' for i,group in enumerate(selected)) or 'Gruplara tıklayarak sıralamayı oluştur.'
+        st.markdown(f'<div style="padding:9px 12px;border-radius:11px;background:#f1f7f9;color:#456775;font-size:12px">{order}</div>',unsafe_allow_html=True)
     if len(selected)<len(groups):st.info('Plan oluşturmadan önce tüm grupları sıraya ekleyin.')
     rows=[]
     for group in selected:
@@ -96,7 +99,8 @@ def render():
                 state['planning_result']=result;state['planning_allow_gaps']=False;state['planning_accept_warnings']=False;state['planning_accept_soft']=False;state['planning_soft_consent']=False
                 state['planning_result_fingerprint']=fingerprint(state)
                 save_keys(state)
-            state['nav_roster']='Taslak Aksiyonları';state['nav_roster_control']='Taslak Aksiyonları'
+            from ortak.gezinme import select_section
+            select_section(state,'nav_roster','Taslak Aksiyonları')
             st.success('Taslak hazır. Öneriler ve yayın kararı için Taslak Aksiyonları ekranına geçiliyor.');st.rerun()
         except (ValueError,TypeError,KeyError) as exc:
             st.error(f'Plan oluşturulamadı: {exc}')
@@ -118,7 +122,7 @@ def render():
     if stale:st.warning('Kayıtlar veya kurallar değişti. Güncel sonucu yayınlamak için yeniden oluşturun.')
     roster_summary(result,'Otomatik Taslak · Grup Kapasitesi ve Atamalar')
     coverage_summary(result,'Planın İhtiyacı Karşılama Durumu')
-    render_shortages(result,'auto_gaps')
+    render_shortages(result,'auto_gaps',actions=False)
     render_issues(result)
     if result.get('issues'):
         from ortak.cakisma_temizleme import propose_cleanup

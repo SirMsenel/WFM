@@ -153,17 +153,13 @@ def render():
     # ======================================================
     st.markdown("### ⚙️ Parametreler")
 
-    default_mode='30 dk kuralları' if st.session_state.get('slot_shrinkage') else 'Genel oran'
-    # Kalıcı ayar ile widget anahtarını ayır. Aynı anahtarın hem servis hem
-    # Streamlit widget'ı tarafından yazılması WidgetAlreadyInstantiated
-    # hatasına yol açıyordu.
-    persisted_mode=st.session_state.get('staffing_shrinkage_mode',default_mode)
-    pending_mode=st.session_state.pop('_staffing_shrinkage_mode_pending',None)
-    if pending_mode in {'Genel oran','30 dk kuralları','Geçmiş öneri'}:st.session_state['staffing_shrinkage_mode_input']=pending_mode
-    st.session_state.setdefault('staffing_shrinkage_mode_input',persisted_mode)
-    shrinkage_mode=st.segmented_control('Shrinkage kaynağı',['Genel oran','30 dk kuralları','Geçmiş öneri'],key='staffing_shrinkage_mode_input') or persisted_mode
+    has_slot_rules=bool(st.session_state.get('slot_shrinkage'))
+    saved_mode=st.session_state.get('staffing_shrinkage_mode','Genel oran')
+    shrinkage_mode=(saved_mode if saved_mode in {'30 dk kuralları','Geçmiş öneri'} else '30 dk kuralları') if has_slot_rules else 'Genel oran'
     st.session_state['staffing_shrinkage_mode']=shrinkage_mode
-    active_slot_rules=shrinkage_mode!='Genel oran'
+    active_slot_rules=has_slot_rules
+    source_color='#2b8c82' if active_slot_rules else '#607d8b'
+    st.markdown(f'<div style="display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border-radius:999px;background:{source_color}12;color:{source_color};font-size:12px;font-weight:750">Aktif shrinkage kaynağı · {shrinkage_mode}</div>',unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         aht = st.slider("AHT (sn)", 60, 600, 300, 5)
@@ -205,7 +201,6 @@ def render():
                 if st.button('Öneriyi Dilim Oranlarına Aktar',disabled=overall is None,key='shrinkage_adopt'):
                     st.session_state['slot_shrinkage']=[{'start_slot':int(r['Slot']),'end_slot':int(r['Slot']),'rate':min(.95,float(r['Shrinkage (%)'])/100),**({'weekdays':[int(r['Haftanın günü'])]} if 'Haftanın günü' in r else {})} for r in table.to_dict('records') if pd.notna(r['Shrinkage (%)'])];st.session_state.pop('slot_loss_editor_clock',None)
                     st.session_state['staffing_shrinkage_mode']='Geçmiş öneri'
-                    st.session_state['_staffing_shrinkage_mode_pending']='Geçmiş öneri'
                     from ortak.calisma_alani_deposu import save_keys
                     save_keys(st.session_state);st.rerun()
     with st.expander('30 dakikalık shrinkage kuralları'):
@@ -229,10 +224,9 @@ def render():
                     if not 1<=a<=b<=48 or not 0<=rate<1:raise ValueError('Bitiş başlangıçtan sonra, kayıp %0–99 arasında olmalı.')
                     rows.append({'start_slot':a,'end_slot':b,'rate':rate,**({'weekdays':[list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES).index(r['Gün'])]} if r['Gün']!='Tüm günler' else {})})
                 st.session_state['slot_shrinkage']=rows
-                st.session_state['staffing_shrinkage_mode']='30 dk kuralları'
-                st.session_state['_staffing_shrinkage_mode_pending']='30 dk kuralları'
+                st.session_state['staffing_shrinkage_mode']='30 dk kuralları' if rows else 'Genel oran'
                 from ortak.calisma_alani_deposu import save_keys
-                save_keys(st.session_state);st.success('Dilim kayıpları kaydedildi. Genel shrinkage oranı devre dışı bırakıldı.');st.rerun()
+                save_keys(st.session_state);st.success('Dilim kayıpları kaydedildi.' if rows else 'Dilim kuralı kaldırıldı; genel shrinkage oranı etkin.');st.rerun()
             except ValueError as e:st.error(str(e))
     occ_percent = st.slider("Doluluk / Occupancy Hedefi (%)", 50, 95, 85, 5)
     st.caption("Doluluk = Trafik (Erlang) / Agent. Hedef %85 ise, sistem doluluk %85’i aşmayacak şekilde agent artırır.")
@@ -266,7 +260,7 @@ def render():
         if popup(st.session_state,start,end):return
         try:
             with st.spinner("Personel ihtiyacı hesaplanıyor..."):
-                active_rules=st.session_state.get("slot_shrinkage",[]) if shrinkage_mode!='Genel oran' else []
+                active_rules=st.session_state.get("slot_shrinkage",[]) if active_slot_rules else []
                 result_df=calculate_staffing(forecast_df,ratio_df,aht=float(aht),target_sl=target_sl,
                                             target_time=float(target_time),shrinkage=shrinkage,occ_target=occ_target,slot_shrinkage=active_rules)
             st.session_state["staffing_parameters"]={"aht":float(aht),"target_sl":target_sl,"target_time":float(target_time),"shrinkage":shrinkage,"occ_target":occ_target}

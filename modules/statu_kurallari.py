@@ -52,10 +52,7 @@ def render():
                     rule['break_min_gap_minutes']=number('İki mola arasında en az süre (dk)',0,180,int(rule.get('break_min_gap_minutes',15)),5,key='break_gap_'+group)
                     rule['break_preferred_minutes']=number('Tercih edilen mola parçası (dk)',1,min(15,int(rule['break_minutes'])),min(int(rule.get('break_preferred_minutes',10)),int(rule['break_minutes'])),1,key='break_preferred_'+group)
                     st.markdown('<div style="margin:10px 0 7px;padding:11px 13px;border-radius:13px;background:#f2f8fa;border:1px solid #dce9ee"><b>Çalışma süresine göre toplam mola hakkı</b><br><small>Alt sınır hariç, üst sınır dahildir.</small></div>',unsafe_allow_html=True)
-                    preset=st.selectbox('Hızlı kural şablonu',['Mevcut kuralları düzenle','Standart · 3,5 saate kadar 15 dk, üzeri 30 dk','Kısa vardiya · 4 saate kadar 15 dk, üzeri 30 dk'],key='break_preset_'+group)
                     rules=rule.get('break_rules',[{'min_hours':0,'max_hours':3.5,'minutes':15},{'min_hours':3.5,'max_hours':24,'minutes':30}])
-                    if preset.startswith('Standart'):rules=[{'min_hours':0,'max_hours':3.5,'minutes':15},{'min_hours':3.5,'max_hours':24,'minutes':30}]
-                    elif preset.startswith('Kısa vardiya'):rules=[{'min_hours':0,'max_hours':4,'minutes':15},{'min_hours':4,'max_hours':24,'minutes':30}]
                     df=pd.DataFrame(rules).rename(columns={'min_hours':'Çalışma alt sınırı (hariç)','max_hours':'Çalışma üst sınırı (dahil)','minutes':'Toplam mola (dk)'})
                     with st.container(border=True):
                         table=st.data_editor(df,num_rows='dynamic',hide_index=True,use_container_width=True,key='break_rules_'+group,column_config={'Çalışma alt sınırı (hariç)':st.column_config.NumberColumn('Alt sınır',required=True,min_value=0,max_value=24,step=.5,width='small'),'Çalışma üst sınırı (dahil)':st.column_config.NumberColumn('Üst sınır',required=True,min_value=.5,max_value=24,step=.5,width='small'),'Toplam mola (dk)':st.column_config.NumberColumn('Hak (dk)',required=True,min_value=0,max_value=240,step=5,width='small')})

@@ -65,10 +65,11 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
         if missing_rights:st.dataframe(pd.DataFrame(missing_rights).drop(columns=['employee_id']).rename(columns={'date':'Tarih'}),hide_index=True,use_container_width=True)
     if 'Shrinkage statü bütçesi' in coverage and 'Mola kaybı' in coverage:
         from ortak.modern_kartlar import metric_cards
-        budget=float(coverage['Shrinkage statü bütçesi'].sum())*.5;planned=float(coverage['Mola kaybı'].sum())*.5
+        budget_units=float(coverage['Shrinkage statü bütçesi'].sum());planned_units=float(coverage['Mola kaybı'].sum())
         over=(coverage['Mola kaybı']-coverage['Shrinkage statü bütçesi']).clip(lower=0)
         st.markdown('#### Statüler Seçilen Kayıp Bütçesine Sığıyor mu?')
-        metric_cards([('Shrinkage için ayrılan süre',f'{math.ceil(budget)} kişi-saat'),('Statülere ayrılan süre',f'{math.ceil(planned)} kişi-saat'),('Bütçeyi aşan yarım saat',str(int((over>1e-8).sum())))])
+        metric_cards([('Statüler için ayrılan kapasite',f'{math.ceil(budget_units)} yarım saatlik birim'),('Yemek ve molanın kullandığı kapasite',f'{math.ceil(planned_units)} yarım saatlik birim'),('Kapasitenin aşıldığı zaman aralığı',f'{int((over>1e-8).sum())} yarım saat')])
+        st.caption('Yarım saatlik birim, ilgili 30 dakikada statüye ayrılabilecek bir personellik kapasitedir. Bu değer çalışma süresi veya kişi-saat toplamı değildir.')
         if (over>1e-8).any():st.warning('Bazı yarım saatlerde statü süresi shrinkage bütçesini aşıyor. Bu aşım kapasiteden ayrıca düşüldü; yukarıdaki eksik hesabına dahildir.')
         else:st.caption('Planlanan statüler seçilen shrinkage bütçesi içinde; kapasiteden ikinci kez düşülmez.')
 
@@ -90,6 +91,25 @@ def roster_summary(result,title='Grup Bazlı Plan Özeti'):
     metric_cards([(label,totals[label]) for label in ['Aktif kapasite','Planlanan kişi','OFF','Gece','Yıllık izin','Rapor']])
     view=pd.DataFrame(table).style.format(precision=0).background_gradient(subset=['Çalışma kaydı'],cmap='BuGn').background_gradient(subset=['OFF'],cmap='Blues').background_gradient(subset=['Gece'],cmap='Purples')
     st.dataframe(view,hide_index=True,use_container_width=True)
+
+
+def daily_gap_summary(result,title='Günlük Eksik ve Fazla Özeti'):
+    """Onay ekranlarında her günün eksik ve fazla 30 dk kapasitesini göster."""
+    from html import escape
+    from ortak.cagri_tahmin_servisi import DAY_NAMES
+    coverage=result.get('coverage',pd.DataFrame()).copy()
+    if coverage.empty:return
+    if 'Sayaca Dahil' in coverage:coverage=coverage[coverage['Sayaca Dahil']]
+    coverage['Tarih']=pd.to_datetime(coverage['Tarih']).dt.normalize()
+    st.markdown('### '+title)
+    days=sorted(coverage['Tarih'].unique())
+    for offset in range(0,len(days),7):
+        for col,raw_day in zip(st.columns(min(7,len(days[offset:offset+7]))),days[offset:offset+7]):
+            day=pd.Timestamp(raw_day);frame=coverage[coverage['Tarih']==day]
+            need=pd.to_numeric(frame['İhtiyaç'],errors='coerce').fillna(0);assigned=pd.to_numeric(frame['Atanan'],errors='coerce').fillna(0)
+            missing=float((need-assigned).clip(lower=0).sum());excess=float((assigned-need).clip(lower=0).sum());scale=max(1.,float(need.sum())+excess)
+            missing_deg=min(360.,360*missing/scale);excess_deg=min(360.-missing_deg,360*excess/scale);end=missing_deg+excess_deg
+            col.markdown(f'<div style="min-height:215px;padding:13px 8px;border:1px solid #dce7ec;border-radius:17px;background:#fbfdfe;text-align:center"><b style="font-size:13px;color:#365a69">{escape(DAY_NAMES[day.weekday()])}</b><div style="font-size:11px;color:#71828b">{day:%d.%m.%Y}</div><div style="width:112px;height:112px;margin:9px auto;border-radius:50%;background:conic-gradient(#d66c63 0deg {missing_deg:.1f}deg,#3d9a6b {missing_deg:.1f}deg {end:.1f}deg,#e9eef2 {end:.1f}deg 360deg);display:grid;place-items:center"><div style="width:80px;height:80px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;color:#36515d"><span><span style="color:#b9524b">−{math.ceil(missing)}</span><br><span style="color:#2d8659">+{math.ceil(excess)}</span></span></div></div><div style="font-size:10px;color:#71828b">Kırmızı eksik · Yeşil fazla<br>30 dakikalık personel toplamı</div></div>',unsafe_allow_html=True)
 
 
 
@@ -130,7 +150,7 @@ def styled_shortage_matrix(matrix,excess=False,human=False):
     return display.style.apply(lambda _:styles,axis=None)
 
 
-def render_shortages(result,key='gap'):
+def render_shortages(result,key='gap',actions=True):
     coverage=result['coverage'];missing,daily=shortage_summary(coverage)
     st.markdown('### Haftalık Eksik Personel')
     if coverage.empty:st.info('İhtiyaç verisi bulunamadı.');return
@@ -153,7 +173,7 @@ def render_shortages(result,key='gap'):
         missing['Aralık']=missing.Slot.map(lambda s:f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}–{s//2:02d}:{(s%2)*30:02d}')
     cols=[c for c in ['Tarih','Gün','Aralık','İhtiyaç','Atanan','Eksik'] if c in missing]
     view=missing[cols].rename(columns={'İhtiyaç':'Gereken personel','Atanan':'Yerleştirilen','Eksik':'Eksik personel'})
-    if (st.session_state.get('profile') or {}).get('position') in {'wfm','manager','assistant_manager','moderator','planning_manager'}:
+    if actions and (st.session_state.get('profile') or {}).get('position') in {'wfm','manager','assistant_manager','moderator','planning_manager'}:
         from ortak.eksik_aksiyonlari import render_actions
         render_actions(st.session_state,result,key)
     st.download_button('Eksik Dilimleri CSV İndir',view.to_csv(index=False).encode('utf-8-sig'),'eksik_dilimler.csv','text/csv',key=key+'_csv')
