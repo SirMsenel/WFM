@@ -109,6 +109,19 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
     general = rules.get("general", {})
     boost = rules.get("boosts", {})
 
+    def night_pattern_days(eid):
+        """Personeli kararlı biçimde 3-gece veya 4-gece kohortuna ayır."""
+        token=str(staff.get(str(eid),{}).get('sicil_no') or eid)
+        return {0,1,2} if sum(map(ord,token))%2==0 else {3,4,5,6}
+
+    def friday_rule(group):
+        cfg=rules.get('friday',{});specific=cfg.get('group_rules',{}).get(group)
+        if specific is not None:return specific
+        return {'avoid_male_midday':cfg.get('prefer_women_midday',False) or cfg.get('block_men_midday',False),'hard':cfg.get('block_men_midday',False)}
+
+    def friday_priority(eid,day):
+        emp=staff[eid];return day.weekday()==4 and friday_rule(emp.get('work_type')).get('avoid_male_midday') and emp.get('gender')=='Kadın'
+
     def issue(row, reason):
         issues.append({"source":row.get("source"),"start":row.get("start"),"end":row.get("end"),"shift_code":row.get("shift_code"),"employee_id": str(row.get("employee_id", "")),
                        "date": str(row.get("date", "")), "Sorun": reason,"severity":"warning" if str(reason).startswith("Soft kural:") else "error","override_required":bool(groups.get(staff.get(str(row.get("employee_id")),{}).get("work_type"),{}).get("override_required_if_violate",True))})
@@ -152,6 +165,9 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                     ne+=1440
                 if begin<ns or finish>ne:
                     problems.append('Gece vardiyası tanımlı gece saatleri dışında')
+            if nr.get('weekly_pattern_enabled') and day.weekday() not in night_pattern_days(eid):
+                message='Gece haftalık blok düzeni dışında (ilk 3 gece / son 4 gece)'
+                problems.append(message if nr.get('weekly_pattern_hard') else 'Soft kural: '+message)
         else:
             earliest = minutes(general.get("weekend_general_start" if day.weekday() >= 5 else "weekday_general_start", "08:00"))
             begin = minutes(row["start"])
@@ -171,7 +187,8 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 night_boundary=ns if ns>=12*60 else ns+1440
                 if finish>night_boundary:
                     problems.append('Gece çalışması yasak olan grup gece dilimine taşıyor')
-        if day.weekday()==4 and rules.get('friday',{}).get('block_men_midday') and staff[eid].get('gender')=='Erkek' and interval[0]<datetime.combine(day,time(14)) and datetime.combine(day,time(12))<interval[1]:problems.append('Cuma 12:00–14:00 erkek personel kısıtı')
+        friday=friday_rule(group)
+        if day.weekday()==4 and friday.get('avoid_male_midday') and staff[eid].get('gender')=='Erkek' and interval[0]<datetime.combine(day,time(14)) and datetime.combine(day,time(12))<interval[1]:problems.append(('' if friday.get('hard') else 'Soft kural: ')+'Cuma 12:00–14:00 erkek personel kısıtı')
         if any(_overlap(interval, block) for block in unavailable.get(eid, [])):
             problems.append("Ders/sınav veya uygun olmama kaydıyla çakışıyor")
         week = day.isocalendar()[:2]
@@ -302,15 +319,16 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                             if person.get('language','tr')==language and person.get('work_type') in allowed
                             and groups.get(person.get('work_type'),{}).get('night_allowed',False)
                             and (eid,day) not in occupied]
-                candidates.sort(key=lambda eid:(sum(1 for row in by_employee[eid] if bounds(row)),eid))
+                candidates.sort(key=lambda eid:(day.weekday() not in night_pattern_days(eid),sum(1 for row in by_employee[eid] if bounds(row)),eid))
                 for eid in candidates:
                     if present>=needed:break
                     row={'employee_id':eid,'date':str(day),'group':staff[eid]['work_type'],'shift_code':'GECE',
                          'start':night_start,'end':night_end,'source':'auto_night','note':'Gece kotası için otomatik yerleştirme'}
-                    if violations(row,by_employee[eid]):
-                        continue
+                    night_problems=violations(row,by_employee[eid])
+                    if any(not p.startswith('Soft kural:') for p in night_problems):continue
                     plan.append(row);occupied.add((eid,day));by_employee[eid].append(row)
                     span=bounds(row);covered[indices(span)]+=1;present+=1
+                    for problem in night_problems:issue(row,problem)
     # Explicit 07:00 quota is placed before ordinary group filling. Otherwise an
     # earlier-priority group can consume every day slot before Full Time is tried.
     if auto_fill and 'fulltime' in group_order and boost.get('weekday_0700_fulltime_extra_enabled'):
@@ -322,7 +340,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             if day.weekday()>=5:continue
             quota=int(boost.get('weekday_0700_fulltime_extra_count',0))
             used=sum(r['date']==str(day) and r.get('group')=='fulltime' and r.get('start')=='07:00' for r in plan)
-            for eid in sorted(early_members,key=lambda e:(0 if day.weekday()==4 and rules.get('friday',{}).get('prefer_women_midday') and staff[e].get('gender')=='Kadın' else 1,sum((b[1]-b[0]).total_seconds() for r in by_employee[e] if (b:=bounds(r))),e)):
+            for eid in sorted(early_members,key=lambda e:(0 if friday_priority(e,day) else 1,sum((b[1]-b[0]).total_seconds() for r in by_employee[e] if (b:=bounds(r))),e)):
                 if used>=quota:break
                 if (eid,day) in occupied or (eid,day) in early_off:continue
                 finish=420+duration
@@ -332,8 +350,10 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 caps=np.full(len(active),int(rules.get('capacity',{}).get('max_overstaff',0)),dtype=int)
                 caps[np.asarray([pd.Timestamp(stamp[j]).hour==7 for j in active])]=max(int(rules.get('capacity',{}).get('max_overstaff',0)),quota)
                 if strict_capacity and (len(active)!=expected or (covered[active]+1>required[active]+caps).any()):continue
-                if violations(row,by_employee[eid]):continue
+                early_problems=violations(row,by_employee[eid])
+                if any(not p.startswith('Soft kural:') for p in early_problems):continue
                 plan.append(row);occupied.add((eid,day));by_employee[eid].append(row);covered[ix]+=1;used+=1
+                for problem in early_problems:issue(row,problem)
     for group in (group_order if auto_fill else []):
         rule = groups[group]
         max_hours = float(rule.get("shift_total_hours_max", rule.get("shift_total_hours", 0)))
@@ -347,7 +367,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
             # Least-worked person goes first; ties are stable between reruns.
             def worked(eid):
                 return sum((b[1]-b[0]).total_seconds() for r in by_employee[eid] if (b := bounds(r)))
-            for eid in sorted(members, key=lambda e: (0 if day.weekday()==4 and rules.get('friday',{}).get('prefer_women_midday') and staff[e].get('gender')=='Kadın' else 1,worked(e),e)):
+            for eid in sorted(members, key=lambda e: (0 if friday_priority(e,day) else 1,worked(e),e)):
                 if (eid, day) in occupied or (eid,day) in off_days:
                     continue
                 earliest = minutes(general.get("weekend_general_start" if day.weekday() >= 5 else "weekday_general_start", "08:00"))
@@ -389,15 +409,16 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                                     and finish <= minutes(rule.get("daytime_window_end", "19:00"))))
                         early_needed=group=='fulltime' and day.weekday()<5 and begin==420 and boost.get('weekday_0700_fulltime_extra_enabled') and sum(r['date']==day.isoformat() and r.get('group')=='fulltime' and r.get('start')=='07:00' for r in plan)<int(boost.get('weekday_0700_fulltime_extra_count',0))
                         score = (gain+len(stamp) if early_needed else gain, -excess, int(daytime), -begin)
-                        if score <= best_score or violations(row, by_employee[eid]):
-                            continue
-                        best, best_score = (row, interval, ix), score
+                        problems=violations(row,by_employee[eid])
+                        if score <= best_score or any(not p.startswith('Soft kural:') for p in problems):continue
+                        best, best_score = (row, interval, ix,problems), score
                 if best:
-                    row, interval, ix = best
+                    row, interval, ix,problems = best
                     plan.append(row)
                     by_employee[eid].append(row)
                     occupied.add((eid, day))
                     covered[ix] += 1
+                    for problem in problems:issue(row,problem)
 
     for eid in staff:
         for day in days:

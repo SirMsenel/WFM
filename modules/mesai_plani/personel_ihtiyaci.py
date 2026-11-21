@@ -154,7 +154,15 @@ def render():
     st.markdown("### ⚙️ Parametreler")
 
     default_mode='30 dk kuralları' if st.session_state.get('slot_shrinkage') else 'Genel oran'
-    shrinkage_mode=st.segmented_control('Shrinkage kaynağı',['Genel oran','30 dk kuralları','Geçmiş öneri'],default=st.session_state.get('staffing_shrinkage_mode',default_mode),key='staffing_shrinkage_mode') or default_mode
+    # Kalıcı ayar ile widget anahtarını ayır. Aynı anahtarın hem servis hem
+    # Streamlit widget'ı tarafından yazılması WidgetAlreadyInstantiated
+    # hatasına yol açıyordu.
+    persisted_mode=st.session_state.get('staffing_shrinkage_mode',default_mode)
+    pending_mode=st.session_state.pop('_staffing_shrinkage_mode_pending',None)
+    if pending_mode in {'Genel oran','30 dk kuralları','Geçmiş öneri'}:st.session_state['staffing_shrinkage_mode_input']=pending_mode
+    st.session_state.setdefault('staffing_shrinkage_mode_input',persisted_mode)
+    shrinkage_mode=st.segmented_control('Shrinkage kaynağı',['Genel oran','30 dk kuralları','Geçmiş öneri'],key='staffing_shrinkage_mode_input') or persisted_mode
+    st.session_state['staffing_shrinkage_mode']=shrinkage_mode
     active_slot_rules=shrinkage_mode!='Genel oran'
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -197,15 +205,21 @@ def render():
                 if st.button('Öneriyi Dilim Oranlarına Aktar',disabled=overall is None,key='shrinkage_adopt'):
                     st.session_state['slot_shrinkage']=[{'start_slot':int(r['Slot']),'end_slot':int(r['Slot']),'rate':min(.95,float(r['Shrinkage (%)'])/100),**({'weekdays':[int(r['Haftanın günü'])]} if 'Haftanın günü' in r else {})} for r in table.to_dict('records') if pd.notna(r['Shrinkage (%)'])];st.session_state.pop('slot_loss_editor_clock',None)
                     st.session_state['staffing_shrinkage_mode']='Geçmiş öneri'
+                    st.session_state['_staffing_shrinkage_mode_pending']='Geçmiş öneri'
                     from ortak.calisma_alani_deposu import save_keys
                     save_keys(st.session_state);st.rerun()
     with st.expander('30 dakikalık shrinkage kuralları'):
-        st.caption('Çakışan kurallarda son satır uygulanır. Örn. 12:00–14:00 %35. Yemek, mola ve koçluk dahil toplam kayıp oranı.')
+        st.markdown('<div style="padding:14px 16px;border-radius:15px;background:linear-gradient(120deg,#edf7f8,#f5f2fb);border:1px solid #dce8ed"><b style="color:#315d6e">Yarım Saatlik Kayıp Tasarımı</b><div style="font-size:12px;color:#657a85;margin-top:5px">Gün ve saat aralığına göre yemek, mola, koçluk ve diğer planlı kayıpların toplam oranını belirle.</div></div>',unsafe_allow_html=True)
         existing=st.session_state.get('slot_shrinkage',[])
         clock=lambda n:f'{n//2:02d}:{30*(n%2):02d}'
         starts=[clock(i) for i in range(48)];ends=[clock(i) for i in range(1,49)]
         table=pd.DataFrame([{'Başlangıç':clock(r['start_slot']-1),'Bitiş':clock(r['end_slot']),'Shrinkage (%)':r['rate']*100,'Gün':('Tüm günler' if not r.get('weekdays') else __import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES[r['weekdays'][0]])} for r in existing],columns=['Başlangıç','Bitiş','Shrinkage (%)','Gün'])
-        edited=st.data_editor(table,num_rows='dynamic',hide_index=True,key='slot_loss_editor_clock',column_config={'Gün':st.column_config.SelectboxColumn(options=['Tüm günler']+list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES),required=True),'Başlangıç':st.column_config.SelectboxColumn(options=starts,required=True),'Bitiş':st.column_config.SelectboxColumn(options=ends,required=True),'Shrinkage (%)':st.column_config.NumberColumn(min_value=0,max_value=99,step=5,required=True)})
+        if existing:
+            avg=sum(float(r.get('rate',0)) for r in existing)/len(existing)*100
+            a,b,c=st.columns(3);a.metric('Tanımlı kural',len(existing));b.metric('Ortalama kayıp',f'%{avg:.1f}');c.metric('Kapsanan gün tipi',len({tuple(r.get('weekdays',[])) for r in existing}))
+        with st.container(border=True):
+            edited=st.data_editor(table,num_rows='dynamic',hide_index=True,use_container_width=True,height=min(420,max(180,74+len(table)*35)),key='slot_loss_editor_clock',column_config={'Gün':st.column_config.SelectboxColumn('Uygulanacak gün',options=['Tüm günler']+list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES),required=True,width='medium'),'Başlangıç':st.column_config.SelectboxColumn('Başlangıç',options=starts,required=True,width='small'),'Bitiş':st.column_config.SelectboxColumn('Bitiş',options=ends,required=True,width='small'),'Shrinkage (%)':st.column_config.NumberColumn('Toplam kayıp (%)',min_value=0,max_value=99,step=1,required=True,width='medium')})
+            st.caption('Yeni satır ekleyebilir veya gereksiz satırı seçip silebilirsin. Çakışan kurallarda en alttaki satır uygulanır.')
         if st.button('Dilim Oranlarını Kaydet',key='save_slot_loss'):
             try:
                 rows=[]
@@ -216,6 +230,7 @@ def render():
                     rows.append({'start_slot':a,'end_slot':b,'rate':rate,**({'weekdays':[list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES).index(r['Gün'])]} if r['Gün']!='Tüm günler' else {})})
                 st.session_state['slot_shrinkage']=rows
                 st.session_state['staffing_shrinkage_mode']='30 dk kuralları'
+                st.session_state['_staffing_shrinkage_mode_pending']='30 dk kuralları'
                 from ortak.calisma_alani_deposu import save_keys
                 save_keys(st.session_state);st.success('Dilim kayıpları kaydedildi. Genel shrinkage oranı devre dışı bırakıldı.');st.rerun()
             except ValueError as e:st.error(str(e))

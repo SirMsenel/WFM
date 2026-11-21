@@ -7,7 +7,7 @@ from modules.vardiya_plani.vardiya_motoru import generate_plan
 from modules.vardiya_plani.planlama_verileri import collect_inputs,fingerprint
 from ortak.personel import planner_people,WORK_LABELS
 from ortak.planlama import preview_plan,school_term
-from ortak.planlama_gorunumu import period_banner,coverage_summary,render_shortages,render_issues,blocking_issues,coverage_controls
+from ortak.planlama_gorunumu import period_banner,coverage_summary,render_shortages,render_issues,blocking_issues,coverage_controls,roster_summary
 from ortak.calisma_alani_deposu import save_keys
 
 GROUP_LABELS=WORK_LABELS
@@ -96,7 +96,8 @@ def render():
                 state['planning_result']=result;state['planning_allow_gaps']=False;state['planning_accept_warnings']=False;state['planning_accept_soft']=False;state['planning_soft_consent']=False
                 state['planning_result_fingerprint']=fingerprint(state)
                 save_keys(state)
-            st.success('Taslak hazır. Takvimi Vardiya Saatleri ekranından da inceleyebilirsin.')
+            state['nav_roster']='Taslak Aksiyonları';state['nav_roster_control']='Taslak Aksiyonları'
+            st.success('Taslak hazır. Öneriler ve yayın kararı için Taslak Aksiyonları ekranına geçiliyor.');st.rerun()
         except (ValueError,TypeError,KeyError) as exc:
             st.error(f'Plan oluşturulamadı: {exc}')
     if st.button('Otomatik Taslağı Sıfırla',key='planning_reset'):
@@ -115,6 +116,7 @@ def render():
         return
     stale=state.get('planning_result_fingerprint')!=fingerprint(state)
     if stale:st.warning('Kayıtlar veya kurallar değişti. Güncel sonucu yayınlamak için yeniden oluşturun.')
+    roster_summary(result,'Otomatik Taslak · Grup Kapasitesi ve Atamalar')
     coverage_summary(result,'Planın İhtiyacı Karşılama Durumu')
     render_shortages(result,'auto_gaps')
     render_issues(result)

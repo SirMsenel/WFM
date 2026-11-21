@@ -15,6 +15,9 @@ def css(name='Okyanus'):
     h1,h2{{color:var(--wfm-dark)!important;border-bottom-color:var(--wfm-line)!important}}
     h3,.wfm-section-label{{color:var(--wfm-primary)!important}}
     .wfm-section-rule{{background:linear-gradient(90deg,var(--wfm-primary),var(--wfm-line) 62%,transparent)!important}}
-    div[data-testid="stSegmentedControl"] button[aria-pressed="true"],div.stButton > button[kind="primary"]{{background:var(--wfm-primary)!important;border-color:var(--wfm-primary)!important;color:#fff!important}}
+    /* Palet yalnızca ekranın genel kimliğini değiştirir. Aksiyon ve seçim
+       butonları kendi anlam renklerini korur. */
+    [data-testid="stAppViewContainer"] .stAlert{{border-color:var(--wfm-line)!important}}
+    [data-testid="stAppViewContainer"] div[data-testid="stMetric"]{{border-color:var(--wfm-line)!important}}
     section[data-testid="stSidebar"]{{border-right-color:var(--wfm-line)!important}}
     </style>'''

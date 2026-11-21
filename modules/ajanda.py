@@ -40,17 +40,23 @@ def render():
     st.divider();st.markdown('### Ekibim İçin Koçluk Planla')
     people={str(x['employee_id']):x for x in visible_people(p,get_people(s))}
     if not people:st.info('Yetki kapsamında personel yok.');return
-    from ortak.kocluk_talepleri import pending,decide
+    from ortak.kocluk_talepleri import pending,decide,can_approve
     requests=[row for row in pending(s) if week.date()<=pd.Timestamp(row['start']).date()<=end.date()]
     if requests:
         st.markdown('#### Personelden Gelen Koçluk Talepleri')
         for request in requests:
             a,b=pd.Timestamp(request['start']),pd.Timestamp(request['end'])
             with st.container(border=True):
-                x,y=st.columns([3,1]);x.markdown(f"**{request['employee_name']}** · {a:%d.%m.%Y} · {a:%H:%M}–{b:%H:%M}")
-                if y.button('Onayla',key='agenda_request_yes_'+request['id'],type='primary'):
+                valid,why=can_approve(s,request);st.markdown(f"**{request['employee_name']}** · {a:%d.%m.%Y} · {a:%H:%M}–{b:%H:%M}")
+                if not valid:st.warning(why+' Talebi reddedin ve gerekçeyi personele iletin.')
+                reason=st.text_input('Karar gerekçesi',key='agenda_request_note_'+request['id'],placeholder='Ret işleminde zorunludur')
+                x,y=st.columns(2)
+                if x.button('Onayla',key='agenda_request_yes_'+request['id'],type='primary',disabled=not valid,use_container_width=True):
                     try:decide(s,request['id'],True);st.success('Koçluk ajandaya eklendi.');st.rerun()
                     except ValueError as exc:st.warning('Onay için önce kendi ajandanda bu saati kapsayan çalışma aralığı olmalı: '+str(exc))
+                if y.button('Reddet',key='agenda_request_no_'+request['id'],disabled=not reason.strip(),use_container_width=True):
+                    try:decide(s,request['id'],False,reason);st.success('Talep reddedildi ve personelin talep durumuna işlendi.');st.rerun()
+                    except ValueError as exc:st.warning(str(exc))
     eid=st.selectbox('Görüşülecek personel',list(people),format_func=lambda i:people[i]['full_name'],key='agenda_coach_person');person=people[eid]
     rule=s.get('status_rules',{}).get('groups',{}).get(person['work_type'],{})
     st.caption('Aynı hafta birden fazla görüşme: '+('İzinli' if rule.get('coaching_multiple_per_week',False) else 'Kapalı · en fazla bir görüşme')+' · Aylık üst süre: '+str(rule.get('coaching_monthly_minutes',60))+' dk')

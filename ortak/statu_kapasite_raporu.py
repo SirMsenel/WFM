@@ -172,6 +172,15 @@ def render_approval_capacity(rights,items,openings,start,end,key):
     cols[2].markdown(f'<div style="padding:17px;border-radius:16px;border:1px solid #3a8d6040;border-top:4px solid #3a8d60;background:#3a8d600d;min-height:145px"><b style="color:#3a8d60">AÇIK KOÇLUK</b><div style="font-size:27px;font-weight:800;margin:10px 0">{open_count} adet</div><div style="font-size:13px;color:#506d5b">15 dakikalık atanabilir alan</div><small>{open_count*15} dakika açık kapasite</small></div>',unsafe_allow_html=True)
     days=list(pd.date_range(start,end));day=st.selectbox('Dağılım günü',days,format_func=lambda t:t.strftime('%d.%m.%Y'),key=key+'_day') if len(days)>1 else pd.Timestamp(start)
     table=slot_capacity(items,openings,day)[['Yemek kullanan kişi','Mola kullanan kişi','Açık koçluk kontenjanı']]
+    try:
+        import plotly.express as px
+        chart=table.reset_index(names='Saat');chart['Saat']=chart['Saat'].dt.strftime('%H:%M')
+        long=chart.melt('Saat',var_name='Statü',value_name='Kişi / kontenjan')
+        fig=px.line(long,x='Saat',y='Kişi / kontenjan',color='Statü',markers=True,color_discrete_map={'Yemek kullanan kişi':'#258f94','Mola kullanan kişi':'#7c69b0','Açık koçluk kontenjanı':'#3a8d60'})
+        fig.update_layout(height=330,margin=dict(l=15,r=15,t=30,b=20),legend=dict(orientation='h',y=1.14),plot_bgcolor='#fbfdfe',hovermode='x unified');fig.update_xaxes(nticks=16)
+        st.plotly_chart(fig,use_container_width=True,key=key+'_status_lines')
+    except Exception:
+        st.line_chart(table,color=['#258f94','#7c69b0','#3a8d60'])
     table.index=[f'{t:%H:%M}–{t+pd.Timedelta(minutes=30):%H:%M}' for t in table.index];table.index.name='Saat aralığı'
     styled=table.style.format('{:.0f}').background_gradient(subset=['Yemek kullanan kişi'],cmap='BuGn').background_gradient(subset=['Mola kullanan kişi'],cmap='Purples').background_gradient(subset=['Açık koçluk kontenjanı'],cmap='Greens')
     st.dataframe(styled,use_container_width=True,height=430)

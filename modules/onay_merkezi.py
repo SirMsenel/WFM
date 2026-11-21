@@ -23,12 +23,16 @@ def simulation_actions():
     if not waiting:st.info('Bekleyen simülasyon aksiyonu yok.');return
     for item in waiting:
         with st.container(border=True):
-            a,b=st.columns([3,1]);a.markdown(f"#### {item['kind']} · {item['month']}");a.write(item['reason']);b.markdown(f"**{item.get('actor_name',item.get('actor','—'))}**");b.caption(item.get('created_at','')[:16].replace('T',' '))
+            from html import escape
+            st.markdown(f'<div style="padding:15px 17px;border-radius:16px;background:linear-gradient(135deg,#eef7f8,#f5f1fb);border:1px solid #dce7ed"><div style="display:flex;justify-content:space-between;gap:12px"><span><small style="color:#b27a2f">ONAY BEKLİYOR</small><h4 style="margin:4px 0">{escape(item["kind"])} · {escape(item["month"])}</h4></span><span style="text-align:right"><b>{escape(item.get("actor_name",item.get("actor","—")))}</b><br><small>{escape(item.get("created_at","")[:16].replace("T"," "))}</small></span></div><div style="margin-top:9px;color:#5d707c">{escape(item["reason"])}</div></div>',unsafe_allow_html=True)
             scenario=item.get('scenario') or []
             if scenario:
                 frame=__import__('pandas').DataFrame(scenario);month_rows=frame[frame['Ay'].astype(str)==str(item['month'])] if 'Ay' in frame else frame.head(3)
                 if not month_rows.empty:st.dataframe(month_rows[[c for c in ['Senaryo','Mevcut personel','Gerekli personel','Önerilen alım','Simüle SL (%)'] if c in month_rows]],hide_index=True,use_container_width=True)
-            note=st.text_input('Karar notu',key='sim_approval_note_'+str(item['id']));x,y=st.columns(2)
+            note=st.text_input('Karar notu',key='sim_approval_note_'+str(item['id']));detail,x,y=st.columns([1.25,1,1])
+            if detail.button('Simülasyon Detayına Git',key='sim_approval_detail_'+str(item['id']),use_container_width=True):
+                from ortak.gezinme import navigate
+                navigate(s,'🧮 Similasyon');s['sim_section']='Senaryo Özeti';s['sim_section_control']='Senaryo Özeti';st.rerun()
             if x.button('Aksiyonu Onayla',type='primary',key='sim_approval_yes_'+str(item['id'])):
                 try:decide(s,item['id'],True,note);st.rerun()
                 except ValueError as exc:st.warning(str(exc))

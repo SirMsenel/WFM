@@ -12,18 +12,11 @@ def inverse_erlang(agents,aht=300,target=.8,seconds=20,occupancy=.85):
     return inverse_erlang_calls(agents,aht,target,seconds,occupancy)
 
 
-def _variation_cards(peak,seconds):
-    aht_choice=st.segmented_control('AHT grubu',[190,195,200],default=195,format_func=lambda value:f'{value} sn',key='sim_variation_aht') or 195
-    rows=[]
-    for test_shrinkage in (.20,.25,.30):
-        for test_sl in (.80,.85,.90):
-            net=erlang_c_required_agents(peak,aht_choice,1800,test_sl,seconds,.85)['m'];planned=math.ceil(net/(1-test_shrinkage))
-            rows.append({'AHT':aht_choice,'Shrinkage':test_shrinkage,'SL':test_sl,'Net':net,'Planlanan':planned})
-    values=sorted(row['Planlanan'] for row in rows);low=values[len(values)//3];high=values[(2*len(values))//3]
-    for offset in range(0,len(rows),3):
-        for col,row in zip(st.columns(3),rows[offset:offset+3]):
-            color='#2d8b68' if row['Planlanan']<=low else '#c18735' if row['Planlanan']<=high else '#bd6262';level='Düşük personel' if color=='#2d8b68' else 'Orta personel' if color=='#c18735' else 'Yüksek personel'
-            col.markdown(f'<div style="min-height:205px;padding:19px;border-radius:18px;border:1px solid {color}40;border-top:5px solid {color};background:linear-gradient(145deg,{color}12,#fff)"><div style="display:flex;justify-content:space-between;color:{color}"><b>%{row["SL"]*100:.0f} SL</b><small>{level}</small></div><div style="font-size:34px;font-weight:800;color:{color};margin:13px 0">{row["Planlanan"]}<small style="font-size:13px"> kişi</small></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><span>Net agent<br><b>{row["Net"]}</b></span><span>Shrinkage<br><b>%{row["Shrinkage"]*100:.0f}</b></span><span>AHT<br><b>{row["AHT"]} sn</b></span><span>Cevap hedefi<br><b>{seconds} sn</b></span></div></div>',unsafe_allow_html=True)
+def _variation_cards(first,seconds):
+    variants=[('İyi',190,.20,.80,'#2d8b68'),('Normal',195,.25,.85,'#c18735'),('Kötü',200,.30,.90,'#bd6262')]
+    for col,(scenario,test_aht,test_shrinkage,test_sl,color) in zip(st.columns(3),variants):
+        source=first[first['Senaryo']==scenario];peak=max(1,int(source['Tepe yarım saat çağrı'].iloc[0]));net=erlang_c_required_agents(peak,test_aht,1800,test_sl,seconds,.85)['m'];planned=math.ceil(net/(1-test_shrinkage))
+        col.markdown(f'<div style="min-height:225px;padding:19px;border-radius:19px;border:1px solid {color}35;border-top:5px solid {color};background:linear-gradient(145deg,{color}12,#fff)"><div style="display:flex;justify-content:space-between;align-items:center;color:{color}"><b style="font-size:18px">{scenario} Senaryo</b><small>%{test_sl*100:.0f} SL</small></div><div style="font-size:35px;font-weight:850;color:{color};margin:16px 0">{planned}<small style="font-size:13px"> planlanan kişi</small></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:12px"><span>Net agent<br><b>{net}</b></span><span>Tepe çağrı<br><b>{peak}</b></span><span>AHT<br><b>{test_aht} sn</b></span><span>Shrinkage<br><b>%{test_shrinkage*100:.0f}</b></span></div></div>',unsafe_allow_html=True)
 
 
 def _action_page(state,table):
@@ -63,7 +56,7 @@ def render():
     view=st.segmented_control('Simülasyon bölümü',['Senaryo Özeti','Parametre Varyasyonları','Aksiyonlar'],default='Senaryo Özeti',key='sim_section') or 'Senaryo Özeti'
     if view=='Parametre Varyasyonları':
         st.markdown('### Parametre Varyasyonları · İlk Ay')
-        first=table[table['Ay']==sorted(table['Ay'].unique())[0]];peak=max(1,int(first[first['Senaryo']=='Normal']['Tepe yarım saat çağrı'].iloc[0]));_variation_cards(peak,seconds);return
+        first=table[table['Ay']==sorted(table['Ay'].unique())[0]];_variation_cards(first,seconds);return
     if view=='Aksiyonlar':_action_page(s,table);return
     metric_cards([('Geçmiş gün',meta['history_days']),('Ölçülen geçmiş hata',f"%{meta['wape']:.1f}"),('Senaryo farkı',f"±%{meta['spread']:.1f}")])
     from ortak.senaryo_kartlari import render_scenarios

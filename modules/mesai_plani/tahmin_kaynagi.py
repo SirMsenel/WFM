@@ -358,7 +358,9 @@ def render():
             byid={r['id']:r for r in records}
             ident=st.selectbox('Kayıtlı günlük tahmin',list(byid),format_func=lambda i:daily_label(byid[i],path),key='sp_saved_daily_pick')
             selected=byid[ident]
-            st.dataframe(selected['frame'].rename(columns={'tarih':'Tarih','y_pred':'Çağrı tahmini'}),hide_index=True,use_container_width=True)
+            saved_view=selected['frame'].rename(columns={'tarih':'Tarih','y_pred':'Çağrı tahmini'}).copy()
+            saved_view.insert(1,'Gün',pd.to_datetime(saved_view['Tarih']).dt.day_name().map(TR_DAY_MAP))
+            st.dataframe(saved_view,hide_index=True,use_container_width=True,column_config={'Tarih':st.column_config.DateColumn(format='DD.MM.YYYY')})
             if st.button('Kayıtlı Tahmini Planlamada Kullan',key='sp_activate_saved'):
                 activate_forecast(state,selected['frame'],selected['meta']);st.success('Kayıtlı tahmin planlamaya alındı.')
     else:
@@ -375,14 +377,16 @@ def render():
                 grid = grid.merge(current[['tarih','y_pred']],how='left',on='tarih')
             else:
                 grid['y_pred'] = np.nan
+            grid.insert(1,'Gün',grid['tarih'].dt.day_name().map(TR_DAY_MAP))
             st.caption("Her günün çağrı sayısını girin; boş veya negatif kayıt kabul edilmez. Var olan planlama tahmini başlangıç değeri olarak gösterilir.")
-            edited = st.data_editor(grid,hide_index=True,use_container_width=True,disabled=['tarih'],
+            edited = st.data_editor(grid,hide_index=True,use_container_width=True,disabled=['tarih','Gün'],
                                     column_config={'tarih':st.column_config.DateColumn('Tarih'),
+                                                   'Gün':st.column_config.TextColumn('Gün'),
                                                    'y_pred':st.column_config.NumberColumn('Çağrı sayısı',min_value=0,step=1,required=True)},
                                     key=f"sp_manual_editor_{dates[0]}_{dates[1]}")
             if st.button("Elle Girilen Tahmini Kullan",key="sp_activate_manual"):
                 try:
-                    activate_forecast(state,edited,{'model_name':'Elle girilen tahmin','horizon':f'{len(edited)} gün','start':str(dates[0]),'end':str(dates[1]),'created_at':pd.Timestamp.now().isoformat()})
+                    activate_forecast(state,edited.drop(columns=['Gün']),{'model_name':'Elle girilen tahmin','horizon':f'{len(edited)} gün','start':str(dates[0]),'end':str(dates[1]),'created_at':pd.Timestamp.now().isoformat()})
                     st.success("Elle girilen tahmin planlamaya alındı. Personel ihtiyacını yeniden hesaplayın.")
                 except ValueError as exc:
                     st.error(str(exc))

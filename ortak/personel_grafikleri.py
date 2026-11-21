@@ -50,7 +50,8 @@ def donut(counts,title,labels):
     center=alt.Chart(pd.DataFrame({'Toplam':[int(values.Personel.sum())]})).mark_text(fontSize=26,fontWeight='bold',color='#173e50').encode(text='Toplam:Q')
     st.altair_chart((ring+center).properties(height=180),use_container_width=True)
     for i,record in enumerate(values.to_dict('records')):
-        st.markdown(f'<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px"><span><span style="color:{colors[i%len(colors)]}">●</span> {escape(str(record["Grup"]))}</span><b>{record["Personel"]}</b></div>',unsafe_allow_html=True)
+        color=colors[i%len(colors)]
+        st.markdown(f'<div style="display:grid;grid-template-columns:12px 1fr 38px;align-items:center;gap:7px;padding:7px 9px;border-radius:10px;background:{color}0d;font-size:13px"><span style="width:10px;height:10px;border-radius:50%;background:{color};display:inline-block"></span><span>{escape(str(record["Grup"]))}</span><b style="text-align:center;color:{color};background:{color}18;border-radius:8px;padding:3px 5px">{record["Personel"]}</b></div>',unsafe_allow_html=True)
 
 
 def render_summary(summary):

@@ -24,16 +24,11 @@ def coverage_controls(state):
 
 
 def _ring(column,label,value,portion,color,note=''):
-    import altair as alt
     with column:
         from html import escape
-        st.markdown('<div style="text-align:center;font-weight:700;font-size:14px;min-height:40px;display:flex;align-items:center;justify-content:center">'+escape(label)+'</div>',unsafe_allow_html=True)
         portion=max(0.,min(1.,portion))
-        data=pd.DataFrame({'Tür':['Değer','Kalan'],'Pay':[portion,1-portion]})
-        arc=alt.Chart(data).mark_arc(innerRadius=40,outerRadius=53).encode(theta='Pay:Q',color=alt.Color('Tür:N',scale=alt.Scale(domain=['Değer','Kalan'],range=[color,'#e9eef4']),legend=None))
-        text=alt.Chart(pd.DataFrame({'Değer':[value]})).mark_text(fontSize=17,fontWeight='bold',color='#24445b').encode(text='Değer:N')
-        st.altair_chart((arc+text).properties(height=128),use_container_width=True)
-        if note:st.markdown('<div style="text-align:center;color:#70828e;font-size:11px;min-height:30px">'+escape(note)+'</div>',unsafe_allow_html=True)
+        degree=round(portion*360,1)
+        st.markdown(f'<div style="min-height:226px;padding:15px 11px;border:1px solid {color}2f;border-radius:18px;background:linear-gradient(145deg,{color}0c,#fff);text-align:center"><div style="font-weight:750;font-size:13px;min-height:38px;display:flex;align-items:center;justify-content:center;color:#315363">{escape(label)}</div><div style="width:118px;height:118px;margin:6px auto 10px;border-radius:50%;background:conic-gradient({color} 0deg {degree}deg,#e9eef2 {degree}deg 360deg);display:grid;place-items:center"><div style="width:86px;height:86px;border-radius:50%;background:#fff;display:grid;place-items:center;padding:5px;font-size:17px;font-weight:800;color:#294b5b">{escape(str(value))}</div></div><div style="font-size:11px;color:#71828b;min-height:32px">{escape(note)}</div></div>',unsafe_allow_html=True)
 
 
 def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
@@ -47,23 +42,25 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
     slots=int(((missing>1e-8)&active).sum());excess_slots=int(((assigned-required)>1e-8).sum());covered_slots=int(((missing<=1e-8)&active).sum());total=int(active.sum());rate=served/needed if needed else 1.
     st.markdown('### '+title)
     first=st.columns(3);second=st.columns(3)
-    _ring(first[0],'İhtiyaç karşılama oranı',f'%{100*rate:.1f}',rate,'#14977f','Karşılanan / gereken personel-dilim')
-    _ring(first[1],'Karşılanan kapasite',f'{served:.0f} kişi-dilim',rate,'#287f9c',f'{served/2:.1f} kişi-saat')
-    _ring(first[2],'Eksik kapasite',f'{left:.0f} kişi-dilim',left/needed if needed else 0,'#d86c60',f'{left/2:.1f} kişi-saat')
+    _ring(first[0],'İhtiyaç karşılama oranı',f'%{100*rate:.1f}',rate,'#14977f','Tüm yarım saatlerde karşılanan toplam ihtiyaç')
+    _ring(first[1],'Karşılanan 30 dk ihtiyacı',f'{served:.0f} kişi',rate,'#287f9c',f'Toplam {served/2:.1f} personel-saat')
+    _ring(first[2],'Eksik kalan 30 dk ihtiyacı',f'{left:.0f} kişi',left/needed if needed else 0,'#d86c60',f'Toplam {left/2:.1f} personel-saat')
     _ring(second[0],'Tam karşılanan yarım saat',f'{covered_slots} dilim',covered_slots/total if total else 1,'#5588b0',f'Toplam {total} dilim')
     _ring(second[1],'Eksik yarım saat',f'{slots} dilim',slots/total if total else 0,'#e8a33d',f'En yüksek eksik {missing.max():.0f} kişi' if total else '')
-    _ring(second[2],'Fazladan planlanan',f'{excess:.0f} kişi-dilim',excess/(needed+excess) if needed+excess else 0,'#3d9a6b',f'{excess_slots} dilim · {excess/2:.1f} kişi-saat')
+    _ring(second[2],'Fazladan planlanan',f'{excess:.0f} kişi',excess/(needed+excess) if needed+excess else 0,'#3d9a6b',f'{excess_slots} yarım saat · {excess/2:.1f} personel-saat')
     if excess:st.info('Yeşil + hücreler ihtiyacın üzerinde planlanan kapasiteyi gösterir. Yeni otomatik atamalar tanımlı fazla personel sınırını korur.')
     if result.get('breaks') is not None and result.get('staff'):
         from ortak.statu_haklari import balance
-        from ortak.modern_kartlar import metric_cards
         rights=balance(st.session_state,result.get('plan',[]),result['staff'],result['breaks'])
         meal=[r for r in result['breaks'] if r.get('kind')=='Yemek']
         breaks=[r for r in result['breaks'] if r.get('kind')=='Mola']
         coaching=[r for r in result['breaks'] if r.get('kind')=='Koçluk Alanı']
         def minutes(items):return sum((pd.Timestamp(r['end'])-pd.Timestamp(r['start'])).total_seconds()/60 for r in items if r.get('start') and r.get('end'))
         st.markdown('#### Planlanan Statüler ve Kalan Kapasite')
-        metric_cards([('Yemek planı',f"{len({str(r['employee_id']) for r in meal})} kişi · {minutes(meal):.0f} dk"),('Mola planı',f"{len({str(r['employee_id']) for r in breaks})} kişi · {minutes(breaks):.0f} dk"),('Shrinkage açığı',('Kural düzeltilmeli' if any(r.get('Kural hatası') for r in rights) else f"{sum(r['Eksik (dk)'] for r in rights):.0f} dk")),('Koçluk için açık alan',f"{sum(int(x.get('remaining_capacity',1)) for x in coaching)} adet · {minutes(coaching):.0f} dk")])
+        status_values=[('Yemek planı',len({str(r['employee_id']) for r in meal}),minutes(meal),'#258f94','kişi'),('Mola planı',len({str(r['employee_id']) for r in breaks}),minutes(breaks),'#7c69b0','kişi'),('Shrinkage açığı','—' if any(r.get('Kural hatası') for r in rights) else f"{sum(r['Eksik (dk)'] for r in rights):.0f}",sum(r['Eksik (dk)'] for r in rights),'#c07845','dk'),('Açık koçluk',sum(int(x.get('remaining_capacity',1)) for x in coaching),minutes(coaching),'#398a60','adet')]
+        for col,(label,count,total,color,unit) in zip(st.columns(4),status_values):
+            second_label='Kural düzeltilmeli' if count=='—' else (f'{total:.0f} dakika' if unit!='dk' else 'dağıtılamayan süre')
+            col.markdown(f'<div style="min-height:154px;padding:16px;border-radius:17px;border:1px solid {color}36;border-top:4px solid {color};background:{color}0d"><b style="color:{color};font-size:13px">{label}</b><div style="font-size:27px;font-weight:800;color:#294c5b;margin-top:13px">{count} <small style="font-size:12px">{unit}</small></div><div style="margin-top:8px;color:#6c7f89;font-size:12px">{second_label}</div></div>',unsafe_allow_html=True)
         missing_rights=[r for r in rights if r['Eksik (dk)'] or r['Fazla (dk)'] or r.get('Kural hatası')]
         if missing_rights:st.dataframe(pd.DataFrame(missing_rights).drop(columns=['employee_id']).rename(columns={'date':'Tarih'}),hide_index=True,use_container_width=True)
     if 'Shrinkage statü bütçesi' in coverage and 'Mola kaybı' in coverage:
@@ -74,6 +71,25 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
         metric_cards([('Shrinkage için ayrılan süre',f'{math.ceil(budget)} kişi-saat'),('Statülere ayrılan süre',f'{math.ceil(planned)} kişi-saat'),('Bütçeyi aşan yarım saat',str(int((over>1e-8).sum())))])
         if (over>1e-8).any():st.warning('Bazı yarım saatlerde statü süresi shrinkage bütçesini aşıyor. Bu aşım kapasiteden ayrıca düşüldü; yukarıdaki eksik hesabına dahildir.')
         else:st.caption('Planlanan statüler seçilen shrinkage bütçesi içinde; kapasiteden ikinci kez düşülmez.')
+
+
+def roster_summary(result,title='Grup Bazlı Plan Özeti'):
+    """Taslak ve onay ekranlarında aynı sayım tanımını kullan."""
+    from ortak.personel import WORK_LABELS
+    from modules.vardiya_plani.vardiya_motoru import bounds
+    staff=result.get('staff',[]);rows=result.get('plan',[]);people={str(p['employee_id']):p for p in staff}
+    groups=list(dict.fromkeys([p.get('work_type') for p in staff if p.get('work_type')]))
+    table=[]
+    for group in groups:
+        ids={str(p['employee_id']) for p in staff if p.get('work_type')==group};chosen=[r for r in rows if str(r.get('employee_id')) in ids]
+        table.append({'Grup':WORK_LABELS.get(group,group),'Aktif kapasite':len(ids),'Planlanan kişi':len({str(r['employee_id']) for r in chosen if bounds(r) is not None}),'Çalışma kaydı':sum(bounds(r) is not None for r in chosen),'OFF':sum(r.get('shift_code')=='OFF' for r in chosen),'Gece':sum(r.get('shift_code')=='GECE' for r in chosen),'Yıllık izin':sum(r.get('shift_code')=='YILLIK_IZIN' for r in chosen),'Rapor':sum(r.get('shift_code')=='RAPOR' for r in chosen)})
+    if not table:return
+    st.markdown('### '+title)
+    totals={key:sum(int(r[key]) for r in table) for key in ['Aktif kapasite','Planlanan kişi','OFF','Gece','Yıllık izin','Rapor']}
+    from ortak.modern_kartlar import metric_cards
+    metric_cards([(label,totals[label]) for label in ['Aktif kapasite','Planlanan kişi','OFF','Gece','Yıllık izin','Rapor']])
+    view=pd.DataFrame(table).style.format(precision=0).background_gradient(subset=['Çalışma kaydı'],cmap='BuGn').background_gradient(subset=['OFF'],cmap='Blues').background_gradient(subset=['Gece'],cmap='Purples')
+    st.dataframe(view,hide_index=True,use_container_width=True)
 
 
 
@@ -122,6 +138,13 @@ def render_shortages(result,key='gap'):
     first=dates.min().normalize()-pd.Timedelta(days=dates.min().weekday())
     weeks=list(pd.date_range(first,dates.max(),freq='7D'))
     week=st.selectbox('Gösterilecek hafta',weeks,format_func=lambda d:f'{d:%d.%m.%Y} – {d+pd.Timedelta(days=6):%d.%m.%Y}',key=key+'_week') if len(weeks)>1 else first
+    selected_days=pd.date_range(week,periods=7);daily_cols=st.columns(7)
+    for col,day in zip(daily_cols,selected_days):
+        frame=coverage[pd.to_datetime(coverage.Tarih).dt.normalize()==day.normalize()]
+        if 'Sayaca Dahil' in frame:frame=frame[frame['Sayaca Dahil']]
+        need=float(frame['İhtiyaç'].sum()) if not frame.empty else 0.;served=float(pd.concat([frame['Atanan'],frame['İhtiyaç']],axis=1).min(axis=1).sum()) if not frame.empty else 0.;rate=served/need if need else 1.
+        from ortak.cagri_tahmin_servisi import DAY_NAMES
+        _ring(col,DAY_NAMES[day.weekday()],f'%{100*rate:.0f}',rate,'#278b83',day.strftime('%d.%m'))
     matrix=shortage_matrix(coverage,week,signed=True)
     st.caption('Kırmızı: eksik kişi · Yeşil +: fazla kişi · 0: ihtiyaç karşılanmış · —: sayaca dahil değil, veri yok veya seçili dönem dışında.')
     st.dataframe(styled_shortage_matrix(matrix,human=True),height=540,use_container_width=True)

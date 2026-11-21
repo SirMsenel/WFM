@@ -372,7 +372,7 @@ elif main == "🗓️ Vardiya Planı":
     st.title(main)
     sections('nav_roster',{'Plan Dönem Seçimi':render_plan_period,'Vardiya Kuralları':render_current_plan,
                           'Talepler':render_requests_tab,'Vardiya Saatleri':render_shift_hours,'Yabancı Dil Planı':__import__('modules.vardiya_plani.yabanci_dil_plani',fromlist=['render']).render,
-                          'Oluştur & Kontrol & Yayınla':render_publish,'Yayın Yönetimi':render_publication_management,'Yayın Onayları':__import__('modules.yayin_onay_ekrani',fromlist=['render']).render})
+                          'Oluştur & Kontrol & Yayınla':render_publish,'Taslak Aksiyonları':__import__('modules.vardiya_plani.taslak_aksiyonlari',fromlist=['render']).render,'Yayın Yönetimi':render_publication_management,'Yayın Onayları':__import__('modules.yayin_onay_ekrani',fromlist=['render']).render})
 elif main == "📈 Güncel Takip Analizi":
     render_history_comparison()
 elif main == "🧪 Demo Veritabanı":
@@ -407,7 +407,8 @@ elif main == "🧮 Similasyon":
     from modules.similasyon import render
     render()
 elif main == "🧾 Fatura Mutabakat":
-    st.title(main);st.info("Bu alan sonraki faz için ayrıldı.")
+    from modules.fatura_mutabakat import render
+    render()
 elif main == "🗃️ Veri ve Kayıt Merkezi":
     from modules.kayit_merkezi import render as render_registry
     render_registry()

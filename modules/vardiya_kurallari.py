@@ -17,6 +17,11 @@ def render():
     with b.container(border=True,height=550):
         st.markdown('#### Gece kuralları');n=r['night'];n['enabled']=st.checkbox('Gece etkin',n.get('enabled',True));n['mode']=st.selectbox('Gece dönemi',['normal','ramazan','ozel'],index=['normal','ramazan','ozel'].index(n.get('mode','normal')))
         n['auto_fill']=st.checkbox('Eksik gece kotasını otomatik tamamla',n.get('auto_fill',True),help='Taslak oluşturulurken geceye uygun grup, dil ve dinlenme kurallarıyla boşta kalan personel aranır. Uygun kişi bulunamazsa eksik görünür kalır.')
+        n['weekly_pattern_enabled']=st.checkbox('Gece vardiyalarını haftalık blok halinde dağıt',n.get('weekly_pattern_enabled',False),help='Personelleri dengeli olarak ilk 3 gece + 4 OFF veya ilk 3 OFF + son 4 gece düzenine ayırır.')
+        if n['weekly_pattern_enabled']:
+            enforcement=st.segmented_control('Gece blok kuralı',['Esnek','Kesin'],default='Kesin' if n.get('weekly_pattern_hard') else 'Esnek',key='night_weekly_pattern_strength') or 'Esnek'
+            n['weekly_pattern_hard']=enforcement=='Kesin'
+            st.caption('Esnek: ihtiyaç karşılanamazsa blok dışına çıkabilir ve uyarı üretir. Kesin: personelin belirlenen 3/4 günlük gece bloğu dışına vardiya yazılmaz.')
         for k,label in [('night_window_start','Gece başlangıç'),('night_window_end','Gece bitiş')]:g[k]=clock(label,value=time.fromisoformat(g[k]),key='p7_'+k).strftime('%H:%M')
         target=n.setdefault(n['mode'],{'tr':0,'en':0,'ar':0});cols=st.columns(3)
         for col,lang in zip(cols,['tr','en','ar']):target[lang]=col.number_input(lang.upper(),0,100,int(target.get(lang,0)))
@@ -42,10 +47,14 @@ def render():
                 rule['max_end_time']=clock('Grup son çıkış',time.fromisoformat(rule['max_end_time']),key='p7_last_'+group).strftime('%H:%M');rule['max_end_is_hard']=st.checkbox('Bitiş sınırı Hard',rule.get('max_end_is_hard',True),key='p7_hard_'+group);rule['override_required_if_violate']=st.checkbox('Soft aşımında onay iste',rule.get('override_required_if_violate',True),key='p7_soft_'+group)
     with st.container(border=True):
         st.markdown('#### Kapasite ve ek mesai');capacity=r.setdefault('capacity',{})
-        capacity['max_overstaff']=number('Bir dilimde izin verilen fazla personel',0,100,int(capacity.get('max_overstaff',2)))
-        capacity['recommendation_overstaff_limit']=number('Uygun aksiyon önerilerinde izin verilen fazla personel',0,5,int(capacity.get('recommendation_overstaff_limit',5)),1)
-        capacity['min_overtime_hours']=number('Yeni ek mesai bloğu en az saat',.5,10.,float(capacity.get('min_overtime_hours',4)),.5)
-        capacity['bridge_gap_slots']=number('Eksik bloklar arasında birleştirilecek yarım saat',0,6,int(capacity.get('bridge_gap_slots',1)),key='bridge_gap_slots')
+        st.caption('Bu kurallar ihtiyacı kapatırken sistemin ne kadar esneyebileceğini belirler; personelin çalışma süresi ve dinlenme kuralları yine korunur.')
+        x,y=st.columns(2)
+        with x:
+            capacity['max_overstaff']=number('Otomatik planda dilim başına en fazla fazla kişi',0,100,int(capacity.get('max_overstaff',2)),help='İhtiyaç 10 ise ve değer 2 ise o yarım saatte en fazla 12 kişi planlanabilir.')
+            capacity['min_overtime_hours']=number('Yeni ek mesainin en kısa süresi (saat)',.5,10.,float(capacity.get('min_overtime_hours',4)),.5,help='Boş güne önerilecek yeni çalışma bloğu bundan kısa olamaz.')
+        with y:
+            capacity['recommendation_overstaff_limit']=number('Açık kapatma önerisinde izin verilen fazla kişi',0,5,int(capacity.get('recommendation_overstaff_limit',5)),1,help='Öneri sistemi parçalı eksikleri birleştirirken bu sınıra kadar artıya geçebilir.')
+            capacity['bridge_gap_slots']=number('Eksik blokları birleştirme toleransı (yarım saat)',0,6,int(capacity.get('bridge_gap_slots',1)),key='bridge_gap_slots',help='İki eksik blok arasında bu kadar dolu yarım saat varsa tek vardiya önerisi üretilebilir.')
         school=r.setdefault('school',{});school['holiday_priority']=st.checkbox('Bayram önceliği',school.get('holiday_priority',True));school['summer_months']=st.multiselect('Ders uygulanmayan yaz ayları',list(range(1,13)),default=school.get('summer_months',[6,7,8]))
     sync=st.checkbox('Seçili dönemin kesin gece kayıtlarını yeni saatlere uyarla',True,key='rules_sync_nights')
     if st.button('Kaydet ve Uygula',key='rules_apply',type='primary'):

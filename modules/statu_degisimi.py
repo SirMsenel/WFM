@@ -25,12 +25,10 @@ def render_requests(state):
     people={str(item['employee_id']):item for item in get_people(state)}
     for r in items:
         with st.container(border=True):
-            a,b=r['before'];left,right=st.columns(2)
+            a,b=r['before']
             owner=people.get(str(a['employee_id']),{}).get('full_name',a['employee_id']);peer=people.get(str(b['employee_id']),{}).get('full_name',b['employee_id'])
-            left.markdown(f'<div style="border-left:4px solid #7c69b0;padding:10px 13px;background:#f5f1ff;border-radius:10px"><small>DEĞİŞİMİ İSTEYEN</small><br><b>{owner}</b><br>{a["kind"]} · {pd.Timestamp(a["start"]):%d.%m · %H:%M}–{pd.Timestamp(a["end"]):%H:%M}</div>',unsafe_allow_html=True)
-            right.markdown(f'<div style="border-left:4px solid #258f94;padding:10px 13px;background:#eefafa;border-radius:10px"><small>KARŞILIKLI PERSONEL</small><br><b>{peer}</b><br>{b["kind"]} · {pd.Timestamp(b["start"]):%d.%m · %H:%M}–{pd.Timestamp(b["end"]):%H:%M}</div>',unsafe_allow_html=True)
             status_color={'Karşı personel onayı':'#b98434','Takım Lideri onayı':'#6578b1','Uygulandı':'#2f8b69','Reddedildi':'#bd6262','İptal':'#7d8790'}.get(r['status'],'#66869c')
-            st.markdown(f'<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:10px"><div style="padding:10px 12px;border-radius:11px;background:{status_color}14;border:1px solid {status_color}35"><small style="color:{status_color}">DURUM</small><br><b style="color:{status_color}">{r["status"]}</b></div><div style="padding:10px 12px;border-radius:11px;background:#f5f7f9;border:1px solid #e1e7eb"><small style="color:#687c88">GEREKÇE</small><br><b>{r.get("reason") or "Belirtilmedi"}</b></div></div>',unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;border-left:5px solid {status_color};border-radius:12px;background:{status_color}12"><div style="display:flex;justify-content:space-between;gap:10px"><b style="color:{status_color}">{r["status"]}</b><small>{pd.Timestamp(a["start"]):%d.%m.%Y}</small></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:9px;font-size:12px"><span><small>İSTEYEN</small><br><b>{owner}</b><br>{a["kind"]} · {pd.Timestamp(a["start"]):%H:%M}–{pd.Timestamp(a["end"]):%H:%M}</span><span><small>KARŞI PERSONEL</small><br><b>{peer}</b><br>{b["kind"]} · {pd.Timestamp(b["start"]):%H:%M}–{pd.Timestamp(b["end"]):%H:%M}</span></div><div style="margin-top:8px;font-size:12px;color:#60747f">{r.get("reason") or "Gerekçe belirtilmedi"}</div></div>',unsafe_allow_html=True)
             if r['status'] in {'Karşı personel onayı','Takım Lideri onayı'}:
                 x,y=st.columns(2)
                 for col,label,value in [(x,'Onayla',True),(y,'Reddet',False)]:

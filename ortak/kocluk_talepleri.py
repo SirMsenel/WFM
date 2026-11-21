@@ -18,7 +18,7 @@ def _person(state,eid):
     return next((p for p in get_people(state) if str(p['employee_id'])==str(eid)),None)
 
 
-def eligible_slots(state,eid):
+def eligible_slots(state,eid,day=None):
     """Slots are shown to the representative without exposing seat capacity."""
     from ortak.mola_servisi import records
     eid=str(eid);person=_person(state,eid)
@@ -36,6 +36,7 @@ def eligible_slots(state,eid):
     rule=state.get('status_rules',{}).get('groups',{}).get(person.get('work_type'),{})
     for opening in read(state):
         a,b=pd.Timestamp(opening['start']),pd.Timestamp(opening['end'])
+        if day is not None and a.date()!=pd.Timestamp(day).date():continue
         if a<current or b-a!=pd.Timedelta(minutes=15) or not accepts(opening,eid):continue
         if not any(row['kind']=='Çalışma' and pd.Timestamp(row['start'])<=a and b<=pd.Timestamp(row['end']) for row in agenda):continue
         if any(row['kind']=='Koçluk' and a<pd.Timestamp(row['end']) and pd.Timestamp(row['start'])<b for row in agenda):continue
@@ -64,18 +65,29 @@ def submit(state,opening_id):
     return ident
 
 
-def pending(state,team_only=True):
+def requests(state,team_only=True,statuses=None):
     path=state.get('workspace_db_path')
     if not path:return []
     init(path)
     with connect(path) as db:
-        items=[dict(loads(row['payload']),status=row['status']) for row in db.execute("SELECT * FROM coaching_requests WHERE status='Bekliyor' ORDER BY rowid")]
+        items=[dict(loads(row['payload']),status=row['status']) for row in db.execute("SELECT * FROM coaching_requests ORDER BY rowid DESC")]
+    if statuses is not None:items=[item for item in items if item['status'] in set(statuses)]
     profile=state.get('profile') or {}
     if not team_only:return items
     if profile.get('position')=='agent':return [item for item in items if str(item['employee_id'])==str(profile.get('employee_id'))]
     from ortak.personel import get_people,visible_people
     visible={str(person['employee_id']) for person in visible_people(profile,get_people(state))}
     return [item for item in items if str(item['employee_id']) in visible]
+
+
+def pending(state,team_only=True):return requests(state,team_only,{'Bekliyor'})
+
+
+def can_approve(state,item):
+    """Ajanda/kota değiştiyse onay yerine gerekçeli ret zorunludur."""
+    opening=next((row for row in eligible_slots(state,item['employee_id']) if row.get('id')==item.get('opening_id')),None)
+    if opening:return True,''
+    return False,'Bu saat artık ajanda, vardiya, haftalık/aylık koçluk sınırı veya açık kapasite kuralını karşılamıyor.'
 
 
 def decide(state,ident,approve=True,reason=''):

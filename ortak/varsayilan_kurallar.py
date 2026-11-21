@@ -10,6 +10,8 @@ SHIFT_RULES = {'general': {'weekday_general_start': '08:00',
  'boosts': {'weekday_0700_fulltime_extra_enabled': True, 'weekday_0700_fulltime_extra_count': 2},
  'night': {'enabled': True,
            'mode': 'normal',
+           'weekly_pattern_enabled': False,
+           'weekly_pattern_hard': False,
            'normal': {'tr': 2, 'en': 1, 'ar': 1},
            'ramazan': {'tr': 3, 'en': 0, 'ar': 0},
            'ozel': {'tr': 2, 'en': 1, 'ar': 1},
@@ -53,6 +55,8 @@ def enforce_current_rules(state):
         state['shift_rules']=rules
         state['plan_ctx_confirmed']=False
     if rules:
+        rules.setdefault('night',{}).setdefault('weekly_pattern_enabled',False)
+        rules['night'].setdefault('weekly_pattern_hard',False)
         for group in rules.get('work_type',{}).values():
             group['min_rest_hours']=max(11,group.get('min_rest_hours',11))
             group['max_consecutive_days']=max(1,min(6,int(group.get('max_consecutive_days',group.get('max_days_per_week',group.get('max_days_per_week_default',6))))))

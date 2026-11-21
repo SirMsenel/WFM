@@ -86,17 +86,19 @@ def _render_day_line(profile_df: pd.DataFrame, key_prefix: str = "sp_reg_line"):
 
     c1, c2 = st.columns([1.2, 2.8])
     with c1:
-        day_pick = st.selectbox("Gün seç", order, index=0, key=f"{key_prefix}_day")
+        day_pick = st.selectbox("Gün seç", ["Tümü"]+order, index=0, key=f"{key_prefix}_day")
     with c2:
         st.caption("X: yarım saat aralığı • Y: çağrı payı (%)")
 
-    dfp = profile_df[profile_df["Gün"] == day_pick].copy().sort_values("Slot")
+    dfp = profile_df.copy().sort_values(["Gün","Slot"]) if day_pick=="Tümü" else profile_df[profile_df["Gün"] == day_pick].copy().sort_values("Slot")
     fig = px.line(
         dfp,
         x="Aralık",
         y="Oran(%)",
+        color="Gün" if day_pick=="Tümü" else None,
         markers=True,
-        title=f"{day_pick} — Gün İçi Çağrı Dağılımı",
+        title="7 Gün · Gün İçi Çağrı Dağılımı" if day_pick=="Tümü" else f"{day_pick} — Gün İçi Çağrı Dağılımı",
+        category_orders={'Gün':order},
     )
     fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=20))
     fig.update_xaxes(tickangle=-45)
@@ -136,7 +138,8 @@ def render():
             with column.container(border=True):
                 name=p['name'];ident=hashlib.sha1(name.encode()).hexdigest()[:12]
                 color='#158570' if name==active else '#487ca8'
-                st.markdown(f'<div style="color:{color};font-weight:750;font-size:18px">{escape(name)}</div><div style="margin:10px 0;color:#64748b">{escape(str(p.get("meta",{}).get("week_start","Genel dağılım")))} · {"● Aktif" if name==active else "Kayıtlı"}</div>',unsafe_allow_html=True)
+                border=f'2px solid {color}' if name==active else '1px solid #dbe6ec';shadow='0 10px 28px #15857024' if name==active else '0 5px 18px #27485b0c'
+                st.markdown(f'<div style="padding:15px;border:{border};box-shadow:{shadow};border-radius:16px;background:linear-gradient(145deg,{color}10,#fff);min-height:118px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="color:{color};font-weight:800;font-size:18px">{escape(name)}</div><span style="padding:4px 8px;border-radius:999px;background:{color}18;color:{color};font-size:11px;font-weight:750">{"AKTİF" if name==active else "KAYITLI"}</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:13px"><div style="padding:8px;background:#fff;border:1px solid #e8eef2;border-radius:10px"><small>Dönem</small><br><b>{escape(str(p.get("meta",{}).get("week_start","Genel")))}</b></div><div style="padding:8px;background:#fff;border:1px solid #e8eef2;border-radius:10px"><small>Kayıt</small><br><b>{escape(str(p.get("meta",{}).get("rows_used_after_iqr","—")))}</b></div></div></div>',unsafe_allow_html=True)
                 if st.checkbox('Seç',key='profile_card_'+ident):selected.append(name)
                 if st.button('Aktif Yap',key='profile_activate_'+ident,disabled=name==active,use_container_width=True):activate_name=name
     if st.button('Seçilenleri Sil',key='sp_btn_delete',disabled=not selected):action='delete'
