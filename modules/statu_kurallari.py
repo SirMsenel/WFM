@@ -32,6 +32,7 @@ def render():
     s=st.session_state;cfg=deepcopy(s.get('status_rules_edit') or s.get('status_rules') or defaults());cfg.update(automatic=True,shrinkage_included=True,coaching_by_leader=True);cfg['enabled']=True
     st.info('Yemek ve mola hakları vardiya oluşturulurken tamamen ve otomatik dağıtılır. Koçluk kalan kapasiteden ayrılır.')
     def panel(kind):
+        if kind=='Mola':st.caption('Çalışma süresi aralıklarında alt sınır hariç, üst sınır dahildir.')
         cols=st.columns(3)
         for col,group in zip(cols,['fulltime','akademi','dis_kaynak']):
             rule=cfg['groups'].setdefault(group,{})
@@ -69,8 +70,8 @@ def render():
                         remove=None;updated=[]
                         for index,row in enumerate(rows):
                             rid=int(row['id']);c1,c2,c3,c4=st.columns([1.35,1.35,1.25,.32],vertical_alignment='bottom',gap='small')
-                            lower=c1.selectbox('Alt sınır (hariç)',hour_values,index=hour_values.index(nearest_hour(row['min_hours'])),format_func=lambda value:hour_labels[value],key=f'break_lower_{group}_{rid}')
-                            upper=c2.selectbox('Üst sınır (dahil)',hour_values,index=hour_values.index(nearest_hour(row['max_hours'])),format_func=lambda value:hour_labels[value],key=f'break_upper_{group}_{rid}')
+                            lower=c1.selectbox('Alt sınır',hour_values,index=hour_values.index(nearest_hour(row['min_hours'])),format_func=lambda value:hour_labels[value],key=f'break_lower_{group}_{rid}')
+                            upper=c2.selectbox('Üst sınır',hour_values,index=hour_values.index(nearest_hour(row['max_hours'])),format_func=lambda value:hour_labels[value],key=f'break_upper_{group}_{rid}')
                             total=c3.selectbox('Toplam mola hakkı',minute_values,index=minute_values.index(nearest_minute(row['minutes'])),format_func=lambda value:minute_labels[value],key=f'break_total_{group}_{rid}')
                             if c4.button('×',key=f'break_delete_{group}_{rid}',help='Satırı sil'):remove=rid
                             updated.append({'id':rid,'min_hours':lower,'max_hours':upper,'minutes':total})

@@ -102,6 +102,22 @@ sections('nav_demo',{'Oluştur':first,'Taslak':lambda:st.write('Taslak ekranı')
         result=_build(state,'en',need)
         self.assertLessEqual(result['coverage']['Atanan'].max(),1)
 
+    def test_foreign_plan_reorders_groups_to_close_early_gap_and_ignores_main_draft(self):
+        from ortak.varsayilan_kurallar import default_shift_rules
+        from modules.vardiya_plani.yabanci_dil_plani import _build
+        day=pd.Timestamp('2026-11-23').date()
+        people=[dict(emp(str(index),group),language='en',username='en'+str(index)) for index,group in enumerate(['akademi','akademi','fulltime','fulltime'],1)]
+        schedules={person['username']:{'2026-Güz':{'Saat':['08:00-11:00'],'Pazartesi':['Ders']}} for person in people if person['work_type']=='akademi'}
+        need=pd.DataFrame([{'Tarih':day,'Slot':slot,'Planlanan Agent':2 if 17<=slot<=48 else 0,'Net Agent':2 if 17<=slot<=48 else 0} for slot in range(1,49)])
+        state={'employees_cache':people,'shift_rules':default_shift_rules(),'plan_ctx':{'start':day,'end':day},'plan_ctx_confirmed':True,'plan_group_priority':['akademi','fulltime','dis_kaynak'],'planning_languages':{'tr':True,'en':True,'ar':True},'draft_shift_plan':[dict(row('3',day),source='manual_single')],'fixed_shift_records':[],'shift_overrides':[],'published_shift_plan':[],'trk_requests':[],'group_hour_targets':[],'status_rules':{'enabled':False},'acad_schedules':schedules}
+        result=_build(state,'en',need);active=result['coverage'][result['coverage'].Slot.between(17,48)]
+        self.assertEqual(active['Eksik'].sum(),0);self.assertFalse(any(record.get('source')=='manual_single' for record in result['plan']))
+
+    def test_demo_exam_fixture_has_and_migrates_end_time(self):
+        from ortak.ornek_veri import ensure_demo_exam_end_times
+        state={'acad_exam_calendar':{'u1':{'2026-Sinav':{'Tarih':['2026-11-23'],'Saat':['10:00'],'Ders':['Vize']}}}}
+        self.assertTrue(ensure_demo_exam_end_times(state));self.assertEqual(state['acad_exam_calendar']['u1']['2026-Sinav']['Bitiş'],['12:00'])
+
 
 class CurrentRosterRegressionTests(unittest.TestCase):
     def test_break_rule_selection_survives_first_rerun(self):

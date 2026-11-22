@@ -1,5 +1,6 @@
 """Yabancı dil ihtiyacını ve vardiya taslağını ana plandan bağımsız yönetir."""
 from copy import deepcopy
+from itertools import permutations,islice
 import pandas as pd
 import streamlit as st
 
@@ -20,7 +21,9 @@ def _build(state,lang,demand):
     from modules.vardiya_plani.planlama_verileri import collect_inputs
     from modules.vardiya_plani.vardiya_motoru import generate_plan
     check=dict(state);check['planning_languages']={'tr':False,'en':lang=='en','ar':lang=='ar'}
-    check['draft_shift_plan']=[r for r in state.get('draft_shift_plan',[]) if r.get('source')!='foreign_language_plan']
+    # Bağımsız dil planı ana taslaktaki otomatik/elle vardiyalardan etkilenmez.
+    # İzin, gece, talep ve okul kayıtları kendi kaynaklarından yine korunur.
+    check['draft_shift_plan']=[]
     staff,fixed,history,unavailable,issues=collect_inputs(check)
     order=[g for g in state.get('plan_group_priority',[]) if g in state['shift_rules']['work_type']]
     if set(order)!=set(state['shift_rules']['work_type']):order=list(state['shift_rules']['work_type'])
@@ -29,7 +32,20 @@ def _build(state,lang,demand):
     # fazla personel ve 07:00/gece kotaları ikinci bir kişiyi ekleyemez.
     scoped_rules=deepcopy(state['shift_rules']);scoped_rules.setdefault('capacity',{})['max_overstaff']=0
     scoped_rules.setdefault('boosts',{})['weekday_0700_fulltime_extra_enabled']=False
-    result=generate_plan(staff,demand,scoped_rules,order,ctx['start'],ctx['end'],fixed=fixed,history=history,unavailable=unavailable,strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=check['planning_languages'],exclude_early_hours=state.get('planning_exclude_early_hours',False),auto_night=False)
+    # Bir grubun geç saatleri önce doldurması, sonraki grubun uzun vardiyasını
+    # tamamen reddedip gün başında yapay açık bırakabiliyordu. En fazla altı
+    # grup sırası denenir ve gerçek yarım saat açığı en düşük taslak seçilir.
+    base_order=tuple(order)
+    alternatives=(candidate for candidate in permutations(order) if candidate!=base_order)
+    orders=[base_order]+list(islice(alternatives,5))
+    result=None;best_score=None
+    for candidate_order in orders:
+        candidate=generate_plan(staff,demand,scoped_rules,list(candidate_order),ctx['start'],ctx['end'],fixed=fixed,history=history,unavailable=unavailable,strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=check['planning_languages'],exclude_early_hours=state.get('planning_exclude_early_hours',False),auto_night=False)
+        counted=candidate['coverage'][candidate['coverage']['Sayaca Dahil']] if 'Sayaca Dahil' in candidate['coverage'] else candidate['coverage']
+        hard=sum(row.get('severity')!='warning' for row in candidate.get('issues',[]))
+        score=(float(counted['Eksik'].sum()),int((counted['Eksik']>0).sum()),hard,float(counted['Fazla'].sum()))
+        if best_score is None or score<best_score:result,best_score=candidate,score
+        if score[:2]==(0.,0):break
     from ortak.statuler import meal_plan
     statuses,coverage,status_issues=meal_plan(state,result['plan'],result['coverage'],staff)
     result['breaks']=statuses;result['coverage']=coverage
@@ -39,7 +55,9 @@ def _build(state,lang,demand):
 
 def _transfer(state,lang,result,ids):
     ids={str(eid) for eid in ids};start,end=result['period']['start'],result['period']['end']
-    kept=[r for r in state.get('draft_shift_plan',[]) if not (r.get('source')=='foreign_language_plan' and r.get('language')==lang and start<=str(r.get('date'))<=end)]
+    # Aktarılan personelin aynı dönemdeki eski ana-taslak kaydı kaldırılır;
+    # yabancı dil vardiyası tek ve kilitli kaynak olur.
+    kept=[r for r in state.get('draft_shift_plan',[]) if not (start<=str(r.get('date'))<=end and (str(r.get('employee_id')) in ids or r.get('source')=='foreign_language_plan' and r.get('language')==lang))]
     moved=[]
     for row in result['plan']:
         if str(row['employee_id']) in ids:moved.append({**row,'source':'foreign_language_plan','language':lang,'note':LABELS[lang]+' planından ana taslağa aktarıldı'})

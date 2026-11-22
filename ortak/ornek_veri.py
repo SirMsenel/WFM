@@ -17,6 +17,23 @@ def employees():
     return list_people()
 
 
+def ensure_demo_exam_end_times(state):
+    """Eski demo sınavlarına görünür ve hesaplanabilir bitiş saati ekle."""
+    changed=False
+    for terms in (state.get('acad_exam_calendar') or {}).values():
+        for data in terms.values():
+            starts=list(data.get('Saat',[]));ends=list(data.get('Bitiş',[]))
+            if len(ends)<len(starts):ends.extend(['']*(len(starts)-len(ends)))
+            for index,raw in enumerate(starts):
+                if str(ends[index]).strip() or not str(raw).strip():continue
+                try:
+                    text=str(raw).split('-',1)[0].strip();stamp=datetime.strptime(text,'%H:%M')+timedelta(hours=2)
+                    ends[index]=stamp.strftime('%H:%M');changed=True
+                except ValueError:continue
+            data['Bitiş']=ends
+    return changed
+
+
 def ensure_demo(path=DEFAULT_DB, today=None):
     init_db(path)
     with connect(path) as con:
@@ -56,7 +73,7 @@ def ensure_demo(path=DEFAULT_DB, today=None):
                                       'Cuma':['','','','','',''],'Cumartesi':['','','','','',''],'Pazar':['','','','','','']}}
         if i<4:
             exams[e['username']]={f'{today.year}-Sinav':{'Tarih':[str(next_week+timedelta(days=i))],
-                                                        'Saat':['10:00'],'Ders':['Dönem sınavı'],'Sınav Türü':['Vize'],'Not':['Örnek sınav bildirimi']}}
+                                                        'Saat':['10:00'],'Bitiş':['12:00'],'Ders':['Dönem sınavı'],'Sınav Türü':['Vize'],'Not':['Örnek sınav bildirimi']}}
     fixed=[]
     # Rotate people through existing night assignments; each person gets at most
     # two nights. These are fixture records, not auto-generated working shifts.
@@ -247,6 +264,7 @@ def bootstrap(state, path=DEFAULT_DB):
         save_keys(state)
     hydrate(state,path)
     if demo:
+        ensure_demo_exam_end_times(state)
         from ortak.sabit_demo import prepare
         prepare(state,path,effective_today)
         from ortak.statu_gecmisi import seed_demo
