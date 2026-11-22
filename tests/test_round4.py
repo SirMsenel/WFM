@@ -230,14 +230,14 @@ class Round4UITests(unittest.TestCase):
   at=self.app('from core.request_ui import render_center\nrender_center("planning","test_search")',s)
   at.text_input(key='test_search_search').set_value('Person').run();self.assertFalse(at.exception)
   at.text_input(key='test_search_search').set_value('not-found').run();self.assertFalse(at.exception);self.assertTrue(at.info)
- def test_published_popup_blocks_generation_and_other_language_can_be_selected(self):
+ def test_published_popup_keeps_main_scope_turkish_and_foreign_scope_is_person_based(self):
   s=state();s['published_shift_plan']=[dict(row(),language='tr')]
   at=self.app('from modules.shift_planing.publish import render\nrender()',s)
   self.assertFalse(any(b.key=='planning_generate' for b in at.button));self.assertTrue(at.warning)
   at.button(key='guard_ack').click().run()
-  at.toggle(key='planning_include_tr').set_value(False).run()
-  at.toggle(key='planning_include_en').set_value(True).run()
-  self.assertFalse(at.exception);self.assertTrue(any(b.key=='planning_generate' for b in at.button))
+  self.assertFalse(any(t.key in {'planning_include_tr','planning_include_en','planning_include_ar'} for t in at.toggle))
+  self.assertEqual(at.session_state['planning_languages'],{'tr':True,'en':False,'ar':False})
+  self.assertFalse(at.exception);self.assertFalse(any(b.key=='planning_generate' for b in at.button))
  def test_navigation_keeps_subpage_when_widget_is_removed(self):
   at=self.app('''
 import streamlit as st

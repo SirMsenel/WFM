@@ -107,7 +107,6 @@ class Round2UITests(unittest.TestCase):
  def test_publication_preserves_excluded_language_records(self):
   at=self.app('from modules.shift_planing.publish import render\nrender()')
   at.session_state['published_shift_plan']=[row(eid='2',start='09:00',end='18:00',source='auto')]
-  at.toggle(key='planning_include_en').set_value(False).run()
   at.button(key='planning_generate').click().run();self.assertFalse(at.exception)
   from ortak.yayin_servisi import publish_plan
   publish_plan(at.session_state,at.session_state['planning_result'])

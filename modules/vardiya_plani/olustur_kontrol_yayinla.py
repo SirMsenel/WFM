@@ -13,6 +13,39 @@ from ortak.calisma_alani_deposu import save_keys
 GROUP_LABELS=WORK_LABELS
 
 
+def foreign_plan_period_summary(state,context,lang):
+    """Dönemdeki bağımsız dil planını ve ana plana taşınan net etkisini özetle."""
+    start,end=str(context['start']),str(context['end'])
+    result=(state.get('foreign_language_plans') or {}).get(lang) or {}
+    period=result.get('period') or {}
+    planned=str(period.get('start'))==start and str(period.get('end'))==end
+    selected={str(eid) for eid in (state.get('foreign_language_transferred_ids') or {}).get(lang,[])}
+    rows=[row for row in state.get('draft_shift_plan',[])
+          if row.get('source')=='foreign_language_plan' and row.get('language')==lang
+          and str(row.get('employee_id')) in selected and start<=str(row.get('date'))<=end]
+    from modules.vardiya_plani.vardiya_motoru import bounds
+    active=[row for row in rows if bounds(row)]
+    hours=sum((bounds(row)[1]-bounds(row)[0]).total_seconds()/3600 for row in active)
+    return {'planned':planned,'planned_people':len(result.get('staff',[])) if planned else 0,
+            'impact_people':len({str(row['employee_id']) for row in active}),
+            'impact_shifts':len(active),'impact_hours':hours}
+
+
+def render_foreign_plan_status(state,context):
+    columns=st.columns(2,gap='small')
+    for column,(lang,label,color) in zip(columns,[('en','İngilizce','#3c7ca6'),('ar','Arapça','#8a62a8')]):
+        item=foreign_plan_period_summary(state,context,lang)
+        badge='Planlandı' if item['planned'] else 'Planlanmadı'
+        badge_bg='#e4f5ec' if item['planned'] else '#f2f3f5'
+        badge_color='#26704d' if item['planned'] else '#6d7680'
+        with column:
+            st.markdown(f'''<div style="min-height:122px;padding:14px 16px;border-radius:16px;background:linear-gradient(135deg,#fff,#f7f9fb);border:1px solid #dfe7eb;box-shadow:0 4px 14px rgba(42,66,78,.06)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b style="color:{color}">{label} Dil Planı</b><span style="padding:4px 9px;border-radius:999px;background:{badge_bg};color:{badge_color};font-size:12px;font-weight:700">{badge}</span></div>
+            <div style="margin-top:11px;color:#536873;font-size:13px">Plan kapsamı <b>{item['planned_people']} kişi</b></div>
+            <div style="margin-top:5px;color:#263f4a;font-size:13px">Türkçe ihtiyaç etkisi <b>{item['impact_people']} kişi · {item['impact_shifts']} vardiya · {item['impact_hours']:g} saat</b></div>
+            </div>''',unsafe_allow_html=True)
+
+
 def render_group_priority():
     rules=(st.session_state.get('shift_rules') or {}).get('work_type',{})
     if not rules:
@@ -48,13 +81,12 @@ def render():
     with st.expander('Otomatik vardiya motoru nasıl yerleştirir?'):
         st.markdown('''Motor, önce kesin kayıtları (onaylı izin/talep, gece, ders-sınav ve elle girilmiş vardiya) korur. Ardından seçtiğin grup sırasına göre her personel için yarım saatlik ihtiyaç açığını en çok azaltan vardiyayı dener. Her denemede dil, çalışma grubu, işe giriş/ayrılış tarihi, 11 saat dinlenme, en fazla ardışık gün, haftalık OFF, ders/sınav, gece, Cuma kuralı, vardiya süresi ve dönem hedefleri kontrol edilir. Son aşamada yemek ve mola hakları otomatik dağıtılır; açıklar ile kural ihlalleri yayın öncesinde ayrıca gösterilir.''')
         st.caption('Bu yaklaşım kural-temelli ve deterministiktir: aynı veri ve kuralla aynı sonucu üretir. Küresel matematiksel optimum garantisi yerine, uygulanabilir en yüksek yerel ihtiyaç kazanımını hedefler.')
-    language=state.get('planning_languages',{'en':True,'ar':True})
-    tr,en,ar=st.columns(3)
-    turkish=tr.toggle('Türkçe personeller dahil',value=language.get('tr',True),key='planning_include_tr')
-    english=en.toggle('İngilizce personeller dahil',value=language.get('en',True),key='planning_include_en')
-    arabic=ar.toggle('Arapça personeller dahil',value=language.get('ar',True),key='planning_include_ar')
-    state['planning_languages']={'tr':turkish,'en':english,'ar':arabic}
-    save_keys(state)
+    # Ana motor Türkçe planı oluşturur. Yabancı dil kapasitesi yalnızca bağımsız
+    # dil planında kişi bazında ana plana aktarılan sabit vardiyalardan gelir.
+    language_scope={'tr':True,'en':False,'ar':False}
+    if state.get('planning_languages')!=language_scope:
+        state['planning_languages']=language_scope;save_keys(state)
+    render_foreign_plan_status(state,context)
     from ortak.donem_kilitleri import render_guard
     if not render_guard(state):return
     exam=st.toggle('Sınav gününde saat bilgisi varsa diğer uygun saatlere vardiya yaz',value=state.get('planning_exam_hours',False),key='planning_exam_hours_toggle')

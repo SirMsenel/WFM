@@ -144,6 +144,17 @@ sections('nav_demo',{'Oluştur':first,'Taslak':lambda:st.write('Taslak ekranı')
         staff=collect_inputs(state)[0]
         self.assertEqual({person['employee_id'] for person in staff},{'B'})
 
+    def test_foreign_period_card_reports_only_transferred_capacity(self):
+        from modules.vardiya_plani.olustur_kontrol_yayinla import foreign_plan_period_summary
+        day=pd.Timestamp('2026-11-23').date()
+        state={'foreign_language_plans':{'en':{'period':{'start':str(day),'end':str(day)},'staff':[emp('A'),emp('B')]}},
+               'foreign_language_transferred_ids':{'en':['B']},'draft_shift_plan':[
+                   dict(row('A',day),source='foreign_language_plan',language='en'),
+                   dict(row('B',day),source='foreign_language_plan',language='en')]}
+        item=foreign_plan_period_summary(state,{'start':day,'end':day},'en')
+        self.assertTrue(item['planned']);self.assertEqual(item['planned_people'],2)
+        self.assertEqual(item['impact_people'],1);self.assertEqual(item['impact_shifts'],1);self.assertEqual(item['impact_hours'],9)
+
     def test_demo_exam_fixture_has_and_migrates_end_time(self):
         from ortak.ornek_veri import ensure_demo_exam_end_times
         state={'acad_exam_calendar':{'u1':{'2026-Sinav':{'Tarih':['2026-11-23'],'Saat':['10:00'],'Ders':['Vize']}}}}
