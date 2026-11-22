@@ -11,9 +11,10 @@ def render():
     from ortak.modern_kartlar import metric_cards
     metric_cards([('Planlama onayı',f"{len(item['votes'])}/2"),('Eksik ihtiyaç',f"%{item['rate']:.2f}"),('Yönetici onayı','Alındı' if item['manager'] else 'Gerekli' if item['rate']>5 else 'Gerekmiyor')])
     result=item['result']
-    from ortak.planlama_gorunumu import coverage_summary,shortage_matrix,styled_shortage_matrix,roster_summary,daily_gap_summary
+    from ortak.planlama_gorunumu import coverage_summary,shortage_matrix,styled_shortage_matrix,roster_summary,daily_gap_summary,daily_coverage_summary
     roster_summary(result,'Yayınlanacak Planın Personel Özeti')
     coverage_summary(result,'Planın Doluluk ve Açık Özeti')
+    daily_coverage_summary(result)
     daily_gap_summary(result)
     with st.expander('Yarım saatlerde eksik / fazla personel',expanded=True):
         import pandas as pd

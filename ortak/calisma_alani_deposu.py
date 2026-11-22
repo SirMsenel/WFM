@@ -19,7 +19,8 @@ STATE_KEYS = ("planning_demand_language","language_demands","language_demand_inc
               "sp_ratio_profiles", "sp_active_ratio_profile_df", "sp_active_ratio_profile_name",
               "sp_staffing_result_df", "plan_ctx", "plan_ctx_confirmed", "planning_class_term", "demo_initial_staffing_done",
               "sp_active_ratio_profile_meta", "interval_last_used_profile", "interval_used_profiles", "shift_edit_history", "plan_removed_assignments",
-              "demo_initial_profile_done", "demo_clock_enabled", "demo_clock_date", "demo_clock_time", "ui_palette", "planning_allow_hour_target_override")
+              "demo_initial_profile_done", "demo_clock_enabled", "demo_clock_date", "demo_clock_time", "ui_palette", "planning_allow_hour_target_override",
+              "foreign_language_plans", "foreign_language_transferred_ids")
 
 
 def _encode(value):

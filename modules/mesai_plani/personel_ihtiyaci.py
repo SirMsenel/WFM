@@ -199,7 +199,7 @@ def render():
                 st.dataframe(view.drop(columns=['Slot','Haftanın günü'],errors='ignore').rename(columns={'Shrinkage (%)':'Önerilen toplam kayıp (%)','Çalışma kişi-saat':'Toplam vardiya süresi (saat)','Statü kişi-saat':'Statülere ayrılan süre (saat)'}).style.format(precision=2,na_rep='Çalışma yok'),hide_index=True,use_container_width=True)
                 st.caption('Öneri yalnızca kayıtlı statü kullanımını kapsar. Eğitim, devamsızlık ve benzeri dış kayıplar kurum verisiyle ayrıca eklenmelidir. Öneriyi aşağıdaki yarım saatlik kurallara aktarabilir, sonra istediğin dilimi elle değiştirebilirsin.')
                 if st.button('Öneriyi Dilim Oranlarına Aktar',disabled=overall is None,key='shrinkage_adopt'):
-                    st.session_state['slot_shrinkage']=[{'start_slot':int(r['Slot']),'end_slot':int(r['Slot']),'rate':min(.95,float(r['Shrinkage (%)'])/100),**({'weekdays':[int(r['Haftanın günü'])]} if 'Haftanın günü' in r else {})} for r in table.to_dict('records') if pd.notna(r['Shrinkage (%)'])];st.session_state.pop('slot_loss_editor_clock',None)
+                    st.session_state['slot_shrinkage']=[{'start_slot':int(r['Slot']),'end_slot':int(r['Slot']),'rate':min(.95,float(r['Shrinkage (%)'])/100),**({'weekdays':[int(r['Haftanın günü'])]} if 'Haftanın günü' in r else {})} for r in table.to_dict('records') if pd.notna(r['Shrinkage (%)'])];st.session_state.pop('slot_loss_editor_scope',None)
                     st.session_state['staffing_shrinkage_mode']='Geçmiş öneri'
                     from ortak.calisma_alani_deposu import save_keys
                     save_keys(st.session_state);st.rerun()
@@ -208,13 +208,25 @@ def render():
         existing=st.session_state.get('slot_shrinkage',[])
         clock=lambda n:f'{n//2:02d}:{30*(n%2):02d}'
         starts=[clock(i) for i in range(48)];ends=[clock(i) for i in range(1,49)]
-        table=pd.DataFrame([{'Başlangıç':clock(r['start_slot']-1),'Bitiş':clock(r['end_slot']),'Shrinkage (%)':r['rate']*100,'Gün':('Tüm günler' if not r.get('weekdays') else __import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES[r['weekdays'][0]])} for r in existing],columns=['Başlangıç','Bitiş','Shrinkage (%)','Gün'])
+        day_names=list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES)
+        from itertools import combinations
+        scope_to_days={'Tüm günler':list(range(7))}
+        for size in range(1,7):
+            for subset in combinations(range(7),size):
+                scope_to_days[', '.join(day_names[i] for i in subset)]=list(subset)
+        def scope_label(rule):
+            selected=sorted(set(rule.get('weekdays') or range(7)))
+            return 'Tüm günler' if len(selected)==7 else ', '.join(day_names[i] for i in selected)
+        table=pd.DataFrame([{'Başlangıç':clock(r['start_slot']-1),'Bitiş':clock(r['end_slot']),'Shrinkage (%)':r['rate']*100,'Gün kapsamı':scope_label(r)} for r in existing],columns=['Başlangıç','Bitiş','Shrinkage (%)','Gün kapsamı'])
         if existing:
             avg=sum(float(r.get('rate',0)) for r in existing)/len(existing)*100
-            a,b,c=st.columns(3);a.metric('Tanımlı kural',len(existing));b.metric('Ortalama kayıp',f'%{avg:.1f}');c.metric('Kapsanan gün tipi',len({tuple(r.get('weekdays',[])) for r in existing}))
+            covered=set().union(*(set(r.get('weekdays') or range(7)) for r in existing))
+            scope='Tüm günler' if len(covered)==7 else (day_names[next(iter(covered))] if len(covered)==1 else f'{len(covered)} farklı gün')
+            from ortak.modern_kartlar import metric_cards
+            metric_cards([('Tanımlı kural',len(existing)),('Ortalama kayıp',f'%{avg:.1f}'),('Gün kapsamı',scope)])
         with st.container(border=True):
-            edited=st.data_editor(table,num_rows='dynamic',hide_index=True,use_container_width=True,height=min(420,max(180,74+len(table)*35)),key='slot_loss_editor_clock',column_config={'Gün':st.column_config.SelectboxColumn('Uygulanacak gün',options=['Tüm günler']+list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES),required=True,width='medium'),'Başlangıç':st.column_config.SelectboxColumn('Başlangıç',options=starts,required=True,width='small'),'Bitiş':st.column_config.SelectboxColumn('Bitiş',options=ends,required=True,width='small'),'Shrinkage (%)':st.column_config.NumberColumn('Toplam kayıp (%)',min_value=0,max_value=99,step=1,required=True,width='medium')})
-            st.caption('Yeni satır ekleyebilir veya gereksiz satırı seçip silebilirsin. Çakışan kurallarda en alttaki satır uygulanır.')
+            edited=st.data_editor(table,num_rows='dynamic',hide_index=True,use_container_width=True,height=min(420,max(180,74+len(table)*35)),key='slot_loss_editor_scope',column_config={'Gün kapsamı':st.column_config.SelectboxColumn('Uygulanacak günler',options=list(scope_to_days),required=True,width='large'),'Başlangıç':st.column_config.SelectboxColumn('Başlangıç',options=starts,required=True,width='small'),'Bitiş':st.column_config.SelectboxColumn('Bitiş',options=ends,required=True,width='small'),'Shrinkage (%)':st.column_config.NumberColumn('Toplam kayıp (%)',min_value=0,max_value=99,step=1,required=True,width='medium')})
+            st.caption('Bir satırda tek gün, birden fazla gün veya tüm günleri seçebilirsin. Çakışan kurallarda en alttaki satır uygulanır.')
         if st.button('Dilim Oranlarını Kaydet',key='save_slot_loss'):
             try:
                 rows=[]
@@ -222,7 +234,8 @@ def render():
                 for r in edited.to_dict('records'):
                     a,b=starts.index(r['Başlangıç'])+1,ends.index(r['Bitiş'])+1;rate=float(r['Shrinkage (%)'])/100
                     if not 1<=a<=b<=48 or not 0<=rate<1:raise ValueError('Bitiş başlangıçtan sonra, kayıp %0–99 arasında olmalı.')
-                    rows.append({'start_slot':a,'end_slot':b,'rate':rate,**({'weekdays':[list(__import__('ortak.cagri_tahmin_servisi',fromlist=['DAY_NAMES']).DAY_NAMES).index(r['Gün'])]} if r['Gün']!='Tüm günler' else {})})
+                    selected_days=scope_to_days[r['Gün kapsamı']]
+                    rows.append({'start_slot':a,'end_slot':b,'rate':rate,**({'weekdays':selected_days} if len(selected_days)<7 else {})})
                 st.session_state['slot_shrinkage']=rows
                 st.session_state['staffing_shrinkage_mode']='30 dk kuralları' if rows else 'Genel oran'
                 from ortak.calisma_alani_deposu import save_keys

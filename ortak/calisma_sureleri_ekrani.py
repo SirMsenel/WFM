@@ -22,19 +22,16 @@ def render_hours_summary(state,people):
         st.info('Kalan kapasite ve doluluk halkaları için bu gruba bir dönem çalışma hedefi tanımlayın.')
         with st.expander('Çalışma süresi hedefi tanımla',expanded=True):render_targets(state)
         return
+    st.markdown('<div style="padding:14px 17px;border-radius:16px;background:linear-gradient(120deg,#edf7f8,#f4f1fa);border:1px solid #d9e7ec"><b style="color:#315f70">Tüm Çalışma Süresi Hedefleri</b><br><small>Her kart hedef dönemin kişi başı doluluğunu ve kalan kapasitesini gösterir.</small></div>',unsafe_allow_html=True)
+    for offset in range(0,len(targets),3):
+        for col,target in zip(st.columns(3),targets[offset:offset+3]):
+            group_people=[p for p in agents if p.get('work_type')==target['group']]
+            frame=personnel_hours(state,group_people,target['start'],target['end'],published_only=False)
+            used=float(frame['Toplam saat'].mean()) if not frame.empty else 0.;goal=float(target['hours']);left=max(0,goal-used);rate=min(100,100*used/goal) if goal else 0
+            rule=(state.get('shift_rules') or {}).get('work_type',{}).get(target['group'],{});day_hours=float(rule.get('shift_total_hours',rule.get('shift_total_hours_max',8)) or 8)
+            col.markdown(f'<div style="min-height:190px;padding:17px;border-radius:17px;border:1px solid #d8e6ec;border-top:4px solid #398d95;background:#f8fbfc"><small style="color:#5c7681">{target["start"]} → {target["end"]}</small><h4 style="margin:5px 0 12px;color:#315e6e">{WORK_LABELS.get(target["group"],target["group"])}</h4><div style="font-size:26px;font-weight:800;color:#2d8490">%{rate:.1f}</div><div style="height:7px;background:#e4edef;border-radius:9px;margin:8px 0"><div style="height:7px;width:{rate:.1f}%;background:#398d95;border-radius:9px"></div></div><div style="font-size:12px;line-height:1.8;color:#647983">Kişi başı: <b>{used:.1f} / {goal:.1f} saat</b><br>Kalan: <b>{left:.1f} saat</b> · Yaklaşık <b>{left/day_hours if day_hours else 0:.1f} gün</b><br>Personel: <b>{len(group_people)}</b></div></div>',unsafe_allow_html=True)
     labels={i:f"{WORK_LABELS.get(t['group'],t['group'])} · {t['start']} → {t['end']} · {t['hours']:g} saat/kişi" for i,t in enumerate(targets)}
-    options=['all']+list(labels);chosen=st.selectbox('İncelenecek çalışma hedefi',options,format_func=lambda value:'Tüm hedefler' if value=='all' else labels[value],key='capacity_target_pick')
-    if chosen=='all':
-        st.markdown('<div style="padding:14px 17px;border-radius:16px;background:linear-gradient(120deg,#edf7f8,#f4f1fa);border:1px solid #d9e7ec"><b style="color:#315f70">Tüm Çalışma Süresi Hedefleri</b><br><small>Her kart hedef dönemin kişi başı doluluğunu ve kalan kapasitesini gösterir.</small></div>',unsafe_allow_html=True)
-        for offset in range(0,len(targets),3):
-            for col,target in zip(st.columns(3),targets[offset:offset+3]):
-                group_people=[p for p in agents if p.get('work_type')==target['group']]
-                frame=personnel_hours(state,group_people,target['start'],target['end'],published_only=False)
-                used=float(frame['Toplam saat'].mean()) if not frame.empty else 0.;goal=float(target['hours']);left=max(0,goal-used);rate=min(100,100*used/goal) if goal else 0
-                rule=(state.get('shift_rules') or {}).get('work_type',{}).get(target['group'],{});day_hours=float(rule.get('shift_total_hours',rule.get('shift_total_hours_max',8)) or 8)
-                col.markdown(f'<div style="min-height:190px;padding:17px;border-radius:17px;border:1px solid #d8e6ec;border-top:4px solid #398d95;background:#f8fbfc"><small style="color:#5c7681">{target["start"]} → {target["end"]}</small><h4 style="margin:5px 0 12px;color:#315e6e">{WORK_LABELS.get(target["group"],target["group"])}</h4><div style="font-size:26px;font-weight:800;color:#2d8490">%{rate:.1f}</div><div style="height:7px;background:#e4edef;border-radius:9px;margin:8px 0"><div style="height:7px;width:{rate:.1f}%;background:#398d95;border-radius:9px"></div></div><div style="font-size:12px;line-height:1.8;color:#647983">Kişi başı: <b>{used:.1f} / {goal:.1f} saat</b><br>Kalan: <b>{left:.1f} saat</b> · Yaklaşık <b>{left/day_hours if day_hours else 0:.1f} gün</b><br>Personel: <b>{len(group_people)}</b></div></div>',unsafe_allow_html=True)
-        with st.expander('Çalışma süresi hedeflerini yönet'):render_targets(state)
-        return
+    chosen=st.selectbox('İncelenecek çalışma hedefi',list(labels),format_func=labels.get,key='capacity_target_detail_pick')
     target=targets[chosen]
     group_people=[p for p in agents if p.get('work_type')==target['group']]
     left,right=st.columns([1,1.35],vertical_alignment='top')

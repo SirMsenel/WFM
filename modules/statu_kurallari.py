@@ -51,12 +51,19 @@ def render():
                     rule['break_minutes']=number('Tek mola en fazla (dk)',1,15,min(15,int(rule.get('break_minutes',15))),5,key='break_d_'+group);rule['break_per_hour_max']=number('Bir saat içinde en fazla mola (dk)',5,60,int(rule.get('break_per_hour_max',15)),5,key='break_hour_'+group)
                     rule['break_min_gap_minutes']=number('İki mola arasında en az süre (dk)',0,180,int(rule.get('break_min_gap_minutes',15)),5,key='break_gap_'+group)
                     rule['break_preferred_minutes']=number('Tercih edilen mola parçası (dk)',1,min(15,int(rule['break_minutes'])),min(int(rule.get('break_preferred_minutes',10)),int(rule['break_minutes'])),1,key='break_preferred_'+group)
-                    st.markdown('<div style="margin:10px 0 7px;padding:11px 13px;border-radius:13px;background:#f2f8fa;border:1px solid #dce9ee"><b>Çalışma süresine göre toplam mola hakkı</b><br><small>Alt sınır hariç, üst sınır dahildir.</small></div>',unsafe_allow_html=True)
                     rules=rule.get('break_rules',[{'min_hours':0,'max_hours':3.5,'minutes':15},{'min_hours':3.5,'max_hours':24,'minutes':30}])
-                    df=pd.DataFrame(rules).rename(columns={'min_hours':'Çalışma alt sınırı (hariç)','max_hours':'Çalışma üst sınırı (dahil)','minutes':'Toplam mola (dk)'})
+                    hour_values=[i/2 for i in range(49)];hour_labels={value:f'{value:g} saat' for value in hour_values};hour_lookup={label:value for value,label in hour_labels.items()}
+                    minute_values=list(range(0,241,5));minute_labels={value:f'{value} dk' for value in minute_values};minute_lookup={label:value for value,label in minute_labels.items()}
+                    nearest_hour=lambda value:min(hour_values,key=lambda option:abs(option-float(value)))
+                    nearest_minute=lambda value:min(minute_values,key=lambda option:abs(option-int(value)))
+                    df=pd.DataFrame([{'Alt sınır (hariç)':hour_labels[nearest_hour(row.get('min_hours',0))],'Üst sınır (dahil)':hour_labels[nearest_hour(row.get('max_hours',24))],'Mola hakkı':minute_labels[nearest_minute(row.get('minutes',0))]} for row in rules])
                     with st.container(border=True):
-                        table=st.data_editor(df,num_rows='dynamic',hide_index=True,use_container_width=True,key='break_rules_'+group,column_config={'Çalışma alt sınırı (hariç)':st.column_config.NumberColumn('Alt sınır',required=True,min_value=0,max_value=24,step=.5,width='small'),'Çalışma üst sınırı (dahil)':st.column_config.NumberColumn('Üst sınır',required=True,min_value=.5,max_value=24,step=.5,width='small'),'Toplam mola (dk)':st.column_config.NumberColumn('Hak (dk)',required=True,min_value=0,max_value=240,step=5,width='small')})
-                    rule['break_rules']=table.rename(columns={'Çalışma alt sınırı (hariç)':'min_hours','Çalışma üst sınırı (dahil)':'max_hours','Toplam mola (dk)':'minutes'}).to_dict('records')
+                        table=st.data_editor(df,num_rows='dynamic',hide_index=True,use_container_width=True,key='break_rules_select_'+group,column_config={'Alt sınır (hariç)':st.column_config.SelectboxColumn('Alt sınır (hariç)',options=list(hour_lookup),required=True,width='medium'),'Üst sınır (dahil)':st.column_config.SelectboxColumn('Üst sınır (dahil)',options=list(hour_lookup),required=True,width='medium'),'Mola hakkı':st.column_config.SelectboxColumn('Toplam mola hakkı',options=list(minute_lookup),required=True,width='medium')})
+                    converted=[]
+                    for row in table.to_dict('records'):
+                        if any(pd.isna(row.get(column)) for column in table.columns):converted.append({'min_hours':None,'max_hours':None,'minutes':None})
+                        else:converted.append({'min_hours':hour_lookup[row['Alt sınır (hariç)']],'max_hours':hour_lookup[row['Üst sınır (dahil)']],'minutes':minute_lookup[row['Mola hakkı']]})
+                    rule['break_rules']=converted
 
                 else:
                     rule['coaching_multiple_per_week']=st.checkbox('Aynı hafta birden fazla koçluk yapılabilir',value=rule.get('coaching_multiple_per_week',False),key='coach_multiple_'+group)

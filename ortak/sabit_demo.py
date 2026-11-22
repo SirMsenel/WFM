@@ -16,7 +16,12 @@ def directory(state=None):
     with sqlite3.connect(path) as db:
         if not db.execute("SELECT 1 FROM users WHERE username='moderator'").fetchone():return
         db.execute('CREATE TABLE IF NOT EXISTS demo_migrations(version TEXT PRIMARY KEY)')
-        if db.execute("SELECT 1 FROM demo_migrations WHERE version='phase8'").fetchone():return
+        phase8=bool(db.execute("SELECT 1 FROM demo_migrations WHERE version='phase8'").fetchone())
+        if phase8:
+            if not db.execute("SELECT 1 FROM demo_migrations WHERE version='phase9_languages'").fetchone():
+                _balance_demo_languages(db)
+                db.execute("INSERT INTO demo_migrations VALUES('phase9_languages')")
+            return
         from passlib.context import CryptContext
         hashed=CryptContext(schemes=['pbkdf2_sha256']).hash('1234');rng=random.Random(20261109)
         companies=['Ulak','Teleperformance','Assistt','Müşteri Çözümleri AŞ']
@@ -34,7 +39,17 @@ def directory(state=None):
             if db.execute('SELECT 1 FROM users WHERE username=?',(username,)).fetchone():continue
             eid=db.execute('INSERT INTO employees(full_name,position,work_type,language,location,sicil_no,company,employment_start) VALUES(?,?,?,?,?,?,?,?)',(name,role,'yonetim','tr','Ankara','DEMO7-'+username,'Ulak','2026-01-01')).lastrowid
             db.execute('INSERT INTO users(username,password_hash,employee_id,is_active) VALUES(?,?,?,1)',(username,hashed,eid))
+        _balance_demo_languages(db)
         db.execute("INSERT INTO demo_migrations VALUES('phase8')")
+        db.execute("INSERT INTO demo_migrations VALUES('phase9_languages')")
+
+
+def _balance_demo_languages(db):
+    """Demo agent havuzunda 15 İngilizce, 15 Arapça; kalanlar Türkçe olsun."""
+    active=[r[0] for r in db.execute("SELECT e.employee_id FROM employees e JOIN users u ON u.employee_id=e.employee_id WHERE e.position='agent' AND u.is_active=1 ORDER BY e.employee_id")]
+    db.execute("UPDATE employees SET language='tr' WHERE position='agent'")
+    db.executemany("UPDATE employees SET language='en' WHERE employee_id=?",[(eid,) for eid in active[:15]])
+    db.executemany("UPDATE employees SET language='ar' WHERE employee_id=?",[(eid,) for eid in active[15:30]])
 
 
 def init_history(path):

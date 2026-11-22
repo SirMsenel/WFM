@@ -47,12 +47,22 @@ def sections(key,pages,single_line=False):
             st.session_state['navigation_history']=history[-25:]
         st.session_state[key]=selected
     if single_line:
-        css_key=key
+        def choose(label):
+            if st.session_state.get('main_page') and label!=st.session_state.get(key):
+                history=list(st.session_state.get('navigation_history',[]))
+                history.append({'page':st.session_state['main_page'],'sections':{k:v for k,v in st.session_state.items() if k.startswith('nav_') and not k.endswith('_control')}})
+                st.session_state['navigation_history']=history[-25:]
+            st.session_state[key]=label;st.session_state[control]=label
         st.markdown(f'''<style>
-        .st-key-{css_key}-section-tabs [data-testid="stSegmentedControl"] > div,
-        .st-key-{css_key}-section-tabs [data-testid="stSegmentedControl"] [role="radiogroup"]{{flex-wrap:nowrap!important;overflow-x:auto!important;scrollbar-width:thin;padding-bottom:3px}}
-        .st-key-{css_key}-section-tabs [data-testid="stSegmentedControl"] button{{white-space:nowrap!important;flex:0 0 auto!important;font-size:.82rem!important;padding-left:.72rem!important;padding-right:.72rem!important}}
+        .st-key-{key}-section-tabs [data-testid="stHorizontalBlock"]{{gap:.32rem!important;flex-wrap:nowrap!important}}
+        .st-key-{key}-section-tabs button{{min-height:42px!important;padding:.25rem .28rem!important;font-size:.69rem!important;line-height:1.05!important}}
         </style>''',unsafe_allow_html=True)
+        with st.container(key=key+'_section_tabs'):
+            st.markdown('<div class="wfm-section-label">Bu ekranın bölümleri</div><div class="wfm-section-rule"></div>',unsafe_allow_html=True)
+            for index,(col,label) in enumerate(zip(st.columns(len(labels),gap='small'),labels)):
+                col.button(label,key=f'{control}_button_{index}',type='primary' if st.session_state[key]==label else 'secondary',use_container_width=True,on_click=choose,args=(label,))
+        pages[st.session_state[key]]()
+        return
     with st.container(key=key+'_section_tabs'):
         st.markdown('<div class="wfm-section-label">Bu ekranın bölümleri</div><div class="wfm-section-rule"></div>',unsafe_allow_html=True)
         selected=st.segmented_control('Bölümler',labels,key=control,selection_mode='single',on_change=changed,label_visibility='collapsed')

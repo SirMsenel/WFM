@@ -45,7 +45,7 @@ def _limit(value):
 
 
 def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
-                  history=(), unavailable=None, auto_fill=True, strict_capacity=True, hour_targets=(), languages=None, exclude_early_hours=False, reject_invalid_sources=(), auto_night=False):
+                  history=(), unavailable=None, auto_fill=True, strict_capacity=True, hour_targets=(), languages=None, exclude_early_hours=False, reject_invalid_sources=(), auto_night=False,auto_excluded_ids=()):
     """Return plan/coverage/issues. Never mutates caller-owned rows or tables.
 
     Fixed rows are ordered by source precedence. Conflicting rows are reported
@@ -53,7 +53,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
     Unavailable maps employee IDs to absolute datetime intervals.
     """
     start, end = pd.Timestamp(start).date(), pd.Timestamp(end).date()
-    fixed, history = list(fixed), list(history)
+    fixed, history = list(fixed), list(history);auto_excluded_ids={str(eid) for eid in auto_excluded_ids}
     if start > end or (end - start).days > 92:
         raise ValueError("Plan dönemi 1–93 gün arasında olmalı.")
     groups = rules.get("work_type", {})
@@ -316,7 +316,8 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                     continue
                 present=sum(1 for row in plan if row.get('shift_code')=='GECE' and row['date']==str(day) and staff.get(str(row['employee_id']),{}).get('language')==language)
                 candidates=[eid for eid,person in staff.items()
-                            if person.get('language','tr')==language and person.get('work_type') in allowed
+                            if eid not in auto_excluded_ids
+                            and person.get('language','tr')==language and person.get('work_type') in allowed
                             and groups.get(person.get('work_type'),{}).get('night_allowed',False)
                             and (eid,day) not in occupied]
                 candidates.sort(key=lambda eid:(day.weekday() not in night_pattern_days(eid),sum(1 for row in by_employee[eid] if bounds(row)),eid))
@@ -333,7 +334,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
     # earlier-priority group can consume every day slot before Full Time is tried.
     if auto_fill and 'fulltime' in group_order and boost.get('weekday_0700_fulltime_extra_enabled'):
         from ortak.off_dagilimi import plan_off_days
-        early_members=[eid for eid,e in staff.items() if e['work_type']=='fulltime']
+        early_members=[eid for eid,e in staff.items() if e['work_type']=='fulltime' and eid not in auto_excluded_ids]
         early_off=plan_off_days(early_members,staff,days,df,plan,rules)
         duration=round(float(groups['fulltime'].get('shift_total_hours',9))*60)
         for day in days:
@@ -360,7 +361,7 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         if not 0 < max_hours <= 24:
             raise ValueError(f"{group}: geçersiz vardiya süresi")
         durations = (list(range(round(float(rule['shift_total_hours'])*60),round(max_hours*60)+1,30)) if rule.get('allow_flexible_hours') and 'shift_total_hours' in rule else [round(max_hours*60)]) if 'shift_total_hours' in rule else list(range(max(30,round(float(rule.get('min_shift_hours',.5))*60)),round(max_hours*60)+1,30))
-        members = [eid for eid, emp in staff.items() if emp["work_type"] == group]
+        members = [eid for eid, emp in staff.items() if emp["work_type"] == group and eid not in auto_excluded_ids]
         from ortak.off_dagilimi import plan_off_days
         off_days=plan_off_days(members,staff,days,df,plan,rules)
         for day in days:

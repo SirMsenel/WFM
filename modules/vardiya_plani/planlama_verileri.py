@@ -11,7 +11,7 @@ from modules.vardiya_plani.vardiya_motoru import minutes
 from ortak.planlama import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("planning_demand_language","language_demands","language_demand_inclusion","status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "planning_allow_hour_target_override", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("planning_demand_language","language_demands","language_demand_inclusion","foreign_language_transferred_ids","status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "planning_allow_hour_target_override", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
@@ -145,7 +145,7 @@ def collect_inputs(state):
     for row in state.get("shift_overrides", []):
         if row.get("override_type") in ({'GECE'}|set(LEAVE_LABELS)):
             expand(row, row["override_type"], "fixed_external")
-    manual_sources = {"manual_template", "manual_single", "manual"}
+    manual_sources = {"manual_template", "manual_single", "manual", "foreign_language_plan"}
     for row in state.get("draft_shift_plan", []):
         if row.get("source", "manual") in manual_sources and row.get("shift_code") in ({'GECE'}|set(LEAVE_LABELS)):
             expand(row, row["shift_code"], row.get("source", "manual"))

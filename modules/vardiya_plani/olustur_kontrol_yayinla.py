@@ -21,28 +21,25 @@ def render_group_priority():
     st.session_state.setdefault('plan_group_priority',groups)
     selected=[g for g in st.session_state.get('plan_group_priority',groups) if g in groups]
     with st.container(border=True):
-        title,reset=st.columns([5,1],vertical_alignment='center')
-        title.markdown('#### Yerleştirme Önceliği')
-        if reset.button('Sıfırla',key='priority_reset',use_container_width=True):st.session_state['plan_group_priority']=[];st.rerun()
-        cols=st.columns(len(groups))
-        for col,group in zip(cols,groups):
-            rank=str(selected.index(group)+1) if group in selected else '+'
-            if col.button(rank+'  '+GROUP_LABELS.get(group,group),type='primary' if group in selected else 'secondary',key='priority_add_'+group,use_container_width=True):
-                st.session_state['plan_group_priority']=([g for g in selected if g!=group] if group in selected else selected+[group]);st.rerun()
-        order='  →  '.join(f'<b>{i+1}</b> {GROUP_LABELS.get(group,group)}' for i,group in enumerate(selected)) or 'Gruplara tıklayarak sıralamayı oluştur.'
-        st.markdown(f'<div style="padding:9px 12px;border-radius:11px;background:#f1f7f9;color:#456775;font-size:12px">{order}</div>',unsafe_allow_html=True)
+        left,right=st.columns([1,2.45],vertical_alignment='top')
+        with left:
+            st.markdown('#### Yerleştirme Önceliği')
+            pick=st.selectbox('Grup seç',groups,format_func=GROUP_LABELS.get,key='priority_pick')
+            a,b=st.columns(2)
+            if a.button('Sıraya Ekle',disabled=pick in selected,key='priority_add',use_container_width=True):st.session_state['plan_group_priority']=selected+[pick];st.rerun()
+            if b.button('Çıkar',disabled=pick not in selected,key='priority_remove',use_container_width=True):st.session_state['plan_group_priority']=[g for g in selected if g!=pick];st.rerun()
+            if st.button('Sırayı Sıfırla',key='priority_reset',use_container_width=True):st.session_state['plan_group_priority']=[];st.rerun()
+        with right:
+            st.markdown('<div style="font-size:12px;font-weight:750;color:#58717c;margin:2px 0 9px">SEÇİLEN KAYNAKLAR VE SIRASI</div>',unsafe_allow_html=True)
+            ordered=selected+[g for g in groups if g not in selected]
+            for offset in range(0,len(ordered),3):
+                for col,group in zip(st.columns(3),ordered[offset:offset+3]):
+                    rule=rules[group];details=f"{rule.get('shift_total_hours',rule.get('shift_total_hours_max','—'))} saat · {rule.get('max_days_per_week',rule.get('max_days_per_week_default','—'))} gün"
+                    rank=str(selected.index(group)+1) if group in selected else '+'
+                    if col.button(rank+'  '+GROUP_LABELS.get(group,group),key='priority_add_'+group,type='primary' if group in selected else 'secondary',use_container_width=True):
+                        st.session_state['plan_group_priority']=([g for g in selected if g!=group] if group in selected else selected+[group]);st.rerun()
+                    col.markdown(f'<div style="margin-top:-7px;padding:7px 8px;border-radius:0 0 11px 11px;background:#f3f8fa;text-align:center;font-size:9px;color:#6d818a">{details}</div>',unsafe_allow_html=True)
     if len(selected)<len(groups):st.info('Plan oluşturmadan önce tüm grupları sıraya ekleyin.')
-    rows=[]
-    for group in selected:
-        rule=rules[group]
-        rows.append({'Grup':GROUP_LABELS.get(group,group),'Vardiya':f"{rule.get('shift_total_hours',rule.get('shift_total_hours_max'))} saat"+(" üst sınır" if 'shift_total_hours_max' in rule else ''),
-                     'Haftalık gün':str(rule.get('max_days_per_week',rule.get('max_days_per_week_default','—'))),
-                     'Dinlenme':f"{rule['min_rest_hours']} saat" if 'min_rest_hours' in rule else '—',
-                     'Gece':'Uygun' if rule.get('night_allowed') else 'Uygun değil'})
-    for col,row in zip(st.columns(max(1,len(rows))),rows):
-        from html import escape
-        content=''.join('<div style="font-size:12px;margin-top:8px">'+escape(k)+': <b>'+escape(str(v))+'</b></div>' for k,v in row.items() if k!='Grup')
-        col.markdown('<div style="border:1px solid #d6e5ed;border-top:4px solid #4b94a2;background:#f5fafc;border-radius:16px;padding:16px;min-height:175px"><b>'+escape(row['Grup'])+'</b>'+content+'</div>',unsafe_allow_html=True)
 
 
 
@@ -86,7 +83,8 @@ def render():
                 result=generate_plan(staff,__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state),state['shift_rules'],state['plan_group_priority'],
                                      context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
                                      strict_capacity=True,hour_targets=() if state.get('planning_allow_hour_target_override') else state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),
-                                     auto_night=state.get('shift_rules',{}).get('night',{}).get('auto_fill',True))
+                                     auto_night=state.get('shift_rules',{}).get('night',{}).get('auto_fill',True),
+                                     auto_excluded_ids={str(eid) for ids in (state.get('foreign_language_transferred_ids') or {}).values() for eid in ids})
                 from ortak.statuler import meal_plan
                 meals,coverage,meal_issues=meal_plan(state,result['plan'],result['coverage'],staff)
                 result['breaks']=meals;result['coverage']=coverage
