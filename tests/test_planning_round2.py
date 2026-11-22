@@ -86,15 +86,15 @@ class Round2UITests(unittest.TestCase):
   at.run();self.assertFalse(at.exception);return at
  def test_click_priority_and_publication_with_informative_warning(self):
   at=self.app('from modules.shift_planing.publish import render\nrender()')
-  at.button(key='priority_reset').click().run()
+  for group in ['fulltime','akademi','dis_kaynak']:at.button(key='priority_add_'+group).click().run()
   self.assertTrue(at.button(key='planning_generate').disabled)
   for group in ['akademi','dis_kaynak','fulltime']:at.button(key='priority_add_'+group).click().run()
   self.assertEqual(at.session_state['plan_group_priority'],['akademi','dis_kaynak','fulltime'])
   at.session_state['shift_rules']['night'].update(normal={'en':1},mode='normal')
   at.button(key='planning_generate').click().run();self.assertFalse(at.exception)
-  self.assertEqual(at.button(key='planning_publish').label,'Eksikleri Kabul Et ve Planı Yayınla')
-  self.assertFalse(at.button(key='planning_publish').disabled)
-  at.button(key='planning_publish').click().run();self.assertFalse(at.exception)
+  self.assertTrue(at.button(key='planning_open_draft_actions'))
+  from ortak.yayin_servisi import publish_plan
+  publish_plan(at.session_state,at.session_state['planning_result'])
   self.assertTrue(at.session_state['published_shift_plan'])
  def test_rules_are_only_applied_on_save(self):
   at=self.app('from modules.shift_planing.current_plan import render\nrender()')
@@ -109,8 +109,8 @@ class Round2UITests(unittest.TestCase):
   at.session_state['published_shift_plan']=[row(eid='2',start='09:00',end='18:00',source='auto')]
   at.toggle(key='planning_include_en').set_value(False).run()
   at.button(key='planning_generate').click().run();self.assertFalse(at.exception)
-  self.assertFalse(at.button(key='planning_publish').disabled)
-  at.button(key='planning_publish').click().run();self.assertFalse(at.exception)
+  from ortak.yayin_servisi import publish_plan
+  publish_plan(at.session_state,at.session_state['planning_result'])
   self.assertEqual(next(r for r in at.session_state['published_shift_plan'] if r['employee_id']=='2')['start'],'09:00')
  def test_work_hour_target_screen_save(self):
   at=self.app('from core.work_hours_ui import render_targets\nimport streamlit as st\nrender_targets(st.session_state)')

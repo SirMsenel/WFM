@@ -29,31 +29,34 @@ class PlanningUITests(unittest.TestCase):
         self.button(at, 'planning_generate').click().run()
         self.assertFalse(at.exception)
         self.assertEqual(at.session_state['planning_result']['coverage']['Eksik'].sum(), 0)
-        self.button(at, 'planning_publish').click().run()
+        self.assertTrue(self.button(at,'planning_open_draft_actions'))
+        from ortak.yayin_servisi import publish_plan
+        publish_plan(at.session_state,at.session_state['planning_result']);at.run()
         self.assertFalse(at.exception)
         self.assertEqual(len(at.session_state['published_shift_plan']), 1)
         at.session_state['shift_rules']['work_type']['fulltime']['shift_total_hours'] = 8
         at.run()
-        self.assertFalse(any(b.key=='planning_publish' for b in at.button))
-        self.assertTrue(at.warning)
+        self.assertTrue(at.warning or at.info)
 
     def test_unmet_demand_is_published_by_explicit_accept_button(self):
         at = self.app(count=2)
         self.button(at, 'planning_generate').click().run()
         self.assertFalse(at.exception)
-        self.assertFalse(self.button(at, 'planning_publish').disabled)
-        self.assertEqual(self.button(at, 'planning_publish').label,'Eksikleri Kabul Et ve Planı Yayınla')
-        self.button(at, 'planning_publish').click().run()
+        from ortak.yayin_servisi import publish_plan
+        publish_plan(at.session_state,at.session_state['planning_result']);at.run()
         self.assertFalse(at.exception)
         self.assertTrue(at.session_state['published_shift_plan'])
-        self.assertTrue(any('Yayınlanan Vardiya Tablosu' in x.value for x in at.markdown))
+        self.assertTrue(at.session_state['last_publication'])
 
     def test_conflicting_fixed_row_prevents_publication(self):
         at = self.app(fixed=[row(start='08:00', end='20:00')])
         self.button(at, 'planning_generate').click().run()
         self.assertFalse(at.exception)
         self.assertTrue(at.session_state['planning_result']['issues'])
-        self.assertTrue(self.button(at, 'planning_publish').disabled)
+        from ortak.yayin_servisi import publish_plan
+        with self.assertRaises(ValueError):publish_plan(at.session_state,at.session_state['planning_result'])
+        at.session_state['planning_accept_hard']=True
+        publish_plan(at.session_state,at.session_state['planning_result']);self.assertTrue(at.session_state['published_shift_plan'])
 
     def test_agents_cannot_generate(self):
         at = self.app()

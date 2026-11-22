@@ -55,11 +55,12 @@ def render_actions(state,result,key):
     import streamlit as st
     missing=result['coverage'];missing=missing[missing.Eksik>0]
     if missing.empty:return
-    with st.expander('Eksik için ne yapabilirim? · Uygun aksiyon bul'):
+    with st.expander('Eksik için ne yapabilirim? · Uygun aksiyon bul',expanded=True):
         daily=missing.groupby('Tarih').Eksik.agg(['sum','max'])
         limit=int(state.get('shift_rules',{}).get('capacity',{}).get('recommendation_overstaff_limit',5))
         st.caption(f'Öneri, eksik bloğu kapatırken dilim başına en fazla +{limit} fazla personele geçebilir. Boş gün ve mevcut vardiya seçenekleri; okul, 11 saat dinlenme, 6 gün üst üste çalışma ve dönem saat sınırlarını korur.')
-        day=st.selectbox('Aksiyon günü',sorted(missing.Tarih.astype(str).unique()),key=key+'_action_day')
+        day_order=missing.groupby(missing.Tarih.astype(str)).Eksik.sum().sort_values(ascending=False).index.tolist()
+        day=st.selectbox('Aksiyon günü',day_order,key=key+'_action_day')
         selected=missing[missing.Tarih.astype(str)==day].sort_values('Slot')
         groups=[];begin=previous=None
         for slot in selected.Slot.astype(int):
@@ -93,7 +94,9 @@ def render_actions(state,result,key):
         from ortak.personel import WORK_LABELS
         work_types=list(state.get('shift_rules',{}).get('work_type',{}));allowed=st.multiselect('Çalışma grubu',work_types,default=work_types,format_func=lambda value:WORK_LABELS.get(value,value),key=key+'_work_groups')
         signature=fingerprint(state)+str((day,gap,source_mode,allowed));cachekey=key+'_action_result'
-        if st.button('Uygun Aksiyonları Bul',key=key+'_find_actions'):
+        find_clicked=st.button('Önerileri Yeniden Hesapla',key=key+'_find_actions')
+        current=state.get(cachekey)
+        if find_clicked or not current or current.get('signature')!=signature:
             try:
                 with st.spinner('Uygunluklar kontrol ediliyor…'):options,rejected=suggestions(state,day,*gap,source_mode=source_mode,allowed_groups=set(allowed))
                 state[cachekey]={'signature':signature,'options':options,'rejected':rejected}

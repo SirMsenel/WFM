@@ -24,7 +24,7 @@ def publish_plan(state,result,approval_ticket=None):
         from ortak.talep_servisi import refresh
         refresh(state)
     if state.get('planning_result_fingerprint')!=fingerprint(state):raise ValueError('Taslak güncel değil. Yeniden oluşturun.')
-    if blocking_issues(result):raise ValueError('Kayıt veya çalışma kuralı ihlallerini düzeltin; eksik ihtiyacın kabulü bu ihlalleri kaldırmaz.')
+    if blocking_issues(result) and not state.get('planning_accept_hard'):raise ValueError('Kesin kural ihlallerini düzeltin veya planlama onayıyla devam seçeneğini açıkça onaylayın.')
     if any(r.get('severity')=='warning' and r.get('override_required',True) for r in result.get('issues',[])) and not state.get('planning_accept_soft'):raise ValueError('Esnek kural aşımlarını inceleyip onaylayın.')
     path=state.get('workspace_db_path');previous=state.get('published_shift_plan',[])
     start,end=result['period']['start'],result['period']['end'];included={str(e['employee_id']) for e in result['staff']}
@@ -70,6 +70,8 @@ def publish_plan(state,result,approval_ticket=None):
         assert_can_plan(state,result['staff'])
         state['published_shift_plan']=[r for r in previous if not start<=str(r.get('date'))<=end or str(r['employee_id']) not in included]+rows
         state['publication_batches']=state.get('publication_batches',[])+[dict(payload,status='active')]
+        from ortak.talep_simulasyonu import finalize_in_memory
+        finalize_in_memory(state,rows,start,end,(state.get('profile') or {}).get('username'))
     save_keys(state)
     state['planning_result_fingerprint']=fingerprint(state)
     state['last_publication']={'id':payload['id'],'start':start,'end':end,'count':len(rows),'at':datetime.now(ZoneInfo('Europe/Istanbul')).isoformat(),'fingerprint':state['planning_result_fingerprint']}

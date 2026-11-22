@@ -30,13 +30,34 @@ def finalize(db,rows,start,end,actor):
         if req.get('queue')!='SIMULATION':continue
         code=REQUEST_CODES.get(req['type']);eid=str(req.get('employee_id'));a=req.get('start_date');b=req.get('end_date') or a
         if not code or not a:continue
+        overlap_start=max(str(start),a);overlap_end=min(str(end),b)
+        if overlap_start>overlap_end:continue
         matched=set(req.get('committed_dates',[]))
-        for day in pd.date_range(max(str(start),a),min(str(end),b)):
+        for day in pd.date_range(overlap_start,overlap_end):
             text=str(day.date());row=bykey.get((eid,text))
             if row and row['shift_code']==code:matched.add(text)
-        if matched==set(req.get('committed_dates',[])):continue
         new=deepcopy(req);new['committed_dates']=sorted(matched)
         complete=all(str(d.date()) in matched for d in pd.date_range(a,b))
-        new.update(status='Onaylandı' if complete else 'Kısmen planlandı',queue='Closed' if complete else 'SIMULATION')
-        new.setdefault('events',[]).append({'at':now(),'actor':actor,'action':'Yayınla birlikte kesinleşti' if complete else 'Dönemin bir bölümü yayınlandı','from':req['status'],'to':new['status'],'note':f'{start} – {end}'})
+        new.update(status='Onaylandı' if complete else 'Reddedildi',queue='Closed')
+        applied=len([d for d in pd.date_range(a,b) if str(d.date()) in matched])
+        new.setdefault('events',[]).append({'at':now(),'actor':actor,'action':'Yayınla birlikte kesinleşti' if complete else 'Yayın planına uygulanmadı','from':req['status'],'to':new['status'],'note':f'{start} – {end} · uygulanan {applied}/{len(pd.date_range(a,b))} gün'})
         put_request_in_transaction(db,new,record[1])
+
+
+def finalize_in_memory(state,rows,start,end,actor):
+    """Veritabanı kullanılmayan demo oturumunda aynı kesinleştirmeyi uygula."""
+    from ortak.planlama import REQUEST_CODES
+    bykey={(str(r['employee_id']),str(r['date'])):r for r in rows};updated=[]
+    for req in state.get('trk_requests',[]):
+        if req.get('queue')!='SIMULATION':updated.append(req);continue
+        code=REQUEST_CODES.get(req.get('type'));a=req.get('start_date');b=req.get('end_date') or a
+        if not code or not a or max(str(start),a)>min(str(end),b):updated.append(req);continue
+        matched=set(req.get('committed_dates',[]))
+        for day in pd.date_range(max(str(start),a),min(str(end),b)):
+            text=str(day.date());row=bykey.get((str(req.get('employee_id')),text))
+            if row and row.get('shift_code')==code:matched.add(text)
+        new=deepcopy(req);new['committed_dates']=sorted(matched);all_days=[str(d.date()) for d in pd.date_range(a,b)];complete=all(day in matched for day in all_days)
+        new.update(status='Onaylandı' if complete else 'Reddedildi',queue='Closed')
+        new.setdefault('events',[]).append({'at':now(),'actor':actor,'action':'Yayınla birlikte kesinleşti' if complete else 'Yayın planına uygulanmadı','from':req.get('status'),'to':new['status'],'note':f'{start} – {end} · uygulanan {sum(day in matched for day in all_days)}/{len(all_days)} gün'})
+        updated.append(new)
+    state['trk_requests']=updated

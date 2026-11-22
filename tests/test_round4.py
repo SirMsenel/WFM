@@ -202,7 +202,7 @@ class CalendarAndScopeTests(unittest.TestCase):
   self.assertEqual([e['employee_id'] for e in visible_people({'position':'tl','full_name':'Lead'},people)],['1'])
   self.assertEqual(len(visible_people({'position':'wfm'},people)),2)
   self.assertEqual([e['employee_id'] for e in visible_people({'position':'agent','employee_id':'2'},people)],['2'])
- def test_timed_exam_allows_other_hours_but_missing_end_blocks_day(self):
+ def test_timed_exam_allows_other_hours_and_missing_end_uses_default_duration(self):
   s=state();s['employees_cache']=[dict(emp(group='akademi'),language='tr')]
   s['acad_exam_calendar']={'u1':{'2026-Sinav':{'Tarih':[str(DAY)],'Saat':['10:00'],'Bitiş':['12:00'],'Ders':['Exam']}}};s['planning_exam_hours']=True
   staff,fixed,history,unavailable,issues=collect_inputs(s)
@@ -210,7 +210,8 @@ class CalendarAndScopeTests(unittest.TestCase):
   s['sp_staffing_result_df']=demand(slots=range(17,39));result=draft(s)
   work=[r for r in result['plan'] if bounds(r)];self.assertTrue(work);self.assertTrue(all(bounds(r)[0].hour>=12 for r in work))
   del s['acad_exam_calendar']['u1']['2026-Sinav']['Bitiş'];s['draft_shift_plan']=[]
-  self.assertEqual(draft(s)['plan'][0]['shift_code'],'OFF')
+  blocks=collect_inputs(s)[3]['1'];self.assertTrue(any(a.hour==10 and b.hour==12 for a,b in blocks))
+  night=(pd.Timestamp(DAY),pd.Timestamp(DAY)+pd.Timedelta(hours=8));self.assertFalse(any(a<night[1] and night[0]<b for a,b in blocks))
  def test_shift_window_hours_and_statuses(self):
   from core.shift_display import shift_stats,cell_style
   records=[row(day=DAY,start='08:00',end='13:00'),row(day=DAY+timedelta(days=1),start='13:00',end='17:00'),row(day=DAY+timedelta(days=2),start='17:00',end='00:00'),row(day=DAY+timedelta(days=3),code='GECE',start='00:00',end='08:00'),row(day=DAY+timedelta(days=4),code='RAPOR',start=None,end=None)]

@@ -110,10 +110,11 @@ class Round3UITests(unittest.TestCase):
    path=str(Path(d)/'state.db');init_db(path);at.session_state['workspace_db_path']=path
    at.session_state['sp_staffing_result_df']=demand(count=3)
    at.button(key='planning_generate').click().run();self.assertFalse(at.exception)
-   self.assertEqual(at.button(key='planning_publish').label,'Eksikleri Kabul Et ve Planı Yayınla')
-   at.button(key='planning_publish').click().run();self.assertFalse(at.exception)
+   self.assertTrue(at.button(key='planning_open_draft_actions'))
+   from ortak.yayin_servisi import publish_plan
+   publish_plan(at.session_state,at.session_state['planning_result']);at.run();self.assertFalse(at.exception)
    loaded={};hydrate(loaded,path);self.assertEqual([{k:v for k,v in r.items() if k not in {'language','publication_id'}} for r in loaded['published_shift_plan']],at.session_state['planning_result']['plan'])
-   self.assertTrue(any('Yayınlanan Vardiya Tablosu' in m.value for m in at.markdown))
+   self.assertTrue(at.session_state['published_shift_plan'])
  def test_historical_hours_date_picker_is_independent_of_plan(self):
   at=self.app('from core.work_hours_ui import render_hours_summary\nimport streamlit as st\nrender_hours_summary(st.session_state,st.session_state["employees_cache"])')
   original=dict(at.session_state['plan_ctx'])

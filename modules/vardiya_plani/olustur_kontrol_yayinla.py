@@ -20,25 +20,16 @@ def render_group_priority():
     groups=list(rules)
     st.session_state.setdefault('plan_group_priority',groups)
     selected=[g for g in st.session_state.get('plan_group_priority',groups) if g in groups]
-    with st.container(border=True):
-        left,right=st.columns([1,2.45],vertical_alignment='top')
-        with left:
-            st.markdown('#### Yerleştirme Önceliği')
-            pick=st.selectbox('Grup seç',groups,format_func=GROUP_LABELS.get,key='priority_pick')
-            a,b=st.columns(2)
-            if a.button('Sıraya Ekle',disabled=pick in selected,key='priority_add',use_container_width=True):st.session_state['plan_group_priority']=selected+[pick];st.rerun()
-            if b.button('Çıkar',disabled=pick not in selected,key='priority_remove',use_container_width=True):st.session_state['plan_group_priority']=[g for g in selected if g!=pick];st.rerun()
-            if st.button('Sırayı Sıfırla',key='priority_reset',use_container_width=True):st.session_state['plan_group_priority']=[];st.rerun()
-        with right:
-            st.markdown('<div style="font-size:12px;font-weight:750;color:#58717c;margin:2px 0 9px">SEÇİLEN KAYNAKLAR VE SIRASI</div>',unsafe_allow_html=True)
-            ordered=selected+[g for g in groups if g not in selected]
-            for offset in range(0,len(ordered),3):
-                for col,group in zip(st.columns(3),ordered[offset:offset+3]):
-                    rule=rules[group];details=f"{rule.get('shift_total_hours',rule.get('shift_total_hours_max','—'))} saat · {rule.get('max_days_per_week',rule.get('max_days_per_week_default','—'))} gün"
-                    rank=str(selected.index(group)+1) if group in selected else '+'
-                    if col.button(rank+'  '+GROUP_LABELS.get(group,group),key='priority_add_'+group,type='primary' if group in selected else 'secondary',use_container_width=True):
-                        st.session_state['plan_group_priority']=([g for g in selected if g!=group] if group in selected else selected+[group]);st.rerun()
-                    col.markdown(f'<div style="margin-top:-7px;padding:7px 8px;border-radius:0 0 11px 11px;background:#f3f8fa;text-align:center;font-size:9px;color:#6d818a">{details}</div>',unsafe_allow_html=True)
+    st.markdown('''<style>.st-key-placement-priority button{min-height:38px!important;border-radius:12px!important}.st-key-placement-priority [data-testid="stHorizontalBlock"]{gap:.45rem!important}</style>''',unsafe_allow_html=True)
+    with st.container(key='placement-priority'):
+        title,content=st.columns([1.05,3.95],vertical_alignment='center',gap='small')
+        title.markdown('<div style="padding:9px 12px;border-radius:13px;background:linear-gradient(120deg,#e8f5f5,#f4eef9);border:1px solid #d7e7e8"><b style="font-size:13px;color:#315e68">Yerleştirme Önceliği</b><br><small style="color:#6a7f87">Kartlara sırayla dokun</small></div>',unsafe_allow_html=True)
+        ordered=selected+[g for g in groups if g not in selected]
+        with content:
+            for col,group in zip(st.columns(len(ordered),gap='small'),ordered):
+                rank=str(selected.index(group)+1) if group in selected else '○'
+                if col.button(rank+' · '+GROUP_LABELS.get(group,group),key='priority_add_'+group,type='primary' if group in selected else 'secondary',use_container_width=True,help='Seçimi kaldırmak veya sıranın sonuna eklemek için tıkla'):
+                    st.session_state['plan_group_priority']=([g for g in selected if g!=group] if group in selected else selected+[group]);st.rerun()
     if len(selected)<len(groups):st.info('Plan oluşturmadan önce tüm grupları sıraya ekleyin.')
 
 
@@ -89,17 +80,19 @@ def render():
                 meals,coverage,meal_issues=meal_plan(state,result['plan'],result['coverage'],staff)
                 result['breaks']=meals;result['coverage']=coverage
                 result['issues']=source_issues+result['issues']+meal_issues;result['staff']=staff
+                locked={(str(r['employee_id']),str(r['date'])):(r.get('shift_code'),r.get('start'),r.get('end')) for r in fixed if r.get('source')=='foreign_language_plan'}
+                actual={(str(r['employee_id']),str(r['date'])):(r.get('shift_code'),r.get('start'),r.get('end')) for r in result['plan']}
+                changed=[key for key,value in locked.items() if actual.get(key)!=value]
+                if changed:raise ValueError('Ana motor, aktarılan yabancı dil vardiyasını koruyamadı. Dil planı değiştirilmeden işlem durduruldu.')
                 start,end=str(context['start']),str(context['end'])
                 included={str(e['employee_id']) for e in staff}
                 outside=[r for r in state.get('draft_shift_plan',[]) if not start<=str(r.get('date'))<=end or str(r['employee_id']) not in included]
                 state['draft_shift_plan']=outside+result['plan']
                 result['period']={'start':start,'end':end}
-                state['planning_result']=result;state['planning_allow_gaps']=False;state['planning_accept_warnings']=False;state['planning_accept_soft']=False;state['planning_soft_consent']=False
+                state['planning_result']=result;state['planning_allow_gaps']=False;state['planning_accept_warnings']=False;state['planning_accept_soft']=False;state['planning_accept_hard']=False;state['planning_soft_consent']=False
                 state['planning_result_fingerprint']=fingerprint(state)
                 save_keys(state)
-            from ortak.gezinme import select_section
-            select_section(state,'nav_roster','Taslak Aksiyonları')
-            st.success('Taslak hazır. Öneriler ve yayın kararı için Taslak Aksiyonları ekranına geçiliyor.');st.rerun()
+            st.success('Taslak hazır. Aşağıdaki raporu inceleyebilir; düzeltme ve yayın işlemleri için Taslak Aksiyonları ekranına geçebilirsin.')
         except (ValueError,TypeError,KeyError) as exc:
             st.error(f'Plan oluşturulamadı: {exc}')
     if st.button('Otomatik Taslağı Sıfırla',key='planning_reset'):
@@ -127,26 +120,12 @@ def render():
         propose_cleanup(state,[(r.get('employee_id'),r.get('date')) for r in result['issues']],'publish')
     roster=pd.DataFrame(result['plan'])
     st.download_button('Vardiya CSV İndir',roster.to_csv(index=False).encode('utf-8-sig'),'vardiya_taslagi.csv','text/csv')
-    hard=blocking_issues(result)
-    warnings=len(result.get('issues',[]))-len(hard)
-    has_gaps=bool(result['coverage'].Eksik.sum())
-    soft=any(r.get('severity')=='warning' and r.get('override_required',True) for r in result.get('issues',[]))
-    if soft:state['planning_accept_soft']=st.checkbox('Esnek kural aşımlarını inceledim ve onaylıyorum',value=False,key='planning_soft_consent')
-    reasons=[]
-    if soft and not state.get('planning_accept_soft'):reasons.append('Esnek kural aşımları için onay verin.')
-    if stale:reasons.append('Kayıtlar değişti: Otomatik Vardiya Taslağı Oluştur düğmesine tekrar basın.')
-    if hard:reasons.append(f'{len(hard)} kayıt/kural ihlali var. Yukarıdaki tabloda Mevcut vardiya ve Olması gereken sütunlarını karşılaştırarak düzeltin, sonra yeniden oluşturun.')
-    if reasons:st.info('Yayınlamak için kalan adımlar:\n\n'+'\n\n'.join(reasons))
-    label='Taslağı Yayın Onayına Gönder' if state.get('shift_rules',{}).get('publication_approvals',{}).get('enabled') else ('Eksikleri Kabul Et ve Planı Yayınla' if has_gaps or warnings else 'Kontrol Edilen Planı Yayınla')
-    if st.button(label,disabled=bool(reasons),key='planning_publish',type='primary'):
-        try:
-            from ortak.yayin_servisi import publish_plan
-            if state.get('shift_rules',{}).get('publication_approvals',{}).get('enabled'):
-                from ortak.yayin_onaylari import submit
-                ident=submit(state,result);st.success('Taslak onaya gönderildi: '+ident+' · Yayın Onayları ekranında iki bağımsız Planlama onayı bekleniyor.');return
-            publish_plan(state,result)
-            st.success('Vardiya tablosu yayınlandı ve veritabanına kaydedildi. Personeller Benim Vardiyam ekranından görebilir.')
-        except (ValueError,OSError) as exc:st.error(str(exc))
+    st.divider()
+    st.markdown('### Düzeltme ve Yayın Aşaması')
+    st.caption('Sistem önerileri, personel/saat değişiklikleri ve yayın onayı Taslak Aksiyonları ekranında birlikte yönetilir.')
+    if st.button('Taslak Aksiyonlarına Geç',key='planning_open_draft_actions',type='primary',use_container_width=True):
+        from ortak.gezinme import select_section
+        select_section(state,'nav_roster','Taslak Aksiyonları');st.rerun()
     receipt=state.get('last_publication')
     if receipt and receipt['start']==result['period']['start'] and receipt['end']==result['period']['end'] and not stale and receipt.get('fingerprint')==state.get('planning_result_fingerprint'):
         from ortak.planlama import calendar_grid

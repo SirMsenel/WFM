@@ -61,7 +61,7 @@ def plan(state,rows,coverage,people,used=None):
     coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
     for item in state.get('_status_fixed_baseline',[]):
         a,b=pd.Timestamp(item['start']),pd.Timestamp(item['end']);overlap=np.maximum(0,(np.minimum(np.datetime64(b),stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(a),stamps))/np.timedelta64(30,'m'));loss[:]+=overlap;by_person.setdefault(str(item['employee_id']),[]).append(item)
-    def place(row,kind,duration,a,b,mandatory=False,probe=False):
+    def place(row,kind,duration,a,b,mandatory=False,probe=False,target=None):
         if duration<=0:return True
         eid=str(row['employee_id']);best=None;rule=cfg.get('groups',{}).get(lookup.get(eid,{}).get('work_type'),{})
         indices=np.flatnonzero((stamps+np.timedelta64(30,'m')>np.datetime64(a))&(stamps<np.datetime64(b)))
@@ -103,16 +103,20 @@ def plan(state,rows,coverage,people,used=None):
             previous_breaks=[old for old in by_person.get(eid,[]) if old.get('kind')=='Mola'] if kind=='Mola' else []
             spread=min((max(0,(t-pd.Timestamp(old['end'])).total_seconds()/60,(pd.Timestamp(old['start'])-finish).total_seconds()/60) for old in previous_breaks),default=(b-a).total_seconds()/60)
             center=abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds())
+            target_distance=abs((t+(finish-t)/2-target).total_seconds()) if target is not None else center
             # Shrinkage butcesi icindeki birden fazla secenek ayni maliyete
             # sahip olabilir. Bu durumda mevcut kaybi en az yogunlastiran
             # aralik secilir; ekip molalari tek bir saate yigmaz.
             concentration=float(np.square(local_loss+overlap).sum())
-            candidate=(cost,concentration,preference_penalty,-spread,center,t,finish,overlap)
-            if best is None or candidate[:5]<best[:5]:best=candidate
+            # Mola parçalarında vardiya boyunca eşit aralıklı hedefler önce gelir.
+            # Böylece kapasitesi eşdeğer seçenekler vardiyanın ortasına yığılmaz.
+            score=(cost,target_distance,concentration,preference_penalty,-spread,center) if kind=='Mola' else (cost,concentration,preference_penalty,-spread,center,0)
+            candidate=score+(t,finish,overlap)
+            if best is None or candidate[:6]<best[:6]:best=candidate
         if best is None:
             if probe:return False
             issues.append({'employee_id':eid,'date':row['date'],'Sorun':kind+' için uygun kapasite/pencere yok; '+('vardiyayı veya ihtiyacı düzenleyin' if mandatory else 'uygun başka döneme ertelendi'),'severity':'error' if mandatory else 'warning','override_required':False});return False
-        _,__,___,____,_____,t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
+        _,__,___,____,_____,______,t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
         if kind=='Mola':
             for bucket in pd.date_range(t.floor('h'),(finish-pd.Timedelta(seconds=1)).floor('h'),freq='h'):hour_use[(eid,bucket)]=hour_use.get((eid,bucket),0)+(min(finish,bucket+pd.Timedelta(hours=1))-max(t,bucket)).total_seconds()/60
         return True
@@ -141,12 +145,15 @@ def plan(state,rows,coverage,people,used=None):
             except MolaKuralHatasi as exc:
                 issues.append({'employee_id':str(row['employee_id']),'date':row['date'],'Sorun':str(exc),'severity':'error','override_required':False});continue
             maximum=min(15,max(1,int(rule.get('break_minutes',15))));chunk=min(maximum,max(1,int(rule.get('break_preferred_minutes',10))))
+            initial_remaining=remaining;part_count=max(1,int(np.ceil(initial_remaining/chunk)));part_index=0
+            window_start=a+pd.Timedelta(minutes=rule.get('break_first_minutes',60));window_end=b-pd.Timedelta(minutes=rule.get('break_last_minutes',60))
             while remaining>0:
                 candidates=range(min(chunk,remaining),0,-1)
                 placed=False
+                target=window_start+(window_end-window_start)*(part_index+1)/(part_count+1)
                 for duration in candidates:
-                    if place(row,'Mola',duration,a+pd.Timedelta(minutes=rule.get('break_first_minutes',60)),b-pd.Timedelta(minutes=rule.get('break_last_minutes',60)),mandatory=True,probe=True):
-                        remaining-=duration;placed=True;break
+                    if place(row,'Mola',duration,window_start,window_end,mandatory=True,probe=True,target=target):
+                        remaining-=duration;part_index+=1;placed=True;break
                 if not placed:
                     issues.append({'employee_id':str(row['employee_id']),'date':row['date'],'Sorun':f'Mola hakkı tamamlanamadı: {remaining} dakika eksik. Vardiya süresi, ilk/son saat ve saatlik mola sınırını düzenleyin.','severity':'error','override_required':False});break
         if cfg.get('coaching_by_leader',False):

@@ -18,13 +18,16 @@ def proposals(state):
     with connect(state['workspace_db_path']) as db:return [dict(loads(r['payload']),status=r['status']) for r in db.execute('SELECT * FROM plan_approvals ORDER BY rowid DESC')]
 
 
-def submit(state,result):
+def submit(state,result,planning_languages=None):
     from ortak.statu_haklari import assert_complete
     assert_complete(state,result)
     if (state.get('profile') or {}).get('position')!='wfm':raise ValueError('Yayına Planlama gönderir.')
-    if state.get('planning_result_fingerprint')!=fingerprint(state):raise ValueError('Taslak değişti; yeniden kontrol edin.')
+    scoped=dict(state)
+    if planning_languages is not None:scoped['planning_languages']=planning_languages
+    scoped_fingerprint=fingerprint(scoped)
+    if planning_languages is None and state.get('planning_result_fingerprint')!=scoped_fingerprint:raise ValueError('Taslak değişti; yeniden kontrol edin.')
     from ortak.planlama_gorunumu import blocking_issues
-    if blocking_issues(result):raise ValueError('Hard ihlaller çözülmeli.')
+    if blocking_issues(result) and not state.get('planning_accept_hard'):raise ValueError('Kesin kural ihlalleri çözülmeli veya planlama onayıyla devam seçeneği işaretlenmeli.')
     for existing in proposals(state):
         old=existing['result'];new=result
         if existing['status']=='Bekliyor' and old['period']['start']<=new['period']['end'] and new['period']['start']<=old['period']['end'] and {p.get('language','tr') for p in old['staff']} & {p.get('language','tr') for p in new['staff']}:raise ValueError('Bu dönem ve dil için onay bekleyen plan var: '+existing['id']+'. Önce sonuçlandırın veya reddedin.')
@@ -33,8 +36,8 @@ def submit(state,result):
     result={k:deepcopy(result[k]) for k in ('plan','coverage','staff','period','issues','rules','breaks') if k in result}
     from ortak.statu_kapasite_raporu import entitlement_snapshot
     result['status_rights']=entitlement_snapshot(state,result['plan'],result['staff'])
-    context={k:deepcopy(state[k]) for k in ('planning_demand_language','plan_ctx','plan_ctx_confirmed','planning_languages','planning_exam_hours','planning_exclude_early_hours','planning_bypass','planning_accept_soft','employees_cache') if k in state}
-    item={'id':'APR-'+uuid4().hex[:12],'fingerprint':fingerprint(state),'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
+    context={k:deepcopy(scoped[k]) for k in ('planning_demand_language','plan_ctx','plan_ctx_confirmed','planning_languages','planning_exam_hours','planning_exclude_early_hours','planning_bypass','planning_accept_soft','planning_accept_hard','employees_cache') if k in scoped}
+    item={'id':'APR-'+uuid4().hex[:12],'fingerprint':scoped_fingerprint,'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
     baseline=dict(state.get('workspace_baseline',{}))
     with connect(path) as db:
         db.execute('BEGIN IMMEDIATE')

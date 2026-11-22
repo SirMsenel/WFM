@@ -215,10 +215,13 @@ def collect_inputs(state):
                     try:
                         clock=str(row.get('Saat','')).strip();end_clock=str(row.get('Bitiş','')).strip()
                         if '-' in clock and not end_clock:clock,end_clock=clock.split('-',1)
-                        if clock and end_clock:
-                            a,b=minutes(clock),minutes(end_clock)
+                        if clock:
+                            a=minutes(clock)
+                            default_minutes=int(school.get('exam_default_minutes',120))
+                            b=minutes(end_clock) if end_clock else a+default_minutes
                             if b<=a:raise ValueError('Sınav bitişi başlangıçtan sonra olmalı')
                             begin,finish=base+timedelta(minutes=a),base+timedelta(minutes=b)
+                        else:raise ValueError('Sınav başlangıç saati boş')
                     except ValueError:
                         problem({'employee':user,'date':str(exam.date())},'Sınav saati okunamadı; gün tamamen kapalı tutuldu')
                 unavailable.setdefault(eid,[]).append((begin,finish))

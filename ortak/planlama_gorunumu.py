@@ -81,6 +81,40 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
         metric_cards([('Statülere ayrılan pay',f'%{budget_rate:.1f}'),('Ayrılan payın kullanımı',f'%{use_rate:.1f}'),('Kapasite aşımı','Yok' if not (over>1e-8).any() else f'{int((over>1e-8).sum())} zaman aralığı')])
         if (over>1e-8).any():st.warning('Bazı yarım saatlerde statü süresi shrinkage bütçesini aşıyor. Bu aşım kapasiteden ayrıca düşüldü; yukarıdaki eksik hesabına dahildir.')
         else:st.caption('Planlanan statüler seçilen shrinkage bütçesi içinde; kapasiteden ikinci kez düşülmez.')
+    workload_efficiency_summary(result)
+
+
+def workload_efficiency_summary(result,title='Planlanan Süre, Çağrı Kapasitesi ve Verimlilik'):
+    """Taslak ve onay ekranlarında aynı, insan-okur süre özetini göster."""
+    from modules.vardiya_plani.vardiya_motoru import bounds
+    from ortak.modern_kartlar import metric_cards
+    plan=result.get('plan',[]);items=[r for r in result.get('breaks',[]) if r.get('status')!='İptal']
+    work_minutes=sum((span[1]-span[0]).total_seconds()/60 for row in plan if (span:=bounds(row)))
+    def item_minutes(kind):
+        return sum((pd.Timestamp(row['end'])-pd.Timestamp(row['start'])).total_seconds()/60 for row in items if row.get('kind')==kind and row.get('start') and row.get('end'))
+    meal_minutes=item_minutes('Yemek');break_minutes=item_minutes('Mola')
+    coaching_minutes=item_minutes('Koçluk')
+    open_coaching=sum((pd.Timestamp(row['end'])-pd.Timestamp(row['start'])).total_seconds()/60*int(row.get('remaining_capacity',row.get('capacity',1))) for row in items if row.get('kind')=='Koçluk Alanı' and row.get('start') and row.get('end'))
+    rules=result.get('rules',{}).get('work_type',{});people={str(p['employee_id']):p for p in result.get('staff',[])}
+    report_minutes=0.
+    for row in plan:
+        if row.get('shift_code')!='RAPOR':continue
+        group=people.get(str(row.get('employee_id')),{ }).get('work_type');rule=rules.get(group,{})
+        report_minutes+=60*float(rule.get('shift_total_hours',rule.get('shift_total_hours_max',0)) or 0)
+    coverage=result.get('coverage',pd.DataFrame());net_minutes=0.
+    if not coverage.empty:
+        counted=coverage[coverage['Sayaca Dahil']] if 'Sayaca Dahil' in coverage else coverage
+        source='Net Agent' if 'Net Agent' in counted else 'İhtiyaç';net_minutes=float(pd.to_numeric(counted[source],errors='coerce').fillna(0).clip(lower=0).sum())*30
+    planned_loss=meal_minutes+break_minutes+coaching_minutes+report_minutes
+    call_minutes=max(0.,work_minutes-planned_loss)
+    utilization=100*min(call_minutes,net_minutes)/call_minutes if call_minutes else 0.
+    def duration(value):
+        value=max(0,int(round(value)));hours,minutes=divmod(value,60)
+        return f'{hours} sa {minutes:02d} dk' if hours else f'{minutes} dk'
+    st.markdown('#### '+title)
+    cards=[('Planlanan toplam çalışma',duration(work_minutes)),('Net çağrı ihtiyacı',duration(net_minutes)),('Yemek',duration(meal_minutes)),('Mola',duration(break_minutes)),('Koçluk',duration(coaching_minutes)),('Rapor',duration(report_minutes)),('Çağrıda beklenen süre',duration(call_minutes)),('Ortalama kapasite kullanımı',f'%{utilization:.1f}')]
+    metric_cards(cards[:4]);metric_cards(cards[4:])
+    st.caption(f'Açık koçluk kapasitesi: {duration(open_coaching)} · Planlanan kayıp süresi çalışma süresinden düşülerek çağrıda beklenen süre hesaplanır.')
 
 
 def roster_summary(result,title='Grup Bazlı Plan Özeti'):
@@ -90,15 +124,24 @@ def roster_summary(result,title='Grup Bazlı Plan Özeti'):
     staff=result.get('staff',[]);rows=result.get('plan',[]);people={str(p['employee_id']):p for p in staff}
     if not rows:return
     st.markdown('### '+title)
-    work=[r for r in rows if bounds(r) is not None];totals={'Aktif kapasite':len(staff),'Planlanan kişi':len({str(r['employee_id']) for r in work}),'OFF':sum(r.get('shift_code')=='OFF' for r in rows),'Gece':sum(r.get('shift_code')=='GECE' for r in rows),'Yıllık izin':sum(r.get('shift_code')=='YILLIK_IZIN' for r in rows),'Rapor':sum(r.get('shift_code')=='RAPOR' for r in rows)}
+    work=[r for r in rows if bounds(r) is not None];totals={'Aktif kapasite':len(staff),'Toplam personel':len({str(r['employee_id']) for r in rows}),'OFF':sum(r.get('shift_code')=='OFF' for r in rows),'Gece':sum(r.get('shift_code')=='GECE' for r in rows),'Yıllık izin':sum(r.get('shift_code')=='YILLIK_IZIN' for r in rows),'Rapor':sum(r.get('shift_code')=='RAPOR' for r in rows)}
     from ortak.modern_kartlar import metric_cards
-    metric_cards([(label,totals[label]) for label in ['Aktif kapasite','Planlanan kişi','OFF','Gece','Yıllık izin','Rapor']])
+    metric_cards([(label,totals[label]) for label in ['Aktif kapasite','Toplam personel','OFF','Gece','Yıllık izin','Rapor']])
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     table=[]
     for raw_day in sorted({str(r.get('date'))[:10] for r in rows if r.get('date')}):
         chosen=[r for r in rows if str(r.get('date'))[:10]==raw_day]
-        table.append({'Tarih':pd.Timestamp(raw_day).strftime('%d.%m.%Y'),'Gün':DAY_NAMES[pd.Timestamp(raw_day).weekday()],'Planlanan kişi':len({str(r['employee_id']) for r in chosen if bounds(r) is not None}),'Çalışma kaydı':sum(bounds(r) is not None for r in chosen),'OFF':sum(r.get('shift_code')=='OFF' for r in chosen),'Gece':sum(r.get('shift_code')=='GECE' for r in chosen),'Yıllık izin':sum(r.get('shift_code')=='YILLIK_IZIN' for r in chosen),'Rapor':sum(r.get('shift_code')=='RAPOR' for r in chosen)})
-    view=pd.DataFrame(table).style.format(precision=0).background_gradient(subset=['Çalışma kaydı'],cmap='BuGn').background_gradient(subset=['OFF'],cmap='Blues').background_gradient(subset=['Gece'],cmap='Purples')
+        by_person={str(r['employee_id']):r for r in chosen};counts={'Çalışma':0,'OFF':0,'Gece':0,'Yıllık izin':0,'Rapor':0,'Diğer statü':0}
+        for row in by_person.values():
+            code=row.get('shift_code')
+            if code=='GECE':counts['Gece']+=1
+            elif bounds(row) is not None:counts['Çalışma']+=1
+            elif code=='OFF':counts['OFF']+=1
+            elif code=='YILLIK_IZIN':counts['Yıllık izin']+=1
+            elif code=='RAPOR':counts['Rapor']+=1
+            else:counts['Diğer statü']+=1
+        table.append({'Tarih':pd.Timestamp(raw_day).strftime('%d.%m.%Y'),'Gün':DAY_NAMES[pd.Timestamp(raw_day).weekday()],'Toplam personel':sum(counts.values()),**counts})
+    view=pd.DataFrame(table).style.format(precision=0).background_gradient(subset=['Çalışma'],cmap='BuGn').background_gradient(subset=['OFF'],cmap='Blues').background_gradient(subset=['Gece'],cmap='Purples')
     st.dataframe(view,hide_index=True,use_container_width=True)
 
 

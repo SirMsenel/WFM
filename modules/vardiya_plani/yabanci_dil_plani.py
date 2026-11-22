@@ -1,4 +1,5 @@
 """Yabancı dil ihtiyacını ve vardiya taslağını ana plandan bağımsız yönetir."""
+from copy import deepcopy
 import pandas as pd
 import streamlit as st
 
@@ -24,8 +25,15 @@ def _build(state,lang,demand):
     order=[g for g in state.get('plan_group_priority',[]) if g in state['shift_rules']['work_type']]
     if set(order)!=set(state['shift_rules']['work_type']):order=list(state['shift_rules']['work_type'])
     ctx=state['plan_ctx']
-    result=generate_plan(staff,demand,state['shift_rules'],order,ctx['start'],ctx['end'],fixed=fixed,history=history,unavailable=unavailable,strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=check['planning_languages'],exclude_early_hours=state.get('planning_exclude_early_hours',False),auto_night=state.get('shift_rules',{}).get('night',{}).get('auto_fill',True))
-    result['issues']=issues+result['issues'];result['staff']=staff;result['period']={'start':str(ctx['start']),'end':str(ctx['end'])}
+    # Dil planı kendi ihtiyaç tablosuna birebir uyar; ana plandaki kontrollü
+    # fazla personel ve 07:00/gece kotaları ikinci bir kişiyi ekleyemez.
+    scoped_rules=deepcopy(state['shift_rules']);scoped_rules.setdefault('capacity',{})['max_overstaff']=0
+    scoped_rules.setdefault('boosts',{})['weekday_0700_fulltime_extra_enabled']=False
+    result=generate_plan(staff,demand,scoped_rules,order,ctx['start'],ctx['end'],fixed=fixed,history=history,unavailable=unavailable,strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=check['planning_languages'],exclude_early_hours=state.get('planning_exclude_early_hours',False),auto_night=False)
+    from ortak.statuler import meal_plan
+    statuses,coverage,status_issues=meal_plan(state,result['plan'],result['coverage'],staff)
+    result['breaks']=statuses;result['coverage']=coverage
+    result['issues']=issues+result['issues']+status_issues;result['staff']=staff;result['period']={'start':str(ctx['start']),'end':str(ctx['end'])}
     return result
 
 
@@ -86,3 +94,22 @@ def render():
         _transfer(s,lang,result,chosen);st.success(f'{len(chosen)} personelin {LABELS[lang]} vardiyası ana taslağa aktarıldı ve ana motorun aday havuzundan çıkarıldı.');st.rerun()
     if b.button('Tüm Dil Planını Ana Plana Aktar',key='foreign_transfer_all_'+lang,use_container_width=True):
         _transfer(s,lang,result,list(people));st.success(f'{LABELS[lang]} planının tamamı ana taslağa aktarıldı.');st.rerun()
+    st.markdown('#### Bağımsız Dil Planı Yayını')
+    st.caption('Bu seçenek planı ana Türkçe motoruna yeniden hesaplatmadan yalnızca seçili dil için onaylar/yayınlar.')
+    approvals=s.get('shift_rules',{}).get('publication_approvals',{}).get('enabled')
+    label='Dil Planını Yayın Onayına Gönder' if approvals else 'Dil Planını Doğrudan Yayınla'
+    if st.button(label,key='foreign_publish_'+lang,type='primary',use_container_width=True):
+        scope={'tr':False,'en':lang=='en','ar':lang=='ar'}
+        try:
+            if approvals:
+                from ortak.yayin_onaylari import submit
+                ident=submit(s,result,planning_languages=scope);st.success('Bağımsız dil planı onaya gönderildi: '+ident)
+            else:
+                from modules.vardiya_plani.planlama_verileri import fingerprint
+                from ortak.yayin_servisi import publish_plan
+                original=deepcopy(s.get('planning_languages'));check=dict(s);check['planning_languages']=scope;check['planning_result_fingerprint']=fingerprint(check)
+                publish_plan(check,result)
+                for key in ('published_shift_plan','last_publication','trk_requests','workspace_baseline'):
+                    if key in check:s[key]=check[key]
+                s['planning_languages']=original;save_keys(s);st.success(LABELS[lang]+' planı bağımsız olarak yayınlandı.')
+        except (ValueError,OSError) as exc:st.error(str(exc))

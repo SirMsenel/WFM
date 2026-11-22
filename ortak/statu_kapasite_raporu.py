@@ -173,11 +173,17 @@ def render_approval_capacity(rights,items,openings,start,end,key):
     days=list(pd.date_range(start,end));day=st.selectbox('Dağılım günü',days,format_func=lambda t:t.strftime('%d.%m.%Y'),key=key+'_day') if len(days)>1 else pd.Timestamp(start)
     table=slot_capacity(items,openings,day)[['Yemek kullanan kişi','Mola kullanan kişi','Açık koçluk kontenjanı']]
     try:
-        import plotly.express as px
-        chart=table.reset_index(names='Saat');chart['Saat']=chart['Saat'].dt.strftime('%H:%M')
-        long=chart.melt('Saat',var_name='Statü',value_name='Kişi / kontenjan')
-        fig=px.line(long,x='Saat',y='Kişi / kontenjan',color='Statü',markers=True,color_discrete_map={'Yemek kullanan kişi':'#258f94','Mola kullanan kişi':'#7c69b0','Açık koçluk kontenjanı':'#3a8d60'})
-        fig.update_layout(height=330,margin=dict(l=15,r=15,t=30,b=20),legend=dict(orientation='h',y=1.14),plot_bgcolor='#fbfdfe',hovermode='x unified');fig.update_xaxes(nticks=16)
+        import plotly.graph_objects as go
+        colors={'Yemek kullanan kişi':'#258f94','Mola kullanan kişi':'#7c69b0','Açık koçluk kontenjanı':'#3a8d60'};fig=go.Figure()
+        frames={str(pd.Timestamp(d).date()):slot_capacity(items,openings,d)[list(colors)] for d in days}
+        for status,color in colors.items():
+            xs=[];ys=[];zs=[];texts=[]
+            for index,d in enumerate(days):
+                frame=frames[str(pd.Timestamp(d).date())]
+                for slot,(stamp,value) in enumerate(frame[status].items(),1):xs.append(slot);ys.append(index);zs.append(float(value));texts.append(f'{pd.Timestamp(d):%d.%m.%Y} · {stamp:%H:%M}')
+                xs.append(None);ys.append(None);zs.append(None);texts.append('')
+            fig.add_trace(go.Scatter3d(x=xs,y=ys,z=zs,mode='lines+markers',name=status,line=dict(color=color,width=5),marker=dict(size=2),text=texts,hovertemplate='%{text}<br>Kişi/kontenjan: %{z:.0f}<extra>%{fullData.name}</extra>'))
+        fig.update_layout(height=460,margin=dict(l=5,r=5,t=30,b=5),legend=dict(orientation='h',y=1.02),scene=dict(xaxis=dict(title='30 dk dilim',tickvals=[1,9,17,25,33,41,48],ticktext=['00:00','04:00','08:00','12:00','16:00','20:00','23:30']),yaxis=dict(title='Gün',tickvals=list(range(len(days))),ticktext=[pd.Timestamp(d).strftime('%d.%m') for d in days]),zaxis=dict(title='Kişi / kontenjan'),bgcolor='#fbfdfe'))
         st.plotly_chart(fig,use_container_width=True,key=key+'_status_lines')
     except Exception:
         st.line_chart(table,color=['#258f94','#7c69b0','#3a8d60'])

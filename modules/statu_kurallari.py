@@ -52,17 +52,34 @@ def render():
                     rule['break_min_gap_minutes']=number('İki mola arasında en az süre (dk)',0,180,int(rule.get('break_min_gap_minutes',15)),5,key='break_gap_'+group)
                     rule['break_preferred_minutes']=number('Tercih edilen mola parçası (dk)',1,min(15,int(rule['break_minutes'])),min(int(rule.get('break_preferred_minutes',10)),int(rule['break_minutes'])),1,key='break_preferred_'+group)
                     rules=rule.get('break_rules',[{'min_hours':0,'max_hours':3.5,'minutes':15},{'min_hours':3.5,'max_hours':24,'minutes':30}])
-                    hour_values=[i/2 for i in range(49)];hour_labels={value:f'{value:g} saat' for value in hour_values};hour_lookup={label:value for value,label in hour_labels.items()}
-                    minute_values=list(range(0,241,5));minute_labels={value:f'{value} dk' for value in minute_values};minute_lookup={label:value for value,label in minute_labels.items()}
-                    nearest_hour=lambda value:min(hour_values,key=lambda option:abs(option-float(value)))
-                    nearest_minute=lambda value:min(minute_values,key=lambda option:abs(option-int(value)))
-                    df=pd.DataFrame([{'Alt sınır (hariç)':hour_labels[nearest_hour(row.get('min_hours',0))],'Üst sınır (dahil)':hour_labels[nearest_hour(row.get('max_hours',24))],'Mola hakkı':minute_labels[nearest_minute(row.get('minutes',0))]} for row in rules])
+                    hour_values=[i/2 for i in range(49)];hour_labels={value:f'{value:g} saat' for value in hour_values}
+                    minute_values=list(range(0,241,5));minute_labels={value:f'{value} dk' for value in minute_values}
+                    def nearest_hour(value):
+                        try:return min(hour_values,key=lambda option:abs(option-float(value)))
+                        except (TypeError,ValueError):return 0.
+                    def nearest_minute(value):
+                        try:return min(minute_values,key=lambda option:abs(option-int(value)))
+                        except (TypeError,ValueError):return 0
+                    rows_key='_break_rule_rows_'+group
+                    if rows_key not in s:
+                        s[rows_key]=[{'id':index+1,'min_hours':nearest_hour(row.get('min_hours',0)),'max_hours':nearest_hour(row.get('max_hours',24)),'minutes':nearest_minute(row.get('minutes',0))} for index,row in enumerate(rules)]
+                    rows=list(s[rows_key]);converted=[]
                     with st.container(border=True):
-                        table=st.data_editor(df,num_rows='dynamic',hide_index=True,use_container_width=True,key='break_rules_select_'+group,column_config={'Alt sınır (hariç)':st.column_config.SelectboxColumn('Alt sınır (hariç)',options=list(hour_lookup),required=True,width='medium'),'Üst sınır (dahil)':st.column_config.SelectboxColumn('Üst sınır (dahil)',options=list(hour_lookup),required=True,width='medium'),'Mola hakkı':st.column_config.SelectboxColumn('Toplam mola hakkı',options=list(minute_lookup),required=True,width='medium')})
-                    converted=[]
-                    for row in table.to_dict('records'):
-                        if any(pd.isna(row.get(column)) for column in table.columns):converted.append({'min_hours':None,'max_hours':None,'minutes':None})
-                        else:converted.append({'min_hours':hour_lookup[row['Alt sınır (hariç)']],'max_hours':hour_lookup[row['Üst sınır (dahil)']],'minutes':minute_lookup[row['Mola hakkı']]})
+                        st.markdown('<div style="font-size:12px;font-weight:750;color:#58717c;margin-bottom:8px">ÇALIŞMA SÜRESİNE GÖRE TOPLAM MOLA HAKKI</div>',unsafe_allow_html=True)
+                        remove=None;updated=[]
+                        for index,row in enumerate(rows):
+                            rid=int(row['id']);c1,c2,c3,c4=st.columns([1.35,1.35,1.25,.32],vertical_alignment='bottom',gap='small')
+                            lower=c1.selectbox('Alt sınır (hariç)',hour_values,index=hour_values.index(nearest_hour(row['min_hours'])),format_func=lambda value:hour_labels[value],key=f'break_lower_{group}_{rid}')
+                            upper=c2.selectbox('Üst sınır (dahil)',hour_values,index=hour_values.index(nearest_hour(row['max_hours'])),format_func=lambda value:hour_labels[value],key=f'break_upper_{group}_{rid}')
+                            total=c3.selectbox('Toplam mola hakkı',minute_values,index=minute_values.index(nearest_minute(row['minutes'])),format_func=lambda value:minute_labels[value],key=f'break_total_{group}_{rid}')
+                            if c4.button('×',key=f'break_delete_{group}_{rid}',help='Satırı sil'):remove=rid
+                            updated.append({'id':rid,'min_hours':lower,'max_hours':upper,'minutes':total})
+                        if st.button('＋ Yeni aralık',key='break_add_'+group,use_container_width=True):
+                            next_id=max([r['id'] for r in updated],default=0)+1
+                            updated.append({'id':next_id,'min_hours':updated[-1]['max_hours'] if updated else 0.,'max_hours':24.,'minutes':0});s[rows_key]=updated;st.rerun()
+                        if remove is not None:s[rows_key]=[row for row in updated if row['id']!=remove];st.rerun()
+                        s[rows_key]=updated
+                    converted=[{'min_hours':row['min_hours'],'max_hours':row['max_hours'],'minutes':row['minutes']} for row in s[rows_key]]
                     rule['break_rules']=converted
 
                 else:
@@ -93,5 +110,7 @@ def render():
     s['status_rules_edit']=cfg
     if st.button('Statü Kurallarını Kaydet',key='status_save'):
         try:
-            validate(cfg);s['status_rules']=cfg;s['shift_rules']['friday']={'prefer_women_midday':cfg['friday'].get('prefer_women_midday',True),'block_men_midday':False,'group_rules':cfg['friday'].get('group_rules',{})};save_keys(s);st.success('Statü hakları kaydedildi. Saatler yeni vardiya planıyla otomatik oluşur.')
+            validate(cfg);s['status_rules']=cfg;s['shift_rules']['friday']={'prefer_women_midday':cfg['friday'].get('prefer_women_midday',True),'block_men_midday':False,'group_rules':cfg['friday'].get('group_rules',{})};save_keys(s)
+            for group in ('fulltime','akademi','dis_kaynak'):s.pop('_break_rule_rows_'+group,None)
+            st.success('Statü hakları kaydedildi. Saatler yeni vardiya planıyla otomatik oluşur.')
         except (ValueError,TypeError,KeyError) as e:st.warning(str(e))

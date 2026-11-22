@@ -93,5 +93,31 @@ sections('nav_demo',{'Oluştur':first,'Taslak':lambda:st.write('Taslak ekranı')
         state['language_demand_inclusion']['en']=True
         self.assertEqual(demand(state).iloc[0]['Planlanan Agent'],12)
 
+    def test_foreign_language_plan_never_exceeds_its_own_need(self):
+        from test_planning_round2 import Round2LogicTests
+        from modules.vardiya_plani.yabanci_dil_plani import _build
+        state=Round2LogicTests().state();state.update(plan_ctx_confirmed=True,plan_group_priority=list(state['shift_rules']['work_type']))
+        for person in state['employees_cache']:person['language']='en'
+        need=state['sp_staffing_result_df'].copy();need['Planlanan Agent']=1
+        result=_build(state,'en',need)
+        self.assertLessEqual(result['coverage']['Atanan'].max(),1)
+
+
+class CurrentRosterRegressionTests(unittest.TestCase):
+    def test_break_rule_selection_survives_first_rerun(self):
+        from streamlit.testing.v1 import AppTest
+        from ortak.statuler import defaults
+        from test_planning import rules
+        at=AppTest.from_string('from modules.statu_kurallari import render\nrender()',default_timeout=30)
+        at.session_state['status_rules']=dict(defaults(),enabled=True);at.session_state['shift_rules']=rules();at.run()
+        at.segmented_control(key='status_kind').set_value('Mola').run();at.selectbox(key='break_total_fulltime_1').set_value(20).run()
+        self.assertFalse(at.exception);self.assertEqual(at.selectbox(key='break_total_fulltime_1').value,20);self.assertEqual(at.session_state['_break_rule_rows_fulltime'][0]['minutes'],20)
+
+    def test_unapplied_simulated_request_is_rejected_when_period_is_published(self):
+        from ortak.talep_simulasyonu import finalize_in_memory
+        state={'trk_requests':[{'id':'r1','queue':'SIMULATION','status':'Simülasyonda','employee_id':'1','type':'Yıllık İzin Talebi','start_date':str(DAY),'end_date':str(DAY),'events':[]}]}
+        finalize_in_memory(state,[row('1',DAY)],str(DAY),str(DAY),'planner')
+        self.assertEqual(state['trk_requests'][0]['status'],'Reddedildi');self.assertEqual(state['trk_requests'][0]['queue'],'Closed')
+
 
 if __name__=='__main__':unittest.main()

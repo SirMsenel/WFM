@@ -126,9 +126,14 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         issues.append({"source":row.get("source"),"start":row.get("start"),"end":row.get("end"),"shift_code":row.get("shift_code"),"employee_id": str(row.get("employee_id", "")),
                        "date": str(row.get("date", "")), "Sorun": reason,"severity":"warning" if str(reason).startswith("Soft kural:") else "error","override_required":bool(groups.get(staff.get(str(row.get("employee_id")),{}).get("work_type"),{}).get("override_required_if_violate",True))})
 
+    index_cache={}
     def indices(interval):
         a, b = map(lambda x: np.datetime64(x, "m"), interval)
-        return np.flatnonzero((stamp >= a) & (stamp + np.timedelta64(30, "m") <= b))
+        key=(int(a.astype('int64')),int(b.astype('int64')))
+        cached=index_cache.get(key)
+        if cached is None:
+            cached=np.flatnonzero((stamp >= a) & (stamp + np.timedelta64(30, "m") <= b));index_cache[key]=cached
+        return cached
 
     def violations(row, prior):
         eid = str(row["employee_id"])
