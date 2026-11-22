@@ -11,7 +11,7 @@ from modules.vardiya_plani.vardiya_motoru import minutes
 from ortak.planlama import LEAVE_LABELS,REQUEST_CODES,school_term
 
 
-SOURCE_KEYS = ("planning_demand_language","language_demands","language_demand_inclusion","foreign_language_transferred_ids","status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "planning_allow_hour_target_override", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
+SOURCE_KEYS = ("planning_demand_language","language_demands","language_demand_inclusion","foreign_language_transferred_ids","foreign_language_reserved_ids","status_rules","academic_transport","planning_bypass","planning_exam_hours", "planning_exclude_early_hours", "planning_languages", "group_hour_targets", "planning_allow_hour_target_override", "plan_ctx", "plan_ctx_confirmed", "shift_rules", "plan_group_priority",
                "employees_cache", "fixed_shift_records", "trk_requests", "plan_overrides",
                "shift_overrides", "acad_schedules", "acad_exam_calendar", 
                "published_shift_plan", "draft_shift_plan", "plan_removed_assignments")
@@ -90,7 +90,14 @@ def collect_inputs(state):
     """Resolve identities exactly. Unsupported/malformed records become blockers."""
     employees = validate_employees(state.get("employees_cache", []))
     included=state.get('planning_languages',{'en':True,'ar':True})
-    excluded={str(e['employee_id']) for e in employees if not included.get(e.get('language'),True)}
+    transferred={str(eid) for ids in (state.get('foreign_language_transferred_ids') or {}).values() for eid in ids}
+    # Eski çalışma alanlarında reserved alanı bulunmayabilir; aktarılanları en
+    # azından koruyarak geriye dönük uyumluluğu sürdür.
+    reserved_source=state.get('foreign_language_reserved_ids') or state.get('foreign_language_transferred_ids') or {}
+    reserved={str(eid) for ids in reserved_source.values() for eid in ids}
+    excluded={str(e['employee_id']) for e in employees
+              if str(e['employee_id']) not in transferred
+              and (str(e['employee_id']) in reserved or not included.get(e.get('language'),True))}
     excluded.update(e.get('username') for e in employees if str(e['employee_id']) in excluded)
     employees=[e for e in employees if str(e['employee_id']) not in excluded]
     lookup = {str(e["employee_id"]): str(e["employee_id"]) for e in employees}

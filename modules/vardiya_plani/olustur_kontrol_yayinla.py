@@ -75,7 +75,7 @@ def render():
                                      context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
                                      strict_capacity=True,hour_targets=() if state.get('planning_allow_hour_target_override') else state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),
                                      auto_night=state.get('shift_rules',{}).get('night',{}).get('auto_fill',True),
-                                     auto_excluded_ids={str(eid) for ids in (state.get('foreign_language_transferred_ids') or {}).values() for eid in ids})
+                                     auto_excluded_ids={str(eid) for ids in ((state.get('foreign_language_reserved_ids') or state.get('foreign_language_transferred_ids') or {})).values() for eid in ids})
                 from ortak.statuler import meal_plan
                 meals,coverage,meal_issues=meal_plan(state,result['plan'],result['coverage'],staff)
                 result['breaks']=meals;result['coverage']=coverage

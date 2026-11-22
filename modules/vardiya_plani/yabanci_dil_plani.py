@@ -54,7 +54,8 @@ def _build(state,lang,demand):
 
 
 def _transfer(state,lang,result,ids):
-    ids={str(eid) for eid in ids};start,end=result['period']['start'],result['period']['end']
+    plan_ids={str(person['employee_id']) for person in result.get('staff',[])}
+    ids={str(eid) for eid in ids}&plan_ids;start,end=result['period']['start'],result['period']['end']
     # Aktarılan personelin aynı dönemdeki eski ana-taslak kaydı kaldırılır;
     # yabancı dil vardiyası tek ve kilitli kaynak olur.
     kept=[r for r in state.get('draft_shift_plan',[]) if not (start<=str(r.get('date'))<=end and (str(r.get('employee_id')) in ids or r.get('source')=='foreign_language_plan' and r.get('language')==lang))]
@@ -63,6 +64,10 @@ def _transfer(state,lang,result,ids):
         if str(row['employee_id']) in ids:moved.append({**row,'source':'foreign_language_plan','language':lang,'note':LABELS[lang]+' planından ana taslağa aktarıldı'})
     state['draft_shift_plan']=kept+moved
     transferred=dict(state.get('foreign_language_transferred_ids') or {});transferred[lang]=sorted(ids);state['foreign_language_transferred_ids']=transferred
+    # Dil taslağındaki bütün personel ana motorun otomatik aday havuzundan
+    # korunur. Yalnızca kullanıcının seçtiği alt kümenin sabit vardiyaları ana
+    # taslağa taşınır ve Türkçe ihtiyacının karşılanmasında sayılır.
+    reserved=dict(state.get('foreign_language_reserved_ids') or {});reserved[lang]=sorted(plan_ids);state['foreign_language_reserved_ids']=reserved
     inclusion=dict(state.get('language_demand_inclusion') or {});inclusion[lang]=False;state['language_demand_inclusion']=inclusion
     for key in ('planning_result','planning_result_fingerprint','_status_plan_cache'):state.pop(key,None)
     save_keys(state)
@@ -106,10 +111,11 @@ def render():
     from ortak.planlama_gorunumu import coverage_summary,roster_summary
     roster_summary(result,LABELS[lang]+' Taslak Özeti');_calendar(result);coverage_summary(result,LABELS[lang]+' İhtiyaç Sonucu')
     people={str(p['employee_id']):p for p in result['staff']};current=(s.get('foreign_language_transferred_ids') or {}).get(lang,[])
-    chosen=st.multiselect('Ana plana aktarılacak personeller',list(people),default=[eid for eid in current if eid in people],format_func=lambda eid:people[eid].get('full_name',eid),key='foreign_transfer_people_'+lang)
+    chosen=st.multiselect('Türkçe ihtiyacından düşülecek personeller',list(people),default=[eid for eid in current if eid in people],format_func=lambda eid:people[eid].get('full_name',eid),key='foreign_transfer_people_'+lang)
+    st.caption('Dil planındaki personeller korunur ve ana motor vardiyalarını değiştiremez. Yalnızca burada seçtiklerinin vardiya kapasitesi ana plandaki Türkçe ihtiyacından düşülür.')
     a,b=st.columns(2)
-    if a.button('Seçili Personelleri Ana Plana Aktar',disabled=not chosen,key='foreign_transfer_selected_'+lang,use_container_width=True):
-        _transfer(s,lang,result,chosen);st.success(f'{len(chosen)} personelin {LABELS[lang]} vardiyası ana taslağa aktarıldı ve ana motorun aday havuzundan çıkarıldı.');st.rerun()
+    if a.button('Seçili Kapasiteyi Ana Plana Aktar',disabled=not chosen,key='foreign_transfer_selected_'+lang,use_container_width=True):
+        _transfer(s,lang,result,chosen);st.success(f'{len(chosen)} personelin kapasitesi Türkçe ihtiyacından düşülecek; dil planındaki diğer personeller korunacak.');st.rerun()
     if b.button('Tüm Dil Planını Ana Plana Aktar',key='foreign_transfer_all_'+lang,use_container_width=True):
         _transfer(s,lang,result,list(people));st.success(f'{LABELS[lang]} planının tamamı ana taslağa aktarıldı.');st.rerun()
     st.markdown('#### Bağımsız Dil Planı Yayını')

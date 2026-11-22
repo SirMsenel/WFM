@@ -113,6 +113,37 @@ sections('nav_demo',{'Oluştur':first,'Taslak':lambda:st.write('Taslak ekranı')
         result=_build(state,'en',need);active=result['coverage'][result['coverage'].Slot.between(17,48)]
         self.assertEqual(active['Eksik'].sum(),0);self.assertFalse(any(record.get('source')=='manual_single' for record in result['plan']))
 
+    def test_only_selected_foreign_person_counts_in_main_plan_and_others_are_reserved(self):
+        from unittest.mock import patch
+        from modules.vardiya_plani.yabanci_dil_plani import _transfer
+        from modules.vardiya_plani.planlama_verileri import collect_inputs
+        from ortak.varsayilan_kurallar import default_shift_rules
+        day=pd.Timestamp('2026-11-23').date()
+        people=[dict(emp('A'),language='en',username='english_only'),dict(emp('B'),language='en',username='bilingual')]
+        result={'staff':people,'period':{'start':str(day),'end':str(day)},'plan':[
+            dict(row('A',day),full_name='English Only'),dict(row('B',day),full_name='Bilingual')]}
+        state={'employees_cache':people,'planning_languages':{'tr':True,'en':False,'ar':False},'plan_ctx':{'start':day,'end':day},
+               'shift_rules':default_shift_rules(),'draft_shift_plan':[],'fixed_shift_records':[],'shift_overrides':[],
+               'published_shift_plan':[],'trk_requests':[],'group_hour_targets':[]}
+        with patch('modules.vardiya_plani.yabanci_dil_plani.save_keys'):_transfer(state,'en',result,['B'])
+        self.assertEqual(state['foreign_language_reserved_ids']['en'],['A','B'])
+        self.assertEqual(state['foreign_language_transferred_ids']['en'],['B'])
+        self.assertEqual({record['employee_id'] for record in state['draft_shift_plan']},{'B'})
+        staff,fixed,_,_,_=collect_inputs(state)
+        self.assertEqual({person['employee_id'] for person in staff},{'B'})
+        self.assertEqual({record['employee_id'] for record in fixed},{'B'})
+
+    def test_reserved_foreign_person_stays_out_even_when_language_toggle_is_on(self):
+        from modules.vardiya_plani.planlama_verileri import collect_inputs
+        from ortak.varsayilan_kurallar import default_shift_rules
+        day=pd.Timestamp('2026-11-23').date()
+        people=[dict(emp('A'),language='en',username='english_only'),dict(emp('B'),language='en',username='other_english')]
+        state={'employees_cache':people,'planning_languages':{'tr':True,'en':True,'ar':True},'foreign_language_reserved_ids':{'en':['A']},
+               'plan_ctx':{'start':day,'end':day},'shift_rules':default_shift_rules(),'draft_shift_plan':[],
+               'fixed_shift_records':[],'shift_overrides':[],'published_shift_plan':[],'trk_requests':[],'group_hour_targets':[]}
+        staff=collect_inputs(state)[0]
+        self.assertEqual({person['employee_id'] for person in staff},{'B'})
+
     def test_demo_exam_fixture_has_and_migrates_end_time(self):
         from ortak.ornek_veri import ensure_demo_exam_end_times
         state={'acad_exam_calendar':{'u1':{'2026-Sinav':{'Tarih':['2026-11-23'],'Saat':['10:00'],'Ders':['Vize']}}}}
