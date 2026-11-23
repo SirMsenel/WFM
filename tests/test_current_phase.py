@@ -156,19 +156,23 @@ _interval_result({"coverage":coverage},"en")
         from modules.vardiya_plani.planlama_verileri import collect_inputs
         from ortak.varsayilan_kurallar import default_shift_rules
         day=pd.Timestamp('2026-11-23').date()
-        people=[dict(emp('A'),language='en',username='english_only'),dict(emp('B'),language='en',username='bilingual')]
-        result={'staff':people,'period':{'start':str(day),'end':str(day)},'plan':[
+        people=[dict(emp('A'),language='en',username='english_only'),dict(emp('B'),language='en',username='bilingual'),dict(emp('C'),language='tr',username='turkish')]
+        result={'staff':people[:2],'period':{'start':str(day),'end':str(day)},'plan':[
             dict(row('A',day),full_name='English Only'),dict(row('B',day),full_name='Bilingual')]}
         state={'employees_cache':people,'planning_languages':{'tr':True,'en':False,'ar':False},'plan_ctx':{'start':day,'end':day},
                'shift_rules':default_shift_rules(),'draft_shift_plan':[],'fixed_shift_records':[],'shift_overrides':[],
-               'published_shift_plan':[],'trk_requests':[],'group_hour_targets':[]}
+               'published_shift_plan':[],'trk_requests':[],'group_hour_targets':[],'foreign_language_plans':{'en':result},
+               'sp_staffing_result_df':pd.DataFrame([{'Tarih':day,'Slot':17,'Planlanan Agent':3.,'Net Agent':2.}])}
         with patch('modules.vardiya_plani.yabanci_dil_plani.save_keys'):_transfer(state,'en',result,['B'])
         self.assertEqual(state['foreign_language_reserved_ids']['en'],['A','B'])
         self.assertEqual(state['foreign_language_transferred_ids']['en'],['B'])
-        self.assertEqual({record['employee_id'] for record in state['draft_shift_plan']},{'B'})
+        self.assertFalse(state['draft_shift_plan'])
         staff,fixed,_,_,_=collect_inputs(state)
-        self.assertEqual({person['employee_id'] for person in staff},{'B'})
-        self.assertEqual({record['employee_id'] for record in fixed},{'B'})
+        self.assertEqual({person['employee_id'] for person in staff},{'C'})
+        self.assertFalse(fixed)
+        from ortak.plan_ihtiyaci import demand
+        counted=demand(state).iloc[0]
+        self.assertEqual(counted['Planlanan Agent'],2);self.assertEqual(counted['Net Agent'],1)
 
     def test_reserved_foreign_person_stays_out_even_when_language_toggle_is_on(self):
         from modules.vardiya_plani.planlama_verileri import collect_inputs
@@ -184,10 +188,9 @@ _interval_result({"coverage":coverage},"en")
     def test_foreign_period_card_reports_only_transferred_capacity(self):
         from modules.vardiya_plani.olustur_kontrol_yayinla import foreign_plan_period_summary
         day=pd.Timestamp('2026-11-23').date()
-        state={'foreign_language_plans':{'en':{'period':{'start':str(day),'end':str(day)},'staff':[emp('A'),emp('B')]}},
-               'foreign_language_transferred_ids':{'en':['B']},'draft_shift_plan':[
-                   dict(row('A',day),source='foreign_language_plan',language='en'),
-                   dict(row('B',day),source='foreign_language_plan',language='en')]}
+        state={'foreign_language_plans':{'en':{'period':{'start':str(day),'end':str(day)},'staff':[emp('A'),emp('B')],
+                                               'plan':[dict(row('A',day),source='auto'),dict(row('B',day),source='auto')]}},
+               'foreign_language_transferred_ids':{'en':['B']},'draft_shift_plan':[]}
         item=foreign_plan_period_summary(state,{'start':day,'end':day},'en')
         self.assertTrue(item['planned']);self.assertEqual(item['planned_people'],2)
         self.assertEqual(item['impact_people'],1);self.assertEqual(item['impact_shifts'],1);self.assertEqual(item['impact_hours'],9)
@@ -213,6 +216,31 @@ class CurrentRosterRegressionTests(unittest.TestCase):
         state={'trk_requests':[{'id':'r1','queue':'SIMULATION','status':'Simülasyonda','employee_id':'1','type':'Yıllık İzin Talebi','start_date':str(DAY),'end_date':str(DAY),'events':[]}]}
         finalize_in_memory(state,[row('1',DAY)],str(DAY),str(DAY),'planner')
         self.assertEqual(state['trk_requests'][0]['status'],'Reddedildi');self.assertEqual(state['trk_requests'][0]['queue'],'Closed')
+
+    def test_publication_finalizes_only_requests_of_published_people(self):
+        from ortak.talep_simulasyonu import finalize_in_memory
+        request=lambda ident,eid:{'id':ident,'queue':'SIMULATION','status':'Simülasyonda','employee_id':eid,'type':'Yıllık İzin Talebi','start_date':str(DAY),'end_date':str(DAY),'events':[]}
+        state={'trk_requests':[request('en-request','1'),request('ar-request','2')]}
+        finalize_in_memory(state,[row('1',DAY)],str(DAY),str(DAY),'planner')
+        by_id={item['id']:item for item in state['trk_requests']}
+        self.assertEqual(by_id['en-request']['queue'],'Closed')
+        self.assertEqual(by_id['ar-request']['queue'],'SIMULATION')
+
+    def test_turkish_coverage_percentage_uses_served_need_and_excludes_disabled_slots(self):
+        from ortak.planlama_gorunumu import coverage_metrics
+        frame=pd.DataFrame([{'İhtiyaç':3,'Atanan':2,'Sayaca Dahil':True},{'İhtiyaç':3,'Atanan':4,'Sayaca Dahil':True},{'İhtiyaç':99,'Atanan':0,'Sayaca Dahil':False}])
+        values=coverage_metrics(frame)
+        self.assertAlmostEqual(values['rate'],5/6);self.assertEqual(values['left'],1);self.assertEqual(values['excess'],1)
+
+    def test_main_engine_can_cross_filled_slots_to_close_a_small_gap(self):
+        from modules.vardiya_plani.vardiya_motoru import generate_plan
+        from test_planning import rules
+        config=rules();config['capacity']={'max_overstaff':0,'recommendation_overstaff_limit':1};config['work_type']['akademi']['min_shift_hours']=4
+        need=demand(count=0,slots=range(1,49));need.loc[need.Slot.isin([33,34]),'Planlanan Agent']=1
+        without=generate_plan([emp('1','akademi')],need,config,list(config['work_type']),DAY,DAY)
+        with_limit=generate_plan([emp('1','akademi')],need,config,list(config['work_type']),DAY,DAY,gap_overstaff_limit=1)
+        self.assertGreater(without['coverage']['Eksik'].sum(),0)
+        self.assertEqual(with_limit['coverage']['Eksik'].sum(),0);self.assertGreater(with_limit['coverage']['Fazla'].sum(),0)
 
     def test_coverage_comparison_uses_gross_assigned_and_shows_ratio_and_delta(self):
         from ortak.planlama_gorunumu import coverage_comparison_matrix,styled_coverage_comparison

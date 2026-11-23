@@ -52,6 +52,14 @@ def source_signature(state,languages=None):
         data[key]=data.get(key) or []
     for key in ('shift_rules','status_rules','staffing_parameters','acad_schedules','acad_exam_calendar'):
         data[key]=data.get(key) or {}
+    # DataFrame çalışma alanına JSON olarak yazılıp geri okunduğunda pandas
+    # dtype metadatası değişebilir; değerler aynıysa onayı eskitmemelidir.
+    if not foreign_only:
+        frame=data.get('sp_staffing_result_df')
+        if hasattr(frame,'to_json'):
+            normalized=frame.copy()
+            if 'Tarih' in normalized:normalized['Tarih']=__import__('pandas').to_datetime(normalized['Tarih'])
+            data['sp_staffing_result_df']=normalized.to_json(date_format='iso',orient='split')
     if not foreign_only:data['directory_revision']=directory_revision(state)
     return hashlib.sha256(dumps(data).encode()).hexdigest()
 

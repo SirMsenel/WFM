@@ -90,14 +90,12 @@ def collect_inputs(state):
     """Resolve identities exactly. Unsupported/malformed records become blockers."""
     employees = validate_employees(state.get("employees_cache", []))
     included=state.get('planning_languages',{'en':True,'ar':True})
-    transferred={str(eid) for ids in (state.get('foreign_language_transferred_ids') or {}).values() for eid in ids}
     # Eski çalışma alanlarında reserved alanı bulunmayabilir; aktarılanları en
     # azından koruyarak geriye dönük uyumluluğu sürdür.
     reserved_source=state.get('foreign_language_reserved_ids') or state.get('foreign_language_transferred_ids') or {}
     reserved={str(eid) for ids in reserved_source.values() for eid in ids}
     excluded={str(e['employee_id']) for e in employees
-              if str(e['employee_id']) not in transferred
-              and (str(e['employee_id']) in reserved or not included.get(e.get('language'),True))}
+              if str(e['employee_id']) in reserved or not included.get(e.get('language'),True)}
     excluded.update(e.get('username') for e in employees if str(e['employee_id']) in excluded)
     employees=[e for e in employees if str(e['employee_id']) not in excluded]
     lookup = {str(e["employee_id"]): str(e["employee_id"]) for e in employees}

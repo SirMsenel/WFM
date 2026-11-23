@@ -25,10 +25,14 @@ def finalize(db,rows,start,end,actor):
     from ortak.calisma_alani_deposu import loads,put_request_in_transaction
     from ortak.planlama import REQUEST_CODES
     bykey={(str(r['employee_id']),r['date']):r for r in rows}
+    published_ids={str(r['employee_id']) for r in rows}
     for record in db.execute('SELECT payload,version FROM requests').fetchall():
         req=loads(record[0])
         if req.get('queue')!='SIMULATION':continue
         code=REQUEST_CODES.get(req['type']);eid=str(req.get('employee_id'));a=req.get('start_date');b=req.get('end_date') or a
+        # Dil planları ayrı yayınlanır. Bir dilin yayını, bu yayında yer
+        # almayan personelin simülasyon talebini kapatmamalıdır.
+        if eid not in published_ids:continue
         if not code or not a:continue
         overlap_start=max(str(start),a);overlap_end=min(str(end),b)
         if overlap_start>overlap_end:continue
@@ -47,9 +51,10 @@ def finalize(db,rows,start,end,actor):
 def finalize_in_memory(state,rows,start,end,actor):
     """Veritabanı kullanılmayan demo oturumunda aynı kesinleştirmeyi uygula."""
     from ortak.planlama import REQUEST_CODES
-    bykey={(str(r['employee_id']),str(r['date'])):r for r in rows};updated=[]
+    bykey={(str(r['employee_id']),str(r['date'])):r for r in rows};published_ids={str(r['employee_id']) for r in rows};updated=[]
     for req in state.get('trk_requests',[]):
         if req.get('queue')!='SIMULATION':updated.append(req);continue
+        if str(req.get('employee_id')) not in published_ids:updated.append(req);continue
         code=REQUEST_CODES.get(req.get('type'));a=req.get('start_date');b=req.get('end_date') or a
         if not code or not a or max(str(start),a)>min(str(end),b):updated.append(req);continue
         matched=set(req.get('committed_dates',[]))

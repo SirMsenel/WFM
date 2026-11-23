@@ -30,15 +30,26 @@ def _ring(column,label,value,portion,color,note=''):
         st.markdown(f'<div style="min-height:226px;padding:15px 11px;border:1px solid {color}2f;border-radius:18px;background:linear-gradient(145deg,{color}0c,#fff);text-align:center"><div style="font-weight:750;font-size:13px;min-height:38px;display:flex;align-items:center;justify-content:center;color:#315363">{escape(label)}</div><div style="width:118px;height:118px;margin:6px auto 10px;border-radius:50%;background:conic-gradient({color} 0deg {degree}deg,#e9eef2 {degree}deg 360deg);display:grid;place-items:center"><div style="width:86px;height:86px;border-radius:50%;background:#fff;display:grid;place-items:center;padding:5px;font-size:17px;font-weight:800;color:#294b5b">{escape(str(value))}</div></div><div style="font-size:11px;color:#71828b;min-height:32px">{escape(note)}</div></div>',unsafe_allow_html=True)
 
 
+def coverage_metrics(coverage):
+    """Yüzde halkalarının kullandığı tek ve test edilebilir hesap."""
+    frame=coverage.copy()
+    if 'Sayaca Dahil' in frame:frame=frame[frame['Sayaca Dahil']]
+    required=pd.to_numeric(frame.get('İhtiyaç',pd.Series(dtype=float)),errors='coerce').fillna(0).clip(lower=0)
+    assigned=pd.to_numeric(frame.get('Atanan',pd.Series(dtype=float)),errors='coerce').fillna(0).clip(lower=0)
+    served=float(pd.concat([assigned,required],axis=1).min(axis=1).sum())
+    needed=float(required.sum());missing=(required-assigned).clip(lower=0);excess=(assigned-required).clip(lower=0);active=required>1e-8
+    return {'needed':needed,'served':served,'left':float(missing.sum()),'excess':float(excess.sum()),
+            'missing':missing,'active':active,'missing_slots':int(((missing>1e-8)&active).sum()),
+            'excess_slots':int((excess>1e-8).sum()),'covered_slots':int(((missing<=1e-8)&active).sum()),
+            'total_slots':int(active.sum()),'rate':served/needed if needed else 1.}
+
+
 def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
     coverage=result['coverage']
     if 'Sayaca Dahil' in coverage:coverage=coverage[coverage['Sayaca Dahil']]
-    needed=float(pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0).clip(lower=0).sum())
-    assigned=pd.to_numeric(coverage['Atanan'],errors='coerce').fillna(0).clip(lower=0)
-    required=pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0).clip(lower=0)
-    served=float(pd.concat([assigned,required],axis=1).min(axis=1).sum());left=max(0.,needed-served)
-    excess=float((assigned-required).clip(lower=0).sum());missing=(required-assigned).clip(lower=0);active=required>1e-8
-    slots=int(((missing>1e-8)&active).sum());excess_slots=int(((assigned-required)>1e-8).sum());covered_slots=int(((missing<=1e-8)&active).sum());total=int(active.sum());rate=served/needed if needed else 1.
+    metrics=coverage_metrics(coverage)
+    needed,served,left,excess=metrics['needed'],metrics['served'],metrics['left'],metrics['excess']
+    missing=metrics['missing'];slots=metrics['missing_slots'];excess_slots=metrics['excess_slots'];covered_slots=metrics['covered_slots'];total=metrics['total_slots'];rate=metrics['rate']
     st.markdown('### '+title)
     first=st.columns(3);second=st.columns(3)
     _ring(first[0],'İhtiyaç karşılama oranı',f'%{100*rate:.1f}',rate,'#14977f','Tüm yarım saatlerde karşılanan toplam ihtiyaç')
@@ -198,8 +209,7 @@ def daily_coverage_summary(result,title='Günlük İhtiyaç Karşılama'):
         current=days[offset:offset+7]
         for col,day in zip(st.columns(len(current)),current):
             frame=coverage[pd.to_datetime(coverage.Tarih).dt.normalize()==pd.Timestamp(day)]
-            if 'Sayaca Dahil' in frame:frame=frame[frame['Sayaca Dahil']]
-            need=float(frame['İhtiyaç'].sum()) if not frame.empty else 0.;served=float(pd.concat([frame['Atanan'],frame['İhtiyaç']],axis=1).min(axis=1).sum()) if not frame.empty else 0.;rate=served/need if need else 1.
+            rate=coverage_metrics(frame)['rate']
             from ortak.cagri_tahmin_servisi import DAY_NAMES
             _ring(col,DAY_NAMES[pd.Timestamp(day).weekday()],f'%{100*rate:.0f}',rate,'#278b83',pd.Timestamp(day).strftime('%d.%m'))
 

@@ -27,9 +27,8 @@ def foreign_plan_period_summary(state,context,lang):
     period=result.get('period') or {}
     planned=str(period.get('start'))==start and str(period.get('end'))==end
     selected={str(eid) for eid in (state.get('foreign_language_transferred_ids') or {}).get(lang,[])}
-    rows=[row for row in state.get('draft_shift_plan',[])
-          if row.get('source')=='foreign_language_plan' and row.get('language')==lang
-          and str(row.get('employee_id')) in selected and start<=str(row.get('date'))<=end]
+    rows=[row for row in result.get('plan',[])
+          if str(row.get('employee_id')) in selected and start<=str(row.get('date'))<=end]
     from modules.vardiya_plani.vardiya_motoru import bounds
     active=[row for row in rows if bounds(row)]
     hours=sum((bounds(row)[1]-bounds(row)[0]).total_seconds()/3600 for row in active)
@@ -114,7 +113,8 @@ def render():
                                      context['start'],context['end'],fixed=fixed,history=history,unavailable=unavailable,
                                      strict_capacity=True,hour_targets=() if state.get('planning_allow_hour_target_override') else state.get('group_hour_targets',[]),languages=state.get('planning_languages'),exclude_early_hours=state.get('planning_exclude_early_hours',False),
                                      auto_night=state.get('shift_rules',{}).get('night',{}).get('auto_fill',True),
-                                     auto_excluded_ids={str(eid) for ids in ((state.get('foreign_language_reserved_ids') or state.get('foreign_language_transferred_ids') or {})).values() for eid in ids})
+                                     auto_excluded_ids={str(eid) for ids in ((state.get('foreign_language_reserved_ids') or state.get('foreign_language_transferred_ids') or {})).values() for eid in ids},
+                                     gap_overstaff_limit=state.get('shift_rules',{}).get('capacity',{}).get('recommendation_overstaff_limit',5))
                 from ortak.statuler import meal_plan
                 # Yabancı dil vardiyaları burada yalnızca Türkçe ihtiyacından
                 # düşülecek yarım saatlik kapasitedir. Kendi yemek/molaları

@@ -45,7 +45,7 @@ def _limit(value):
 
 
 def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
-                  history=(), unavailable=None, auto_fill=True, strict_capacity=True, hour_targets=(), languages=None, exclude_early_hours=False, reject_invalid_sources=(), auto_night=False,auto_excluded_ids=()):
+                  history=(), unavailable=None, auto_fill=True, strict_capacity=True, hour_targets=(), languages=None, exclude_early_hours=False, reject_invalid_sources=(), auto_night=False,auto_excluded_ids=(),gap_overstaff_limit=None):
     """Return plan/coverage/issues. Never mutates caller-owned rows or tables.
 
     Fixed rows are ordered by source precedence. Conflicting rows are reported
@@ -370,10 +370,15 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
         from ortak.off_dagilimi import plan_off_days
         off_days=plan_off_days(members,staff,days,df,plan,rules)
         for day in days:
+            potential_start=np.datetime64(datetime.combine(day,time()),'m')
+            potential_end=np.datetime64(datetime.combine(day,time())+timedelta(minutes=_limit(general.get('global_latest_end','03:00'))),'m')
+            potential_ix=np.flatnonzero((stamp>=potential_start)&(stamp<potential_end)&effective)
+            if not np.any(covered[potential_ix]<required[potential_ix]):continue
             # Least-worked person goes first; ties are stable between reruns.
             def worked(eid):
                 return sum((b[1]-b[0]).total_seconds() for r in by_employee[eid] if (b := bounds(r)))
             for eid in sorted(members, key=lambda e: (0 if friday_priority(e,day) else 1,worked(e),e)):
+                if not np.any(covered[potential_ix]<required[potential_ix]):break
                 if (eid, day) in occupied or (eid,day) in off_days:
                     continue
                 earliest = minutes(general.get("weekend_general_start" if day.weekday() >= 5 else "weekday_general_start", "08:00"))
@@ -403,6 +408,10 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                         if exclude_early_hours:
                             expected=sum(not 180<=((begin+offset)%1440)<480 for offset in range(0,duration,30))
                         allowance=int(rules.get('capacity',{}).get('max_overstaff',0))
+                        # Ana planda parçalı -1 açıkları kapatabilmek için,
+                        # aradaki dolu dilimlerde kontrollü artıya izin verilir.
+                        # Yabancı dil motoru bu parametreyi vermez ve sıfırda kalır.
+                        if gap_overstaff_limit is not None:allowance=max(allowance,int(gap_overstaff_limit))
                         early_quota=group=='fulltime' and day.weekday()<5 and begin==420 and boost.get('weekday_0700_fulltime_extra_enabled')
                         caps=np.full(len(active_ix),allowance,dtype=int)
                         if early_quota:caps[np.asarray([pd.Timestamp(stamp[j]).hour==7 for j in active_ix])]=max(allowance,int(boost.get('weekday_0700_fulltime_extra_count',0)))
