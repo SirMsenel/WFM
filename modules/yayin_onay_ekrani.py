@@ -14,7 +14,7 @@ def render():
     result=item['result']
     from ortak.planlama_gorunumu import coverage_summary,coverage_comparison_matrix,styled_coverage_comparison,roster_summary,daily_gap_summary,daily_coverage_summary,erlang_summary_cards
     roster_summary(result,'Yayınlanacak Planın Personel Özeti')
-    erlang_summary_cards(result)
+    if 'tr' in item.get('languages',[]):erlang_summary_cards(result)
     coverage_summary(result,'Planın Doluluk ve Açık Özeti')
     daily_coverage_summary(result)
     daily_gap_summary(result)

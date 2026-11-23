@@ -30,14 +30,29 @@ def directory_revision(state):
     return str(value).split('|',1)[0] if value is not None else None
 
 
-def source_signature(state):
+def source_signature(state,languages=None):
     """Başka dil taslaklarını değil, planın güvenliğini etkileyen ortak kaynakları izle."""
-    data={key:state.get(key) for key in CRITICAL_KEYS}
+    languages=set(languages or ())
+    foreign_only=bool(languages) and 'tr' not in languages
+    if foreign_only:
+        employees=[row for row in (state.get('employees_cache') or []) if (row.get('language') or 'tr') in languages]
+        ids={str(row.get('employee_id')) for row in employees};users={str(row.get('username')) for row in employees if row.get('username')}
+        def relevant(row):
+            return str(row.get('employee_id',row.get('employee',row.get('created_by','')))) in ids|users
+        data={'employees_cache':employees,'shift_rules':state.get('shift_rules'),'status_rules':state.get('status_rules'),
+              'fixed_shift_records':[row for row in (state.get('fixed_shift_records') or []) if relevant(row)],
+              'shift_overrides':[row for row in (state.get('shift_overrides') or []) if relevant(row)],
+              'trk_requests':[row for row in (state.get('trk_requests') or []) if relevant(row)],
+              'plan_overrides':[row for row in (state.get('plan_overrides') or []) if relevant(row)],
+              'group_hour_targets':state.get('group_hour_targets'),
+              'acad_schedules':{key:value for key,value in (state.get('acad_schedules') or {}).items() if str(key) in ids|users},
+              'acad_exam_calendar':{key:value for key,value in (state.get('acad_exam_calendar') or {}).items() if str(key) in ids|users}}
+    else:data={key:state.get(key) for key in CRITICAL_KEYS}
     for key in ('employees_cache','fixed_shift_records','shift_overrides','trk_requests','plan_overrides','group_hour_targets'):
         data[key]=data.get(key) or []
     for key in ('shift_rules','status_rules','staffing_parameters','acad_schedules','acad_exam_calendar'):
         data[key]=data.get(key) or {}
-    data['directory_revision']=directory_revision(state)
+    if not foreign_only:data['directory_revision']=directory_revision(state)
     return hashlib.sha256(dumps(data).encode()).hexdigest()
 
 
@@ -52,29 +67,33 @@ def proposals(state):
 
 
 def submit(state,result,planning_languages=None):
-    from ortak.statu_haklari import assert_complete
-    assert_complete(state,result)
     if (state.get('profile') or {}).get('position')!='wfm':raise ValueError('Yayına Planlama gönderir.')
     scoped=dict(state)
     if planning_languages is not None:scoped['planning_languages']=planning_languages
     languages={key for key,value in (scoped.get('planning_languages') or {}).items() if value}
     if not languages:languages={p.get('language','tr') for p in result.get('staff',[])}
+    from ortak.yayin_servisi import publication_scope
+    approval_result=publication_scope(result,scoped.get('planning_languages'))
+    from ortak.statu_haklari import assert_complete
+    assert_complete(state,approval_result)
     scoped_fingerprint=fingerprint(scoped)
     if planning_languages is None and state.get('planning_result_fingerprint')!=scoped_fingerprint:raise ValueError('Taslak değişti; yeniden kontrol edin.')
     from ortak.planlama_gorunumu import blocking_issues
-    if blocking_issues(result) and not state.get('planning_accept_hard'):raise ValueError('Kesin kural ihlalleri çözülmeli veya planlama onayıyla devam seçeneği işaretlenmeli.')
+    if blocking_issues(approval_result) and not state.get('planning_accept_hard'):raise ValueError('Kesin kural ihlalleri çözülmeli veya planlama onayıyla devam seçeneği işaretlenmeli.')
     for existing in proposals(state):
         old=existing['result'];new=result
         if existing['status']=='Bekliyor' and old['period']['start']<=new['period']['end'] and new['period']['start']<=old['period']['end'] and approval_languages(existing) & languages:raise ValueError('Bu dönem ve dil için onay bekleyen plan var: '+existing['id']+'. Önce sonuçlandırın veya reddedin.')
-    path=state['workspace_db_path'];init(path);coverage=result['coverage'];coverage=coverage[coverage.get('Sayaca Dahil',True)] if 'Sayaca Dahil' in coverage else coverage
+    path=state['workspace_db_path'];init(path);coverage=approval_result['coverage'];coverage=coverage[coverage.get('Sayaca Dahil',True)] if 'Sayaca Dahil' in coverage else coverage
     total=float(coverage['İhtiyaç'].sum());gap=float(coverage['Eksik'].sum());rate=100*gap/total if total else 0.
-    result={k:deepcopy(result[k]) for k in ('plan','coverage','staff','period','issues','rules','breaks') if k in result}
+    result={k:deepcopy(approval_result[k]) for k in ('plan','coverage','staff','period','issues','rules','breaks') if k in approval_result}
     from ortak.statu_kapasite_raporu import entitlement_snapshot
     result['status_rights']=entitlement_snapshot(state,result['plan'],result['staff'])
     from modules.vardiya_plani.planlama_verileri import SOURCE_KEYS
-    context_keys=set(SOURCE_KEYS)|{'planning_accept_soft','planning_accept_hard'}
+    # fingerprint(), talep seçicisi üzerinden bu tabloyu da okur; onay anındaki
+    # kopya saklanmazsa son yayın adımı sonradan değişen Türkçe hesabı görür.
+    context_keys=set(SOURCE_KEYS)|{'sp_staffing_result_df','planning_accept_soft','planning_accept_hard'}
     context={k:deepcopy(scoped[k]) for k in context_keys if k in scoped}
-    item={'id':'APR-'+uuid4().hex[:12],'fingerprint':scoped_fingerprint,'source_signature':source_signature(state),'languages':sorted(languages),'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
+    item={'id':'APR-'+uuid4().hex[:12],'fingerprint':scoped_fingerprint,'source_signature':source_signature(state,languages),'source_signature_languages':sorted(languages),'languages':sorted(languages),'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
     baseline=dict(state.get('workspace_baseline',{}))
     with connect(path) as db:
         db.execute('BEGIN IMMEDIATE')
@@ -112,7 +131,7 @@ def is_current(state,item):
         revision=db.execute("SELECT value FROM metadata WHERE key='directory_revision'").fetchone() if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone() else None
         current['_directory_revision']=revision[0] if revision else None
         if 'source_signature' not in item:return fingerprint(current_context(state,item,db))==item['fingerprint']
-    return source_signature(current)==item['source_signature']
+    return source_signature(current,item.get('source_signature_languages'))==item['source_signature']
 
 
 def vote(state,ident,approve=True,reason=''):
@@ -132,7 +151,7 @@ def vote(state,ident,approve=True,reason=''):
         current['trk_requests']=[loads(source[0]) for source in db.execute('SELECT payload FROM requests')]
         revision=db.execute("SELECT value FROM metadata WHERE key='directory_revision'").fetchone() if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone() else None
         current['_directory_revision']=revision[0] if revision else None
-        current_ok=source_signature(current)==item['source_signature'] if 'source_signature' in item else fingerprint(current_context(state,item,db))==item['fingerprint']
+        current_ok=source_signature(current,item.get('source_signature_languages'))==item['source_signature'] if 'source_signature' in item else fingerprint(current_context(state,item,db))==item['fingerprint']
         if not current_ok:raise ValueError('Taslak güncel değil. Kaynaklar değişti; bu taslağı reddedip güncel planı yeniden oluşturun.')
         if actor in {v['actor'] for v in item['votes']} or (item.get('manager') or {}).get('actor')==actor:raise ValueError('Aynı gerçek kullanıcı ikinci onayı veremez; hesap görünümü değiştirmek bağımsız onay sayılmaz.')
         entry={'actor':actor,'as':profile['username'],'name':profile.get('full_name') or profile['username'],'role':role,'at':now()}

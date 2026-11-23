@@ -13,6 +13,13 @@ from ortak.calisma_alani_deposu import save_keys
 GROUP_LABELS=WORK_LABELS
 
 
+def status_scope(plan,staff,fixed):
+    """Türkçe statülerine, yabancı dilde zaten planlanan kişileri katma."""
+    foreign_ids={str(row['employee_id']) for row in fixed if row.get('source')=='foreign_language_plan'}
+    return ([row for row in plan if str(row.get('employee_id')) not in foreign_ids],
+            [person for person in staff if str(person.get('employee_id')) not in foreign_ids])
+
+
 def foreign_plan_period_summary(state,context,lang):
     """Dönemdeki bağımsız dil planını ve ana plana taşınan net etkisini özetle."""
     start,end=str(context['start']),str(context['end'])
@@ -109,7 +116,11 @@ def render():
                                      auto_night=state.get('shift_rules',{}).get('night',{}).get('auto_fill',True),
                                      auto_excluded_ids={str(eid) for ids in ((state.get('foreign_language_reserved_ids') or state.get('foreign_language_transferred_ids') or {})).values() for eid in ids})
                 from ortak.statuler import meal_plan
-                meals,coverage,meal_issues=meal_plan(state,result['plan'],result['coverage'],staff)
+                # Yabancı dil vardiyaları burada yalnızca Türkçe ihtiyacından
+                # düşülecek yarım saatlik kapasitedir. Kendi yemek/molaları
+                # bağımsız dil planında kalır ve Türkçe statü planına girmez.
+                status_plan,status_staff=status_scope(result['plan'],staff,fixed)
+                meals,coverage,meal_issues=meal_plan(state,status_plan,result['coverage'],status_staff)
                 result['breaks']=meals;result['coverage']=coverage
                 result['issues']=source_issues+result['issues']+meal_issues;result['staff']=staff
                 locked={(str(r['employee_id']),str(r['date'])):(r.get('shift_code'),r.get('start'),r.get('end')) for r in fixed if r.get('source')=='foreign_language_plan'}

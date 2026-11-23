@@ -10,6 +10,15 @@ from ortak.calisma_alani_deposu import save_keys
 LABELS={'en':'İngilizce','ar':'Arapça'}
 
 
+def _foreign_demand(frame):
+    """Yabancı dil motoru yalnızca doğrudan girilen kişi ihtiyacını kullanır."""
+    result=frame[['Tarih','Slot','Planlanan Agent']].copy()
+    result['Tarih']=pd.to_datetime(result['Tarih']).dt.normalize()
+    result['Slot']=pd.to_numeric(result['Slot'],errors='raise').astype(int)
+    result['Planlanan Agent']=pd.to_numeric(result['Planlanan Agent'],errors='raise').fillna(0).clip(lower=0)
+    return result
+
+
 def _calendar(result):
     from ortak.planlama import calendar_grid
     from ortak.vardiya_gorunumu import cell_style
@@ -44,6 +53,7 @@ def _build(state,lang,demand):
     # İzin, gece, talep ve okul kayıtları kendi kaynaklarından yine korunur.
     check['draft_shift_plan']=[]
     staff,fixed,history,unavailable,issues=collect_inputs(check)
+    demand=_foreign_demand(demand)
     order=[g for g in state.get('plan_group_priority',[]) if g in state['shift_rules']['work_type']]
     if set(order)!=set(state['shift_rules']['work_type']):order=list(state['shift_rules']['work_type'])
     ctx=state['plan_ctx']
@@ -66,7 +76,17 @@ def _build(state,lang,demand):
         if best_score is None or score<best_score:result,best_score=candidate,score
         if score[:2]==(0.,0):break
     from ortak.statuler import meal_plan
-    statuses,coverage,status_issues=meal_plan(state,result['plan'],result['coverage'],staff)
+    status_state=dict(state);status_state['slot_shrinkage']=[];status_state['staffing_parameters']={'shrinkage':0};status_state['sp_staffing_result_df']=demand
+    status_state['status_rules']=deepcopy(state.get('status_rules') or {});status_state['status_rules']['shrinkage_included']=False
+    statuses,coverage,status_issues=meal_plan(status_state,result['plan'],result['coverage'],staff)
+    # Yabancı dilde yemek/mola hakları planlanır ancak bu statüler için
+    # shrinkage hesabı yapılmaz; eksik/fazla vardiyaya yazılan kişiyle ölçülür.
+    assigned=pd.to_numeric(coverage.get('Brüt Atanan',coverage['Atanan']),errors='coerce').fillna(0)
+    need=pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0)
+    coverage['Atanan']=assigned;coverage['Ham Eksik']=(need-assigned).clip(lower=0)
+    coverage['Eksik']=coverage['Ham Eksik'];coverage['Fazla']=(assigned-need).clip(lower=0)
+    if 'Sayaca Dahil' in coverage:coverage.loc[~coverage['Sayaca Dahil'],['Eksik','Fazla']]=0
+    coverage=coverage.drop(columns=['Mola kaybı','Shrinkage statü bütçesi','Operasyon rezervi'],errors='ignore')
     result['breaks']=statuses;result['coverage']=coverage
     result['issues']=issues+result['issues']+status_issues;result['staff']=staff;result['period']={'start':str(ctx['start']),'end':str(ctx['end'])}
     return result
@@ -99,13 +119,13 @@ def render():
     if not s.get('plan_ctx_confirmed') or not ctx.get('start') or not ctx.get('end'):st.info('Önce Plan Dönem Seçimi ekranında dönemi onaylayın.');return
     source=s.get('sp_staffing_result_df')
     if source is None:st.info('Önce Personel Hesap ekranında ihtiyaç hesaplayın.');return
-    saved=s.setdefault('language_demands',{}).get(lang);base=source.copy() if saved is None else saved.copy()
+    saved=s.setdefault('language_demands',{}).get(lang);base=_foreign_demand(source if saved is None else saved)
     with st.expander('Bu dilin yarım saatlik personel ihtiyacını tanımla'):
         table=base[['Tarih','Slot','Planlanan Agent']].copy();from ortak.saat_etiketleri import slot_label
         from ortak.cagri_tahmin_servisi import DAY_NAMES
         table['Tarih']=pd.to_datetime(table['Tarih']).dt.normalize();dates=sorted(table['Tarih'].unique());labels={pd.Timestamp(d).strftime('%d.%m')+' '+DAY_NAMES[pd.Timestamp(d).weekday()]:pd.Timestamp(d) for d in dates}
         wide=table.pivot(index='Slot',columns='Tarih',values='Planlanan Agent').reindex(range(1,49));wide.columns=[next(label for label,value in labels.items() if value==pd.Timestamp(d)) for d in wide.columns];wide.insert(0,'Yarım saat',[slot_label(slot) for slot in wide.index]);wide=wide.reset_index(drop=True)
-        st.markdown('<div style="padding:12px 15px;border-radius:14px;background:#eef7f9;border:1px solid #d8e8ed"><b>30 Dakikalık Dil İhtiyacı</b><br><small>Yalnızca vardiyaya yazılacak Planlanan Agent sayısını gir. Net Agent, seçili shrinkage oranından sistem tarafından hesaplanır.</small></div>',unsafe_allow_html=True)
+        st.markdown('<div style="padding:12px 15px;border-radius:14px;background:#eef7f9;border:1px solid #d8e8ed"><b>30 Dakikalık Dil İhtiyacı</b><br><small>Her yarım saat için doğrudan planlanacak kişi sayısını gir. Yabancı dil planında shrinkage veya Erlang C uygulanmaz.</small></div>',unsafe_allow_html=True)
         config={'Yarım saat':st.column_config.TextColumn('Yarım saat',width='small')};config.update({label:st.column_config.NumberColumn(label,min_value=0,step=1,required=True,width='small') for label in labels})
         edited=st.data_editor(wide,disabled=['Yarım saat'],hide_index=True,use_container_width=True,height=640,key='foreign_need_'+lang,column_config=config)
         if st.button('Dil İhtiyacını Kaydet',key='foreign_save_need'):
@@ -114,8 +134,7 @@ def render():
             else:
                 lookup={(str(day.date()),slot):float(values.iloc[slot-1][label]) for label,day in labels.items() for slot in range(1,49)}
                 base['Planlanan Agent']=[lookup[(str(pd.Timestamp(day).date()),int(slot))] for day,slot in zip(base['Tarih'],base['Slot'])]
-                base['Net Agent']=base['Planlanan Agent']*(1-base['Shrinkage (%)']/100) if 'Shrinkage (%)' in base else base['Planlanan Agent']*.7
-                source_map=dict(s['language_demands']);source_map[lang]=base;s['language_demands']=source_map;save_keys(s);st.rerun()
+                source_map=dict(s['language_demands']);source_map[lang]=_foreign_demand(base);s['language_demands']=source_map;save_keys(s);st.rerun()
     saved=s.get('language_demands',{}).get(lang)
     if saved is None:st.info('Bağımsız vardiya taslağı oluşturmak için önce bu dilin ihtiyacını kaydedin.');return
     header,action=st.columns([4,1.25],vertical_alignment='center')
@@ -127,8 +146,13 @@ def render():
         except (ValueError,TypeError,KeyError) as exc:st.error('Dil planı oluşturulamadı: '+str(exc))
     result=(s.get('foreign_language_plans') or {}).get(lang)
     if not result:return
-    from ortak.planlama_gorunumu import coverage_summary,roster_summary
+    from ortak.planlama_gorunumu import coverage_summary,roster_summary,blocking_issues,render_issues
     roster_summary(result,LABELS[lang]+' Taslak Özeti');_calendar(result);coverage_summary(result,LABELS[lang]+' İhtiyaç Sonucu');_interval_result(result,lang)
+    hard=blocking_issues(result)
+    if result.get('issues'):
+        with st.expander('Kural kontrolleri',expanded=bool(hard)):render_issues(result)
+    accepted=True
+    if hard:accepted=st.checkbox('Kesin kural uyarılarını gördüm; bu dil planını Planlama onayıyla göndermek istiyorum',key='foreign_accept_hard_'+lang)
     people={str(p['employee_id']):p for p in result['staff']};current=(s.get('foreign_language_transferred_ids') or {}).get(lang,[])
     chosen=st.multiselect('Türkçe ihtiyacından düşülecek personeller',list(people),default=[eid for eid in current if eid in people],format_func=lambda eid:people[eid].get('full_name',eid),key='foreign_transfer_people_'+lang)
     st.caption('Dil planındaki personeller korunur ve ana motor vardiyalarını değiştiremez. Yalnızca burada seçtiklerinin vardiya kapasitesi ana plandaki Türkçe ihtiyacından düşülür.')
@@ -141,16 +165,17 @@ def render():
     st.caption('Bu seçenek planı ana Türkçe motoruna yeniden hesaplatmadan yalnızca seçili dil için onaylar/yayınlar.')
     approvals=s.get('shift_rules',{}).get('publication_approvals',{}).get('enabled')
     label='Dil Planını Yayın Onayına Gönder' if approvals else 'Dil Planını Doğrudan Yayınla'
-    if st.button(label,key='foreign_publish_'+lang,type='primary',use_container_width=True):
+    if st.button(label,key='foreign_publish_'+lang,type='primary',use_container_width=True,disabled=not accepted):
         scope={'tr':False,'en':lang=='en','ar':lang=='ar'}
         try:
             if approvals:
                 from ortak.yayin_onaylari import submit
-                ident=submit(s,result,planning_languages=scope);st.success('Bağımsız dil planı onaya gönderildi: '+ident)
+                approval_state=dict(s);approval_state['planning_accept_hard']=accepted
+                ident=submit(approval_state,result,planning_languages=scope);s['workspace_baseline']=approval_state.get('workspace_baseline',s.get('workspace_baseline',{}));st.success('Bağımsız dil planı onaya gönderildi: '+ident)
             else:
                 from modules.vardiya_plani.planlama_verileri import fingerprint
                 from ortak.yayin_servisi import publish_plan
-                original=deepcopy(s.get('planning_languages'));check=dict(s);check['planning_languages']=scope;check['planning_result_fingerprint']=fingerprint(check)
+                original=deepcopy(s.get('planning_languages'));check=dict(s);check['planning_languages']=scope;check['planning_accept_hard']=accepted;check['planning_result_fingerprint']=fingerprint(check)
                 publish_plan(check,result)
                 for key in ('published_shift_plan','last_publication','trk_requests','workspace_baseline'):
                     if key in check:s[key]=check[key]

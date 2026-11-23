@@ -126,6 +126,19 @@ _interval_result({"coverage":coverage},"en")
         result=_build(state,'ar',state['sp_staffing_result_df'])
         self.assertEqual({str(person['employee_id']) for person in result['staff']},{'3'})
 
+    def test_foreign_plan_uses_direct_headcount_and_statuses_do_not_create_false_gap(self):
+        from test_planning_round2 import Round2LogicTests
+        from modules.vardiya_plani.yabanci_dil_plani import _build
+        from ortak.statuler import defaults
+        state=Round2LogicTests().state();cfg=defaults();cfg.update(enabled=True,automatic=True,shrinkage_included=True,coaching_by_leader=False)
+        for rule in cfg['groups'].values():rule['coaching_monthly_minutes']=0
+        state.update(plan_ctx_confirmed=True,plan_group_priority=list(state['shift_rules']['work_type']),status_rules=cfg,staffing_parameters={'shrinkage':.45},slot_shrinkage=[{'start_slot':1,'end_slot':48,'rate':.45}],group_hour_targets=[])
+        need=state['sp_staffing_result_df'].assign(**{'Net Agent':.1,'Shrinkage (%)':90,'AHT (sn)':195,'Hedef SL (%)':80})
+        result=_build(state,'en',need)
+        self.assertEqual(result['coverage']['Eksik'].sum(),0);self.assertEqual(result['coverage']['Fazla'].sum(),0)
+        self.assertNotIn('Shrinkage (%)',result['coverage']);self.assertNotIn('Net Agent',result['coverage']);self.assertNotIn('AHT (sn)',result['coverage'])
+        self.assertTrue(any(item['kind']=='Yemek' for item in result['breaks']));self.assertTrue(any(item['kind']=='Mola' for item in result['breaks']))
+
     def test_foreign_plan_reorders_groups_to_close_early_gap_and_ignores_main_draft(self):
         from ortak.varsayilan_kurallar import default_shift_rules
         from modules.vardiya_plani.yabanci_dil_plani import _build
@@ -243,6 +256,34 @@ class CurrentRosterRegressionTests(unittest.TestCase):
         scoped=publication_scope(result,{'tr':True,'en':False,'ar':False})
         self.assertEqual({person['employee_id'] for person in scoped['staff']},{'1'});self.assertEqual({record['employee_id'] for record in scoped['plan']},{'1'})
         self.assertEqual({record['employee_id'] for record in result['plan']},{'1','2'})
+
+    def test_turkish_status_scope_excludes_foreign_capacity_rows(self):
+        from modules.vardiya_plani.olustur_kontrol_yayinla import status_scope
+        people=[dict(emp('1'),language='tr'),dict(emp('2'),language='en')]
+        plan=[row('1',DAY),dict(row('2',DAY),source='foreign_language_plan',language='en')]
+        scoped_plan,scoped_staff=status_scope(plan,people,[plan[1]])
+        self.assertEqual({record['employee_id'] for record in scoped_plan},{'1'});self.assertEqual({person['employee_id'] for person in scoped_staff},{'1'})
+
+    def test_foreign_approval_ignores_turkish_staffing_changes_and_keeps_zero_gap(self):
+        import tempfile
+        from pathlib import Path
+        from test_planning_round2 import Round2LogicTests
+        from modules.vardiya_plani.yabanci_dil_plani import _build
+        from ortak.statuler import defaults
+        from ortak.calisma_alani_deposu import init_db,save_keys
+        from ortak.yayin_onaylari import submit,proposals,is_current,vote
+        with tempfile.TemporaryDirectory() as folder:
+            state=Round2LogicTests().state();cfg=defaults();cfg.update(enabled=True,automatic=True,shrinkage_included=True,coaching_by_leader=False)
+            for rule in cfg['groups'].values():rule['coaching_monthly_minutes']=0
+            state.update(workspace_db_path=str(Path(folder)/'w.db'),profile={'position':'wfm','username':'planner1'},plan_ctx_confirmed=True,plan_group_priority=list(state['shift_rules']['work_type']),status_rules=cfg,group_hour_targets=[],fixed_shift_records=[],shift_overrides=[],trk_requests=[],plan_overrides=[],acad_schedules={},acad_exam_calendar={})
+            init_db(state['workspace_db_path']);save_keys(state)
+            result=_build(state,'en',state['sp_staffing_result_df']);ident=submit(state,result,{'tr':False,'en':True,'ar':False})
+            item=next(record for record in proposals(state) if record['id']==ident)
+            self.assertEqual(item['rate'],0);self.assertTrue(is_current(state,item))
+            state['sp_staffing_result_df']=state['sp_staffing_result_df'].assign(**{'Planlanan Agent':99});state['slot_shrinkage']=[{'start_slot':1,'end_slot':48,'rate':.8}];save_keys(state)
+            item=next(record for record in proposals(state) if record['id']==ident)
+            self.assertTrue(is_current(state,item));self.assertFalse(vote(state,ident))
+            state['profile']={'position':'wfm','username':'planner2'};self.assertTrue(vote(state,ident))
 
     def test_parallel_language_approvals_stay_current_with_display_revision(self):
         import copy,tempfile
