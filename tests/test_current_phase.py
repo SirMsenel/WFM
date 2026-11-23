@@ -102,6 +102,19 @@ sections('nav_demo',{'Oluştur':first,'Taslak':lambda:st.write('Taslak ekranı')
         result=_build(state,'en',need)
         self.assertLessEqual(result['coverage']['Atanan'].max(),1)
 
+    def test_foreign_plan_result_restores_daily_ring_and_interval_list(self):
+        from streamlit.testing.v1 import AppTest
+        at=AppTest.from_string('''
+import pandas as pd
+from modules.vardiya_plani.yabanci_dil_plani import _interval_result
+coverage=pd.DataFrame([{"Tarih":"2026-11-23","Slot":17,"İhtiyaç":2,"Net Agent":1.5,"Atanan":1.5,"Brüt Atanan":2,"Sayaca Dahil":True}])
+_interval_result({"coverage":coverage},"en")
+''',default_timeout=30).run()
+        self.assertFalse(at.exception)
+        self.assertTrue(any('Günlük İhtiyaç Karşılama' in item.value for item in at.markdown))
+        self.assertTrue(any('30 Dakikalık Plan Sonucu' in item.value for item in at.markdown))
+        self.assertEqual(list(at.dataframe[0].value['30 dk dilim']),['08:00–08:30'])
+
     def test_foreign_plan_reorders_groups_to_close_early_gap_and_ignores_main_draft(self):
         from ortak.varsayilan_kurallar import default_shift_rules
         from modules.vardiya_plani.yabanci_dil_plani import _build
@@ -194,6 +207,17 @@ class CurrentRosterRegressionTests(unittest.TestCase):
         meals=[item for item in items if item['kind']=='Yemek'];self.assertEqual(len(meals),2)
         self.assertFalse(pd.Timestamp(meals[0]['start'])<pd.Timestamp(meals[1]['end']) and pd.Timestamp(meals[1]['start'])<pd.Timestamp(meals[0]['end']))
         self.assertTrue((out['Atanan']>=out['İhtiyaç']).all());self.assertFalse(issues)
+
+    def test_mandatory_meal_and_break_are_not_dropped_when_net_floor_has_no_room(self):
+        from ortak.statuler import defaults,meal_plan
+        cfg=defaults();cfg.update(enabled=True,automatic=True,shrinkage_included=True,coaching_by_leader=False)
+        rule=cfg['groups']['fulltime'];rule.update(min_shift_hours=0,meal_minutes=30,break_rules=[{'min_hours':0,'max_hours':24,'minutes':10}],break_preferred_minutes=10,coaching_monthly_minutes=0)
+        coverage=pd.DataFrame([{'Tarih':DAY,'Slot':slot,'İhtiyaç':1,'Planlanan Agent':1,'Net Agent':1,'Shrinkage (%)':0,'Atanan':1,'Eksik':0,'Fazla':0,'Sayaca Dahil':True} for slot in range(17,35)])
+        items,out,issues=meal_plan({'status_rules':cfg,'staffing_parameters':{'shrinkage':0}},[row('1',DAY,start='08:00',end='17:00')],coverage,[emp('1')])
+        self.assertEqual(sum(item['kind']=='Yemek' for item in items),1)
+        self.assertEqual(sum((pd.Timestamp(item['end'])-pd.Timestamp(item['start'])).total_seconds()/60 for item in items if item['kind']=='Mola'),10)
+        self.assertGreater(out['Eksik'].sum(),0)
+        self.assertFalse(any('tamamlanamadı' in issue['Sorun'] for issue in issues))
 
     def test_erlang_approval_cards_read_saved_staffing_parameters(self):
         from ortak.planlama_gorunumu import erlang_summary_values

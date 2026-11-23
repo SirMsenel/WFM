@@ -17,6 +17,32 @@ def _calendar(result):
     st.dataframe(grid.style.map(cell_style,subset=[c for c in grid if c not in {'Personel','Sicil no','Kullanıcı adı'}]),hide_index=True,use_container_width=True,height=470)
 
 
+def _interval_result(result,lang):
+    """Bağımsız dil planının günlük halkalarını ve 30 dk listesini korur."""
+    coverage=result.get('coverage',pd.DataFrame()).copy()
+    if coverage.empty:return
+    from ortak.planlama_gorunumu import daily_coverage_summary
+    from ortak.cagri_tahmin_servisi import DAY_NAMES
+    from ortak.saat_etiketleri import slot_label
+    daily_coverage_summary(result,LABELS[lang]+' · Günlük İhtiyaç Karşılama')
+    gross='Brüt Atanan' if 'Brüt Atanan' in coverage else 'Atanan';coverage['Tarih']=pd.to_datetime(coverage['Tarih'])
+    view=pd.DataFrame({'Tarih':coverage['Tarih'].dt.strftime('%d.%m.%Y'),'Gün':coverage['Tarih'].dt.day_of_week.map(lambda value:DAY_NAMES[value]),
+                       '30 dk dilim':coverage['Slot'].map(slot_label),'Planlanan Agent':pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0),
+                       'Net Agent':pd.to_numeric(coverage['Net Agent'],errors='coerce').fillna(0) if 'Net Agent' in coverage else pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0),
+                       'Vardiyaya yazılan':pd.to_numeric(coverage[gross],errors='coerce').fillna(0),
+                       'Statü sonrası etkin':pd.to_numeric(coverage['Atanan'],errors='coerce').fillna(0),
+                       'Fark':pd.to_numeric(coverage[gross],errors='coerce').fillna(0)-pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0),
+                       'Sayaç':'Dahil'})
+    if 'Sayaca Dahil' in coverage:view.loc[~coverage['Sayaca Dahil'].to_numpy(bool),'Sayaç']='Hariç'
+    def color(value):
+        if value<0:return 'background-color:#f9dddd;color:#8a302b;font-weight:700'
+        if value>0:return 'background-color:#dff3e8;color:#246848;font-weight:700'
+        return 'background-color:#f1f4f6;color:#61737c'
+    styled=view.style.format({'Planlanan Agent':'{:.0f}','Net Agent':'{:.2f}','Vardiyaya yazılan':'{:.0f}','Statü sonrası etkin':'{:.2f}','Fark':'{:+.0f}'}).map(color,subset=['Fark'])
+    st.markdown('### '+LABELS[lang]+' · 30 Dakikalık Plan Sonucu')
+    st.dataframe(styled,hide_index=True,use_container_width=True,height=540)
+
+
 def _build(state,lang,demand):
     from modules.vardiya_plani.planlama_verileri import collect_inputs
     from modules.vardiya_plani.vardiya_motoru import generate_plan
@@ -83,31 +109,19 @@ def render():
     saved=s.setdefault('language_demands',{}).get(lang);base=source.copy() if saved is None else saved.copy()
     with st.expander('Bu dilin yarım saatlik personel ihtiyacını tanımla'):
         table=base[['Tarih','Slot','Planlanan Agent']].copy();from ortak.saat_etiketleri import slot_label
-        table['Net Agent']=pd.to_numeric(base['Net Agent'],errors='coerce').fillna(pd.to_numeric(base['Planlanan Agent'],errors='coerce')) if 'Net Agent' in base else pd.to_numeric(base['Planlanan Agent'],errors='coerce')
         from ortak.cagri_tahmin_servisi import DAY_NAMES
         table['Tarih']=pd.to_datetime(table['Tarih']).dt.normalize();dates=sorted(table['Tarih'].unique());labels={pd.Timestamp(d).strftime('%d.%m')+' '+DAY_NAMES[pd.Timestamp(d).weekday()]:pd.Timestamp(d) for d in dates}
-        planned=table.pivot(index='Slot',columns='Tarih',values='Planlanan Agent').reindex(range(1,49));net=table.pivot(index='Slot',columns='Tarih',values='Net Agent').reindex(range(1,49))
-        wide=pd.DataFrame(index=range(1,49));wide['Yarım saat']=[slot_label(slot) for slot in wide.index]
-        for label,day in labels.items():
-            wide[label+' · Planlanan']=planned[pd.Timestamp(day)].to_numpy();wide[label+' · Net']=net[pd.Timestamp(day)].to_numpy()
-        wide=wide.reset_index(drop=True)
-        st.markdown('<div style="padding:12px 15px;border-radius:14px;background:#eef7f9;border:1px solid #d8e8ed"><b>30 Dakikalık Dil İhtiyacı</b><br><small>Planlanan, vardiyaya yazılacak brüt kişi sayısıdır. Net, yemek ve mola sırasında hatta korunması gereken en düşük kişi sayısıdır.</small></div>',unsafe_allow_html=True)
-        config={'Yarım saat':st.column_config.TextColumn('Yarım saat',width='small')}
-        for label in labels:
-            config[label+' · Planlanan']=st.column_config.NumberColumn(label+' · Planlanan',min_value=0,step=1,required=True,width='small')
-            config[label+' · Net']=st.column_config.NumberColumn(label+' · Net',min_value=0,step=1,required=True,width='small')
+        wide=table.pivot(index='Slot',columns='Tarih',values='Planlanan Agent').reindex(range(1,49));wide.columns=[next(label for label,value in labels.items() if value==pd.Timestamp(d)) for d in wide.columns];wide.insert(0,'Yarım saat',[slot_label(slot) for slot in wide.index]);wide=wide.reset_index(drop=True)
+        st.markdown('<div style="padding:12px 15px;border-radius:14px;background:#eef7f9;border:1px solid #d8e8ed"><b>30 Dakikalık Dil İhtiyacı</b><br><small>Yalnızca vardiyaya yazılacak Planlanan Agent sayısını gir. Net Agent, seçili shrinkage oranından sistem tarafından hesaplanır.</small></div>',unsafe_allow_html=True)
+        config={'Yarım saat':st.column_config.TextColumn('Yarım saat',width='small')};config.update({label:st.column_config.NumberColumn(label,min_value=0,step=1,required=True,width='small') for label in labels})
         edited=st.data_editor(wide,disabled=['Yarım saat'],hide_index=True,use_container_width=True,height=640,key='foreign_need_'+lang,column_config=config)
         if st.button('Dil İhtiyacını Kaydet',key='foreign_save_need'):
-            values=edited.drop(columns=['Yarım saat']).apply(pd.to_numeric,errors='coerce');planned_cols=[label+' · Planlanan' for label in labels];net_cols=[label+' · Net' for label in labels]
+            values=edited.drop(columns=['Yarım saat']).apply(pd.to_numeric,errors='coerce')
             if values.isna().any().any() or (values<0).any().any():st.warning('İhtiyaç hücreleri boş veya negatif olamaz.')
-            elif any((values[n]>values[p]).any() for p,n in zip(planned_cols,net_cols)):st.warning('Net Agent, Planlanan Agent sayısından büyük olamaz.')
-            elif any(((values[p]>0)&(values[n]<1)).any() for p,n in zip(planned_cols,net_cols)):st.warning('Planlanan Agent sıfırdan büyükse hatta korunacak Net Agent en az 1 olmalıdır.')
             else:
-                plan_lookup={(str(day.date()),slot):float(values.iloc[slot-1][label+' · Planlanan']) for label,day in labels.items() for slot in range(1,49)}
-                net_lookup={(str(day.date()),slot):float(values.iloc[slot-1][label+' · Net']) for label,day in labels.items() for slot in range(1,49)}
-                keys=[(str(pd.Timestamp(day).date()),int(slot)) for day,slot in zip(base['Tarih'],base['Slot'])]
-                base['Planlanan Agent']=[plan_lookup[key] for key in keys];base['Net Agent']=[net_lookup[key] for key in keys]
-                base['Shrinkage (%)']=[100*(1-net/plan) if plan else 0 for plan,net in zip(base['Planlanan Agent'],base['Net Agent'])]
+                lookup={(str(day.date()),slot):float(values.iloc[slot-1][label]) for label,day in labels.items() for slot in range(1,49)}
+                base['Planlanan Agent']=[lookup[(str(pd.Timestamp(day).date()),int(slot))] for day,slot in zip(base['Tarih'],base['Slot'])]
+                base['Net Agent']=base['Planlanan Agent']*(1-base['Shrinkage (%)']/100) if 'Shrinkage (%)' in base else base['Planlanan Agent']*.7
                 source_map=dict(s['language_demands']);source_map[lang]=base;s['language_demands']=source_map;save_keys(s);st.rerun()
     saved=s.get('language_demands',{}).get(lang)
     if saved is None:st.info('Bağımsız vardiya taslağı oluşturmak için önce bu dilin ihtiyacını kaydedin.');return
@@ -121,7 +135,7 @@ def render():
     result=(s.get('foreign_language_plans') or {}).get(lang)
     if not result:return
     from ortak.planlama_gorunumu import coverage_summary,roster_summary
-    roster_summary(result,LABELS[lang]+' Taslak Özeti');_calendar(result);coverage_summary(result,LABELS[lang]+' İhtiyaç Sonucu')
+    roster_summary(result,LABELS[lang]+' Taslak Özeti');_calendar(result);coverage_summary(result,LABELS[lang]+' İhtiyaç Sonucu');_interval_result(result,lang)
     people={str(p['employee_id']):p for p in result['staff']};current=(s.get('foreign_language_transferred_ids') or {}).get(lang,[])
     chosen=st.multiselect('Türkçe ihtiyacından düşülecek personeller',list(people),default=[eid for eid in current if eid in people],format_func=lambda eid:people[eid].get('full_name',eid),key='foreign_transfer_people_'+lang)
     st.caption('Dil planındaki personeller korunur ve ana motor vardiyalarını değiştiremez. Yalnızca burada seçtiklerinin vardiya kapasitesi ana plandaki Türkçe ihtiyacından düşülür.')

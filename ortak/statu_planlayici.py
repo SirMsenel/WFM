@@ -62,7 +62,7 @@ def plan(state,rows,coverage,people,used=None):
     coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
     for item in state.get('_status_fixed_baseline',[]):
         a,b=pd.Timestamp(item['start']),pd.Timestamp(item['end']);overlap=np.maximum(0,(np.minimum(np.datetime64(b),stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(a),stamps))/np.timedelta64(30,'m'));loss[:]+=overlap;by_person.setdefault(str(item['employee_id']),[]).append(item)
-    def place(row,kind,duration,a,b,mandatory=False,probe=False,target=None):
+    def place(row,kind,duration,a,b,mandatory=False,probe=False,target=None,protect_net=True):
         if duration<=0:return True
         eid=str(row['employee_id']);best=None;rule=cfg.get('groups',{}).get(lookup.get(eid,{}).get('work_type'),{})
         indices=np.flatnonzero((stamps+np.timedelta64(30,'m')>np.datetime64(a))&(stamps<np.datetime64(b)))
@@ -76,7 +76,7 @@ def plan(state,rows,coverage,people,used=None):
             # dakikalarda çakışıp hatta kimseyi bırakmayabilir. Aday aralığı,
             # mevcut statülerin başlangıç/bitişleriyle parçalayıp her anda
             # Planlanan - Net kadar eşzamanlı hat dışı kişi sınırını koru.
-            overlapping=[item for item in scheduled if item.get('start') and item.get('end') and t<pd.Timestamp(item['end']) and pd.Timestamp(item['start'])<finish] if explicit_net else []
+            overlapping=[item for item in scheduled if item.get('start') and item.get('end') and t<pd.Timestamp(item['end']) and pd.Timestamp(item['start'])<finish] if explicit_net and protect_net else []
             boundaries=sorted({t,finish,*[max(t,pd.Timestamp(item['start'])) for item in overlapping],*[min(finish,pd.Timestamp(item['end'])) for item in overlapping]})
             instant_ok=True
             for left,right in zip(boundaries,boundaries[1:]):
@@ -86,7 +86,7 @@ def plan(state,rows,coverage,people,used=None):
                 ix=int(slot_ix[0]);is_counted=bool(out['Sayaca Dahil'].iloc[ix]) if 'Sayaca Dahil' in out else True
                 allowed=max(0,int(np.floor(gross[ix]-net_need[ix]+1e-8)))
                 simultaneous=1+sum(pd.Timestamp(item['start'])<right and left<pd.Timestamp(item['end']) for item in overlapping)
-                if explicit_net and is_counted and simultaneous>allowed:instant_ok=False;break
+                if explicit_net and protect_net and is_counted and simultaneous>allowed:instant_ok=False;break
             if not instant_ok:continue
             if kind=='Mola':
                 limit=int(rule.get('break_per_hour_max',15));
@@ -115,7 +115,7 @@ def plan(state,rows,coverage,people,used=None):
             # Kullanıcının girdiği/hesaplanan Net Agent, statüler sırasında hatta
             # korunması gereken alt sınırdır. Zorunlu yemek ve molalar da aynı
             # anda iki kişiyi hat dışına çıkararak bu sınırın altına inemez.
-            if explicit_net and ((remaining+1e-8<local_need)&counted).any():continue
+            if explicit_net and protect_net and ((remaining+1e-8<local_need)&counted).any():continue
             after=np.maximum(0,local_need-remaining);cost=float(((after-before)*counted).sum())
             if not mandatory and cost>1e-8:continue
             # Önce hat kapasitesi, sonra mola parçalarını vardiyaya yayma
@@ -137,6 +137,10 @@ def plan(state,rows,coverage,people,used=None):
             candidate=score+(t,finish,overlap)
             if best is None or candidate[:6]<best[:6]:best=candidate
         if best is None:
+            # Net Agent korunarak yer bulunamazsa zorunlu yemek/mola hakkını
+            # kaybetme. İkinci geçişte hakkı planla; oluşan kapasite açığı
+            # Eksik hesabına ve onay raporuna açıkça yansır.
+            if mandatory and explicit_net and protect_net:return place(row,kind,duration,a,b,mandatory,probe,target,False)
             if probe:return False
             issues.append({'employee_id':eid,'date':row['date'],'Sorun':kind+' için uygun kapasite/pencere yok; '+('vardiyayı veya ihtiyacı düzenleyin' if mandatory else 'uygun başka döneme ertelendi'),'severity':'error' if mandatory else 'warning','override_required':False});return False
         _,__,___,____,_____,______,t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
