@@ -113,7 +113,18 @@ _interval_result({"coverage":coverage},"en")
         self.assertFalse(at.exception)
         self.assertTrue(any('Günlük İhtiyaç Karşılama' in item.value for item in at.markdown))
         self.assertTrue(any('30 Dakikalık Plan Sonucu' in item.value for item in at.markdown))
-        self.assertEqual(list(at.dataframe[0].value['30 dk dilim']),['08:00–08:30'])
+        matrix=at.dataframe[0].value
+        self.assertEqual(matrix.index[16],'08:00–08:30')
+        self.assertIn('23.11 Pazartesi',matrix.columns)
+        self.assertEqual(matrix.iloc[16,0],'2/2 · 0')
+
+    def test_foreign_language_build_never_reuses_transferred_people_from_other_language(self):
+        from test_planning_round2 import Round2LogicTests
+        from modules.vardiya_plani.yabanci_dil_plani import _build
+        state=Round2LogicTests().state();state.update(plan_ctx_confirmed=True,plan_group_priority=list(state['shift_rules']['work_type']),status_rules={'enabled':False},
+            foreign_language_transferred_ids={'en':['2']},foreign_language_reserved_ids={'en':['2']})
+        result=_build(state,'ar',state['sp_staffing_result_df'])
+        self.assertEqual({str(person['employee_id']) for person in result['staff']},{'3'})
 
     def test_foreign_plan_reorders_groups_to_close_early_gap_and_ignores_main_draft(self):
         from ortak.varsayilan_kurallar import default_shift_rules
@@ -232,6 +243,27 @@ class CurrentRosterRegressionTests(unittest.TestCase):
         scoped=publication_scope(result,{'tr':True,'en':False,'ar':False})
         self.assertEqual({person['employee_id'] for person in scoped['staff']},{'1'});self.assertEqual({record['employee_id'] for record in scoped['plan']},{'1'})
         self.assertEqual({record['employee_id'] for record in result['plan']},{'1','2'})
+
+    def test_parallel_language_approvals_stay_current_with_display_revision(self):
+        import copy,tempfile
+        from pathlib import Path
+        from test_round5 import make_state
+        from test_round4 import draft
+        from ortak.calisma_alani_deposu import connect,save_keys
+        from ortak.yayin_onaylari import submit,proposals,is_current
+        with tempfile.TemporaryDirectory() as folder:
+            state=make_state(Path(folder)/'w.db',Path(folder)/'a.db');state.update(profile={'position':'wfm','username':'planner1'},plan_ctx={'start':DAY,'end':DAY},plan_group_priority=list(state['shift_rules']['work_type']),published_shift_plan=[])
+            state['sp_staffing_result_df']=demand();save_keys(state)
+            with connect(state['workspace_db_path']) as db:db.execute("INSERT INTO metadata VALUES('directory_revision','rev-1') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+            state['_directory_revision']='rev-1|2026-11-23'
+            result=draft(state);english=copy.deepcopy(result);arabic=copy.deepcopy(result)
+            for person in english['staff']:person['language']='en'
+            for person in arabic['staff']:person['language']='ar'
+            first=submit(state,english,{'tr':False,'en':True,'ar':False})
+            state['foreign_language_plans']={'en':english,'ar':arabic};save_keys(state)
+            second=submit(state,arabic,{'tr':False,'en':False,'ar':True})
+            items={item['id']:item for item in proposals(state)}
+            self.assertTrue(is_current(state,items[first]));self.assertTrue(is_current(state,items[second]))
 
 
 if __name__=='__main__':unittest.main()

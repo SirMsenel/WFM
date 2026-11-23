@@ -18,6 +18,18 @@ def approval_languages(item):
     return {p.get('language','tr') for p in item.get('result',{}).get('staff',[])}
 
 
+def directory_revision(state):
+    """İmzada da kontrolde de veritabanındaki aynı ham revizyonu kullan."""
+    path=state.get('workspace_db_path')
+    if path:
+        with connect(path) as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone():
+                row=db.execute("SELECT value FROM metadata WHERE key='directory_revision'").fetchone()
+                return row[0] if row else None
+    value=state.get('_directory_revision')
+    return str(value).split('|',1)[0] if value is not None else None
+
+
 def source_signature(state):
     """Başka dil taslaklarını değil, planın güvenliğini etkileyen ortak kaynakları izle."""
     data={key:state.get(key) for key in CRITICAL_KEYS}
@@ -25,12 +37,7 @@ def source_signature(state):
         data[key]=data.get(key) or []
     for key in ('shift_rules','status_rules','staffing_parameters','acad_schedules','acad_exam_calendar'):
         data[key]=data.get(key) or {}
-    path=state.get('workspace_db_path')
-    if '_directory_revision' in state:data['directory_revision']=state['_directory_revision']
-    elif path:
-        with connect(path) as db:
-            if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone():
-                row=db.execute("SELECT value FROM metadata WHERE key='directory_revision'").fetchone();data['directory_revision']=row[0] if row else None
+    data['directory_revision']=directory_revision(state)
     return hashlib.sha256(dumps(data).encode()).hexdigest()
 
 

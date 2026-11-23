@@ -18,35 +18,28 @@ def _calendar(result):
 
 
 def _interval_result(result,lang):
-    """Bağımsız dil planının günlük halkalarını ve 30 dk listesini korur."""
+    """Bağımsız dil planının günlük halkalarını ve 7x48 sonucunu gösterir."""
     coverage=result.get('coverage',pd.DataFrame()).copy()
     if coverage.empty:return
-    from ortak.planlama_gorunumu import daily_coverage_summary
-    from ortak.cagri_tahmin_servisi import DAY_NAMES
-    from ortak.saat_etiketleri import slot_label
+    from ortak.planlama_gorunumu import daily_coverage_summary,coverage_comparison_matrix,styled_coverage_comparison
     daily_coverage_summary(result,LABELS[lang]+' · Günlük İhtiyaç Karşılama')
-    gross='Brüt Atanan' if 'Brüt Atanan' in coverage else 'Atanan';coverage['Tarih']=pd.to_datetime(coverage['Tarih'])
-    view=pd.DataFrame({'Tarih':coverage['Tarih'].dt.strftime('%d.%m.%Y'),'Gün':coverage['Tarih'].dt.day_of_week.map(lambda value:DAY_NAMES[value]),
-                       '30 dk dilim':coverage['Slot'].map(slot_label),'Planlanan Agent':pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0),
-                       'Net Agent':pd.to_numeric(coverage['Net Agent'],errors='coerce').fillna(0) if 'Net Agent' in coverage else pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0),
-                       'Vardiyaya yazılan':pd.to_numeric(coverage[gross],errors='coerce').fillna(0),
-                       'Statü sonrası etkin':pd.to_numeric(coverage['Atanan'],errors='coerce').fillna(0),
-                       'Fark':pd.to_numeric(coverage[gross],errors='coerce').fillna(0)-pd.to_numeric(coverage['İhtiyaç'],errors='coerce').fillna(0),
-                       'Sayaç':'Dahil'})
-    if 'Sayaca Dahil' in coverage:view.loc[~coverage['Sayaca Dahil'].to_numpy(bool),'Sayaç']='Hariç'
-    def color(value):
-        if value<0:return 'background-color:#f9dddd;color:#8a302b;font-weight:700'
-        if value>0:return 'background-color:#dff3e8;color:#246848;font-weight:700'
-        return 'background-color:#f1f4f6;color:#61737c'
-    styled=view.style.format({'Planlanan Agent':'{:.0f}','Net Agent':'{:.2f}','Vardiyaya yazılan':'{:.0f}','Statü sonrası etkin':'{:.2f}','Fark':'{:+.0f}'}).map(color,subset=['Fark'])
     st.markdown('### '+LABELS[lang]+' · 30 Dakikalık Plan Sonucu')
-    st.dataframe(styled,hide_index=True,use_container_width=True,height=540)
+    start=pd.Timestamp(result.get('period',{}).get('start') or pd.to_datetime(coverage['Tarih']).min()).normalize()
+    end=pd.Timestamp(result.get('period',{}).get('end') or pd.to_datetime(coverage['Tarih']).max()).normalize()
+    weeks=list(pd.date_range(start,end,freq='7D')) or [start]
+    chosen=st.selectbox('İncelenecek hafta',weeks,format_func=lambda day:f'{day:%d.%m.%Y} – {min(day+pd.Timedelta(days=6),end):%d.%m.%Y}',key='foreign_result_week_'+lang) if len(weeks)>1 else weeks[0]
+    st.caption('Hücre biçimi: vardiyaya yazılan/planlanan · fark. Kırmızı eksik, yeşil fazla, gri tam karşılanan dilimdir; — ihtiyaç sayacına dahil değildir.')
+    matrix=coverage_comparison_matrix(coverage,chosen)
+    st.dataframe(styled_coverage_comparison(matrix),use_container_width=True,height=540)
 
 
 def _build(state,lang,demand):
     from modules.vardiya_plani.planlama_verileri import collect_inputs
     from modules.vardiya_plani.vardiya_motoru import generate_plan
     check=dict(state);check['planning_languages']={'tr':False,'en':lang=='en','ar':lang=='ar'}
+    # Ana plana aktarılmış başka dil personeli, bağımsız dil motorunda aday
+    # istisnası oluşturamaz. Her dil yalnızca kendi personel havuzundan kurulur.
+    check['foreign_language_transferred_ids']={};check['foreign_language_reserved_ids']={}
     # Bağımsız dil planı ana taslaktaki otomatik/elle vardiyalardan etkilenmez.
     # İzin, gece, talep ve okul kayıtları kendi kaynaklarından yine korunur.
     check['draft_shift_plan']=[]
