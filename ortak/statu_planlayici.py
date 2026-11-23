@@ -53,10 +53,11 @@ def plan(state,rows,coverage,people,used=None):
     if included:
         from ortak.statuler import shrinkage_for
         params=state.get('staffing_parameters',{});fallback=float(params.get('shrinkage',.3));source=state.get('sp_staffing_result_df');mapping={}
-        if source is not None and 'Shrinkage (%)' in source:mapping={(str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])):float(r['Shrinkage (%)'])/100 for r in source.to_dict('records')}
+        if 'Shrinkage (%)' in out:mapping={(str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])):float(r['Shrinkage (%)'])/100 for r in out.to_dict('records')}
+        elif source is not None and 'Shrinkage (%)' in source:mapping={(str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])):float(r['Shrinkage (%)'])/100 for r in source.to_dict('records')}
         rates=np.array([mapping.get((str(pd.Timestamp(r['Tarih']).date()),int(r['Slot'])),shrinkage_for(state,r['Tarih'],int(r['Slot']),fallback)) for r in out.to_dict('records')])
-    net_need=need*(1-rates)
-    if included and 'Net Agent' in out:
+    net_need=need*(1-rates);explicit_net='Net Agent' in out
+    if included and explicit_net:
         measured=pd.to_numeric(out['Net Agent'],errors='coerce').to_numpy(float);net_need=np.maximum(net_need,np.where(np.isfinite(measured),measured,net_need))
     coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
     for item in state.get('_status_fixed_baseline',[]):
@@ -71,6 +72,22 @@ def plan(state,rows,coverage,people,used=None):
         for t in pd.date_range(a,b-pd.Timedelta(minutes=duration),freq='5min'):
             finish=t+pd.Timedelta(minutes=duration)
             if any(t<pd.Timestamp(x['end']) and pd.Timestamp(x['start'])<finish for x in by_person.get(eid,[])):continue
+            # Yarım saat ortalaması uygun görünse bile iki kişinin statüsü aynı
+            # dakikalarda çakışıp hatta kimseyi bırakmayabilir. Aday aralığı,
+            # mevcut statülerin başlangıç/bitişleriyle parçalayıp her anda
+            # Planlanan - Net kadar eşzamanlı hat dışı kişi sınırını koru.
+            overlapping=[item for item in scheduled if item.get('start') and item.get('end') and t<pd.Timestamp(item['end']) and pd.Timestamp(item['start'])<finish] if explicit_net else []
+            boundaries=sorted({t,finish,*[max(t,pd.Timestamp(item['start'])) for item in overlapping],*[min(finish,pd.Timestamp(item['end'])) for item in overlapping]})
+            instant_ok=True
+            for left,right in zip(boundaries,boundaries[1:]):
+                if right<=left:continue
+                middle=left+(right-left)/2;slot_ix=np.flatnonzero((stamps<=np.datetime64(middle))&(np.datetime64(middle)<stamps+np.timedelta64(30,'m')))
+                if not len(slot_ix):continue
+                ix=int(slot_ix[0]);is_counted=bool(out['Sayaca Dahil'].iloc[ix]) if 'Sayaca Dahil' in out else True
+                allowed=max(0,int(np.floor(gross[ix]-net_need[ix]+1e-8)))
+                simultaneous=1+sum(pd.Timestamp(item['start'])<right and left<pd.Timestamp(item['end']) for item in overlapping)
+                if explicit_net and is_counted and simultaneous>allowed:instant_ok=False;break
+            if not instant_ok:continue
             if kind=='Mola':
                 limit=int(rule.get('break_per_hour_max',15));
                 maximum=min(15,max(1,int(rule.get('break_minutes',15))));left,right=t,finish
@@ -94,7 +111,12 @@ def plan(state,rows,coverage,people,used=None):
                 if any(hour_use.get((eid,k),0)+v>limit for k,v in buckets.items()):continue
             overlap=np.maximum(0,(np.minimum(np.datetime64(finish),local_stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(t),local_stamps))/np.timedelta64(30,'m'))
             if overlap.sum()+1e-8<duration/30:continue
-            after=np.maximum(0,local_need-net_capacity(local_gross,local_loss+overlap,local_rates));cost=float(((after-before)*counted).sum())
+            remaining=net_capacity(local_gross,local_loss+overlap,local_rates)
+            # Kullanıcının girdiği/hesaplanan Net Agent, statüler sırasında hatta
+            # korunması gereken alt sınırdır. Zorunlu yemek ve molalar da aynı
+            # anda iki kişiyi hat dışına çıkararak bu sınırın altına inemez.
+            if explicit_net and ((remaining+1e-8<local_need)&counted).any():continue
+            after=np.maximum(0,local_need-remaining);cost=float(((after-before)*counted).sum())
             if not mandatory and cost>1e-8:continue
             # Önce hat kapasitesi, sonra mola parçalarını vardiyaya yayma
             # tercih edilir. Böylece eşdeğer iki seçenekten önceki molaya
@@ -104,13 +126,14 @@ def plan(state,rows,coverage,people,used=None):
             spread=min((max(0,(t-pd.Timestamp(old['end'])).total_seconds()/60,(pd.Timestamp(old['start'])-finish).total_seconds()/60) for old in previous_breaks),default=(b-a).total_seconds()/60)
             center=abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds())
             target_distance=abs((t+(finish-t)/2-target).total_seconds()) if target is not None else center
+            alignment=t.minute%min(30,max(1,duration)) if kind=='Yemek' else 0
             # Shrinkage butcesi icindeki birden fazla secenek ayni maliyete
             # sahip olabilir. Bu durumda mevcut kaybi en az yogunlastiran
             # aralik secilir; ekip molalari tek bir saate yigmaz.
             concentration=float(np.square(local_loss+overlap).sum())
             # Mola parçalarında vardiya boyunca eşit aralıklı hedefler önce gelir.
             # Böylece kapasitesi eşdeğer seçenekler vardiyanın ortasına yığılmaz.
-            score=(cost,target_distance,concentration,preference_penalty,-spread,center) if kind=='Mola' else (cost,concentration,preference_penalty,-spread,center,0)
+            score=(cost,target_distance,concentration,preference_penalty,-spread,center) if kind=='Mola' else (cost,alignment,concentration,preference_penalty,-spread,center)
             candidate=score+(t,finish,overlap)
             if best is None or candidate[:6]<best[:6]:best=candidate
         if best is None:

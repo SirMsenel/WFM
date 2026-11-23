@@ -19,7 +19,6 @@ def period_banner(state):
 def coverage_controls(state):
     from ortak.calisma_alani_deposu import save_keys
     state['planning_exclude_early_hours']=st.toggle('03:00–08:00 aralığını ihtiyaç sayacından çıkar',value=state.get('planning_exclude_early_hours',False),key='planning_early_toggle')
-    st.caption('Açıldığında bu aralıktaki ihtiyaç eksik/fazla hesabına ve otomatik doldurma hedefine katılmaz. Gece vardiyası ve 07:00 girişleri takvimde korunur; çalışma ve dinlenme saatleri gerçek süreden hesaplanır.')
     save_keys(state)
 
 
@@ -55,21 +54,38 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
         meal=[r for r in result['breaks'] if r.get('kind')=='Yemek']
         breaks=[r for r in result['breaks'] if r.get('kind')=='Mola']
         coaching=[r for r in result['breaks'] if r.get('kind')=='Koçluk Alanı']
-        def minutes(items):return sum((pd.Timestamp(r['end'])-pd.Timestamp(r['start'])).total_seconds()/60 for r in items if r.get('start') and r.get('end'))
+        counted=coverage[coverage['Sayaca Dahil']] if 'Sayaca Dahil' in coverage else coverage
+        counted_intervals=[]
+        for raw in counted.to_dict('records'):
+            begin=pd.Timestamp(raw['Tarih']).normalize()+pd.Timedelta(minutes=(int(raw['Slot'])-1)*30)
+            counted_intervals.append((begin,begin+pd.Timedelta(minutes=30)))
+        def scoped(items):
+            output=[]
+            for row in items:
+                if not row.get('start') or not row.get('end'):continue
+                begin,end=pd.Timestamp(row['start']),pd.Timestamp(row['end']);parts={}
+                for left,right in counted_intervals:
+                    minutes=max(0.,(min(end,right)-max(begin,left)).total_seconds()/60)
+                    if minutes:parts[str(left.date())]=parts.get(str(left.date()),0.)+minutes
+                if parts:output.append({**row,'_minutes':sum(parts.values()),'_days':parts})
+            return output
+        meal= scoped(meal);breaks=scoped(breaks);coaching=scoped(coaching)
+        def minutes(items,capacity=False):return sum(r['_minutes']*(int(r.get('remaining_capacity',r.get('capacity',1))) if capacity else 1) for r in items)
         def daily_counts(items,value=lambda rows:len({str(r.get('employee_id')) for r in rows})):
             grouped={}
             for row in items:
-                raw=row.get('date') or (str(row.get('start',''))[:10] if row.get('start') else '')
-                if raw:grouped.setdefault(str(raw)[:10],[]).append(row)
+                raw_days=row.get('_days') or ({str(row.get('date'))[:10]:1} if row.get('date') else {})
+                for raw in raw_days:grouped.setdefault(raw,[]).append(row)
             from ortak.cagri_tahmin_servisi import DAY_NAMES
             return [(DAY_NAMES[pd.Timestamp(day).weekday()],value(rows)) for day,rows in sorted(grouped.items())]
         st.markdown('#### Planlanan Statüler ve Kalan Kapasite')
         missing_items=[{'date':r.get('date'),'value':float(r.get('Eksik (dk)',0))} for r in rights if r.get('date')]
-        status_values=[('Yemek planı',len({str(r['employee_id']) for r in meal}),minutes(meal),'#258f94','kişi',daily_counts(meal)),('Mola planı',len({str(r['employee_id']) for r in breaks}),minutes(breaks),'#7c69b0','kişi',daily_counts(breaks)),('Shrinkage açığı','—' if any(r.get('Kural hatası') for r in rights) else f"{sum(r['Eksik (dk)'] for r in rights):.0f}",sum(r['Eksik (dk)'] for r in rights),'#c07845','dk',daily_counts(missing_items,lambda rows:round(sum(r['value'] for r in rows)))),('Açık koçluk',sum(int(x.get('remaining_capacity',1)) for x in coaching),minutes(coaching),'#398a60','adet',daily_counts(coaching,lambda rows:sum(int(r.get('remaining_capacity',1)) for r in rows)))]
+        meal_days=daily_counts(meal);break_days=daily_counts(breaks);missing_days=daily_counts(missing_items,lambda rows:round(sum(r['value'] for r in rows)));coaching_days=daily_counts(coaching,lambda rows:sum(int(r.get('remaining_capacity',1)) for r in rows))
+        status_values=[('Yemek planı',sum(value for _,value in meal_days),minutes(meal),'#258f94','kişi',meal_days),('Mola planı',sum(value for _,value in break_days),minutes(breaks),'#7c69b0','kişi',break_days),('Shrinkage açığı','—' if any(r.get('Kural hatası') for r in rights) else f"{sum(r['Eksik (dk)'] for r in rights):.0f}",sum(r['Eksik (dk)'] for r in rights),'#c07845','dk',missing_days),('Açık koçluk',sum(value for _,value in coaching_days),minutes(coaching,True),'#398a60','adet',coaching_days)]
         for col,(label,count,total,color,unit,days) in zip(st.columns(4),status_values):
             second_label='Kural düzeltilmeli' if count=='—' else (f'{total:.0f} dakika' if unit!='dk' else 'dağıtılamayan süre')
-            day_html=''.join(f'<span style="padding:3px 6px;border-radius:7px;background:{color}11"><b>{name[:3]}</b> = {value}</span>' for name,value in days)
-            col.markdown(f'<div style="min-height:194px;padding:16px;border-radius:17px;border:1px solid {color}36;border-top:4px solid {color};background:{color}0d"><b style="color:{color};font-size:13px">{label}</b><div style="font-size:27px;font-weight:800;color:#294c5b;margin-top:13px">{count} <small style="font-size:12px">{unit}</small></div><div style="margin-top:8px;color:#6c7f89;font-size:12px">{second_label}</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;font-size:9px;color:#5d7079">{day_html or '<span>Günlük kayıt yok</span>'}</div></div>',unsafe_allow_html=True)
+            day_html=''.join(f'<div style="padding:3px 7px;border-radius:7px;background:{color}11"><b>{name[:3]}</b> = {value}</div>' for name,value in days)
+            col.markdown(f'<div style="min-height:194px;padding:16px;border-radius:17px;border:1px solid {color}36;border-top:4px solid {color};background:{color}0d"><b style="color:{color};font-size:13px">{label}</b><div style="display:grid;grid-template-columns:.9fr 1.1fr;gap:10px;margin-top:13px;align-items:start"><div><div style="font-size:27px;font-weight:800;color:#294c5b">{count} <small style="font-size:12px">{unit}</small></div><div style="margin-top:8px;color:#6c7f89;font-size:12px">{second_label}</div></div><div style="display:grid;gap:4px;font-size:9px;color:#5d7079">{day_html or '<span>Günlük kayıt yok</span>'}</div></div></div>',unsafe_allow_html=True)
         missing_rights=[r for r in rights if r['Eksik (dk)'] or r['Fazla (dk)'] or r.get('Kural hatası')]
         if missing_rights:st.dataframe(pd.DataFrame(missing_rights).drop(columns=['employee_id']).rename(columns={'date':'Tarih'}),hide_index=True,use_container_width=True)
     if 'Shrinkage statü bütçesi' in coverage and 'Mola kaybı' in coverage:
@@ -124,9 +140,9 @@ def roster_summary(result,title='Grup Bazlı Plan Özeti'):
     staff=result.get('staff',[]);rows=result.get('plan',[]);people={str(p['employee_id']):p for p in staff}
     if not rows:return
     st.markdown('### '+title)
-    work=[r for r in rows if bounds(r) is not None];totals={'Aktif kapasite':len(staff),'Toplam personel':len({str(r['employee_id']) for r in rows}),'OFF':sum(r.get('shift_code')=='OFF' for r in rows),'Gece':sum(r.get('shift_code')=='GECE' for r in rows),'Yıllık izin':sum(r.get('shift_code')=='YILLIK_IZIN' for r in rows),'Rapor':sum(r.get('shift_code')=='RAPOR' for r in rows)}
+    work=[r for r in rows if bounds(r) is not None];totals={'Toplam personel':len({str(r['employee_id']) for r in rows}),'OFF':sum(r.get('shift_code')=='OFF' for r in rows),'Gece':sum(r.get('shift_code')=='GECE' for r in rows),'Yıllık izin':sum(r.get('shift_code')=='YILLIK_IZIN' for r in rows),'Rapor':sum(r.get('shift_code')=='RAPOR' for r in rows)}
     from ortak.modern_kartlar import metric_cards
-    metric_cards([(label,totals[label]) for label in ['Aktif kapasite','Toplam personel','OFF','Gece','Yıllık izin','Rapor']])
+    metric_cards([(label,totals[label]) for label in ['Toplam personel','OFF','Gece','Yıllık izin','Rapor']])
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     table=[]
     for raw_day in sorted({str(r.get('date'))[:10] for r in rows if r.get('date')}):
@@ -141,8 +157,35 @@ def roster_summary(result,title='Grup Bazlı Plan Özeti'):
             elif code=='RAPOR':counts['Rapor']+=1
             else:counts['Diğer statü']+=1
         table.append({'Tarih':pd.Timestamp(raw_day).strftime('%d.%m.%Y'),'Gün':DAY_NAMES[pd.Timestamp(raw_day).weekday()],'Toplam personel':sum(counts.values()),**counts})
-    view=pd.DataFrame(table).style.format(precision=0).background_gradient(subset=['Çalışma'],cmap='BuGn').background_gradient(subset=['OFF'],cmap='Blues').background_gradient(subset=['Gece'],cmap='Purples')
-    st.dataframe(view,hide_index=True,use_container_width=True)
+    from html import escape
+    colors={'Çalışma':'#2f8f75','OFF':'#4f7fac','Gece':'#7d64aa','Yıllık izin':'#c27691','Rapor':'#d18456','Diğer statü':'#71818a'}
+    for offset in range(0,len(table),4):
+        for col,item in zip(st.columns(min(4,len(table[offset:offset+4]))),table[offset:offset+4]):
+            chips=''.join(f'<span style="display:flex;justify-content:space-between;gap:8px;padding:5px 7px;border-radius:8px;background:{colors[key]}12;color:{colors[key]}"><b>{escape(key)}</b><b>{item[key]}</b></span>' for key in colors)
+            col.markdown(f'<div style="min-height:225px;padding:14px;border:1px solid #dce7ec;border-radius:17px;background:linear-gradient(145deg,#fff,#f7fafb);box-shadow:0 4px 14px #284b5b0c"><div style="font-size:12px;color:#6b7e87">{escape(item["Gün"])}</div><div style="font-size:17px;font-weight:800;color:#315565;margin:2px 0 10px">{escape(item["Tarih"])}</div><div style="display:grid;gap:5px">{chips}</div></div>',unsafe_allow_html=True)
+
+
+def erlang_summary_values(result):
+    coverage=result.get('coverage',pd.DataFrame())
+    if coverage.empty:return []
+    if 'Sayaca Dahil' in coverage:coverage=coverage[coverage['Sayaca Dahil']]
+    specs=[('AHT','AHT (sn)',' sn'),('Hedef servis seviyesi','Hedef SL (%)','%'),('Beklenen servis seviyesi','SL (model) (%)','%'),('Hedef yanıt süresi','Hedef süre (sn)',' sn'),('Ortalama doluluk','Doluluk (%)','%'),('Ortalama shrinkage','Shrinkage (%)','%')]
+    values=[]
+    for label,column,suffix in specs:
+        if column not in coverage:continue
+        series=pd.to_numeric(coverage[column],errors='coerce').dropna()
+        if series.empty:continue
+        value=float(series.mean());shown=f'{value:.0f}' if abs(value-round(value))<.05 else f'{value:.1f}'
+        values.append((label,shown+suffix))
+    return values
+
+
+def erlang_summary_cards(result):
+    values=erlang_summary_values(result)
+    if not values:return
+    st.markdown('### Erlang C · Planlama Parametreleri')
+    from ortak.modern_kartlar import metric_cards
+    metric_cards(values)
 
 
 def daily_coverage_summary(result,title='Günlük İhtiyaç Karşılama'):
@@ -218,6 +261,39 @@ def styled_shortage_matrix(matrix,excess=False,human=False):
     return display.style.apply(lambda _:styles,axis=None)
 
 
+def coverage_comparison_matrix(coverage,start):
+    """Brüt atanan/ihtiyaç ve farkı aynı hücrede gösteren haftalık matris."""
+    from ortak.cagri_tahmin_servisi import DAY_NAMES
+    week=pd.Timestamp(start).normalize();days=pd.date_range(week,periods=7);df=coverage.copy()
+    df['Tarih']=pd.to_datetime(df['Tarih']).dt.normalize();assigned='Brüt Atanan' if 'Brüt Atanan' in df else 'Atanan'
+    if 'Sayaca Dahil' not in df:df['Sayaca Dahil']=True
+    grouped=df.groupby(['Slot','Tarih'],as_index=False).agg({'İhtiyaç':'sum',assigned:'sum','Sayaca Dahil':'all'})
+    values={(int(r['Slot']),pd.Timestamp(r['Tarih'])):(float(r[assigned]),float(r['İhtiyaç'])) for r in grouped.to_dict('records') if bool(r['Sayaca Dahil'])}
+    table=pd.DataFrame(index=range(1,49),columns=days,dtype=object)
+    for slot in table.index:
+        for day in days:table.at[slot,day]=values.get((slot,pd.Timestamp(day)))
+    table.columns=[d.strftime('%d.%m')+' '+DAY_NAMES[d.weekday()] for d in days]
+    table.index=[f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}–{s//2:02d}:{(s%2)*30:02d}' for s in range(1,49)];table.index.name='Yarım saat'
+    return table
+
+
+def styled_coverage_comparison(matrix):
+    deltas=[value[0]-value[1] for value in matrix.to_numpy().ravel() if isinstance(value,tuple)]
+    scale=max([abs(value) for value in deltas],default=1.) or 1.
+    def style(value):
+        if not isinstance(value,tuple):return 'background-color:#eef2f6;color:#64748b;text-align:center'
+        delta=value[0]-value[1];strength=min(1.,abs(delta)/scale)
+        if delta<-.001:return f'background-color:rgba(218,91,82,{.12+.68*strength});color:#762d29;text-align:center;font-weight:700'
+        if delta>.001:return f'background-color:rgba(48,151,102,{.12+.68*strength});color:#195c3d;text-align:center;font-weight:700'
+        return 'background-color:#f3f6f8;color:#536873;text-align:center;font-weight:650'
+    def label(value):
+        if not isinstance(value,tuple):return '—'
+        assigned,need=value;delta=assigned-need;sign='+' if delta>0 else '−' if delta<0 else ''
+        return f'{math.ceil(assigned)}/{math.ceil(need)} · {sign}{math.ceil(abs(delta)) if abs(delta)>.001 else 0}'
+    styles=matrix.map(style);display=matrix.map(label)
+    return display.style.apply(lambda _:styles,axis=None)
+
+
 def render_shortages(result,key='gap',actions=True):
     coverage=result['coverage'];missing,daily=shortage_summary(coverage)
     st.markdown('### Haftalık Eksik Personel')
@@ -228,9 +304,9 @@ def render_shortages(result,key='gap',actions=True):
     week=st.selectbox('Gösterilecek hafta',weeks,format_func=lambda d:f'{d:%d.%m.%Y} – {d+pd.Timedelta(days=6):%d.%m.%Y}',key=key+'_week') if len(weeks)>1 else first
     selected_days=pd.date_range(week,periods=7)
     daily_coverage_summary({'coverage':coverage[coverage['Tarih'].astype(str).str[:10].isin({str(d.date()) for d in selected_days})]},'Günlük İhtiyaç Karşılama')
-    matrix=shortage_matrix(coverage,week,signed=True)
-    st.caption('Kırmızı: eksik kişi · Yeşil +: fazla kişi · 0: ihtiyaç karşılanmış · —: sayaca dahil değil, veri yok veya seçili dönem dışında.')
-    st.dataframe(styled_shortage_matrix(matrix,human=True),height=540,use_container_width=True)
+    matrix=coverage_comparison_matrix(coverage,week)
+    st.caption('Hücre biçimi: atanan/ihtiyaç · fark. Kırmızı eksik, yeşil fazla, gri tam karşılanan dilimdir; — sayaca dahil değildir veya veri yoktur.')
+    st.dataframe(styled_coverage_comparison(matrix),height=540,use_container_width=True)
     if missing.empty:st.success('Seçili dönemde tüm yarım saatlik ihtiyaç karşılanmış.');return
     if 'Aralık' not in missing:
         missing['Aralık']=missing.Slot.map(lambda s:f'{(s-1)//2:02d}:{((s-1)%2)*30:02d}–{s//2:02d}:{(s%2)*30:02d}')

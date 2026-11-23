@@ -7,21 +7,23 @@ def render():
     s=st.session_state;st.subheader('Plan Yayın Onayları');items=proposals(s)
     if s.get('approval_notice'):st.success(s.pop('approval_notice'))
     if not items:st.info('Henüz onaya gönderilmiş taslak yok.');return
-    byid={r['id']:r for r in items};ident=st.selectbox('Plan',[r['id'] for r in items],format_func=lambda i:f"{byid[i]['result']['period']['start']} – {byid[i]['result']['period']['end']} · {byid[i]['status']} · %{byid[i]['rate']:.1f} eksik",key='approval_pick');item=byid[ident]
+    from ortak.personel import LANG_LABELS
+    byid={r['id']:r for r in items};ident=st.selectbox('Plan',[r['id'] for r in items],format_func=lambda i:f"{byid[i]['result']['period']['start']} – {byid[i]['result']['period']['end']} · {', '.join(LANG_LABELS.get(x,x) for x in byid[i].get('languages',[])) or 'Plan'} · {byid[i]['status']} · %{byid[i]['rate']:.1f} eksik",key='approval_pick');item=byid[ident]
     from ortak.modern_kartlar import metric_cards
     metric_cards([('Planlama onayı',f"{len(item['votes'])}/2"),('Eksik ihtiyaç',f"%{item['rate']:.2f}"),('Yönetici onayı','Alındı' if item['manager'] else 'Gerekli' if item['rate']>5 else 'Gerekmiyor')])
     result=item['result']
-    from ortak.planlama_gorunumu import coverage_summary,shortage_matrix,styled_shortage_matrix,roster_summary,daily_gap_summary,daily_coverage_summary
+    from ortak.planlama_gorunumu import coverage_summary,coverage_comparison_matrix,styled_coverage_comparison,roster_summary,daily_gap_summary,daily_coverage_summary,erlang_summary_cards
     roster_summary(result,'Yayınlanacak Planın Personel Özeti')
+    erlang_summary_cards(result)
     coverage_summary(result,'Planın Doluluk ve Açık Özeti')
     daily_coverage_summary(result)
     daily_gap_summary(result)
     with st.expander('Yarım saatlerde eksik / fazla personel',expanded=True):
         import pandas as pd
         starts=list(pd.date_range(result['period']['start'],result['period']['end'],freq='7D'));chosen=st.selectbox('İncelenecek hafta',starts,format_func=lambda d:d.strftime('%d.%m.%Y'),key='approval_coverage_week') if len(starts)>1 else starts[0]
-        st.caption('Kırmızı: eksik kişi · Yeşil +: ihtiyacın üzerinde planlanan kişi · 0: ihtiyaç karşılanmış · —: sayaca dahil değil.')
-        matrix=shortage_matrix(result['coverage'],chosen,signed=True)
-        st.dataframe(styled_shortage_matrix(matrix,human=True),use_container_width=True,height=430)
+        st.caption('Hücre biçimi: atanan/ihtiyaç · fark. Kırmızı eksik, yeşil fazla, gri tam karşılanan dilimdir; — sayaca dahil değildir.')
+        matrix=coverage_comparison_matrix(result['coverage'],chosen)
+        st.dataframe(styled_coverage_comparison(matrix),use_container_width=True,height=430)
     from ortak.statu_kapasite_raporu import entitlement_snapshot,render_approval_capacity
     rights=result.get('status_rights')
     if rights is None:

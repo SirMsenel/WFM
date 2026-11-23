@@ -177,5 +177,37 @@ class CurrentRosterRegressionTests(unittest.TestCase):
         finalize_in_memory(state,[row('1',DAY)],str(DAY),str(DAY),'planner')
         self.assertEqual(state['trk_requests'][0]['status'],'Reddedildi');self.assertEqual(state['trk_requests'][0]['queue'],'Closed')
 
+    def test_coverage_comparison_uses_gross_assigned_and_shows_ratio_and_delta(self):
+        from ortak.planlama_gorunumu import coverage_comparison_matrix,styled_coverage_comparison
+        frame=pd.DataFrame([{'Tarih':DAY,'Slot':17,'İhtiyaç':10,'Atanan':4,'Brüt Atanan':5,'Sayaca Dahil':True},
+                            {'Tarih':DAY,'Slot':18,'İhtiyaç':12,'Atanan':12,'Brüt Atanan':15,'Sayaca Dahil':True}])
+        html=styled_coverage_comparison(coverage_comparison_matrix(frame,DAY)).to_html()
+        self.assertIn('5/10',html);self.assertIn('−5',html);self.assertIn('15/12',html);self.assertIn('+3',html)
+
+    def test_status_placement_preserves_manual_net_agent_floor(self):
+        from ortak.statuler import defaults,meal_plan
+        cfg=defaults();cfg.update(enabled=True,automatic=True,shrinkage_included=True,coaching_by_leader=False)
+        rule=cfg['groups']['fulltime'];rule.update(min_shift_hours=0,meal_minutes=30,break_rules=[{'min_hours':0,'max_hours':24,'minutes':0}],coaching_monthly_minutes=0)
+        coverage=pd.DataFrame([{'Tarih':DAY,'Slot':slot,'İhtiyaç':2,'Planlanan Agent':2,'Net Agent':1,'Shrinkage (%)':50,'Atanan':2,'Eksik':0,'Fazla':0,'Sayaca Dahil':True} for slot in range(17,21)])
+        rows=[row('1',DAY,start='08:00',end='10:00'),row('2',DAY,start='08:00',end='10:00')]
+        items,out,issues=meal_plan({'status_rules':cfg,'staffing_parameters':{'shrinkage':.5}},rows,coverage,[emp('1'),emp('2')])
+        meals=[item for item in items if item['kind']=='Yemek'];self.assertEqual(len(meals),2)
+        self.assertFalse(pd.Timestamp(meals[0]['start'])<pd.Timestamp(meals[1]['end']) and pd.Timestamp(meals[1]['start'])<pd.Timestamp(meals[0]['end']))
+        self.assertTrue((out['Atanan']>=out['İhtiyaç']).all());self.assertFalse(issues)
+
+    def test_erlang_approval_cards_read_saved_staffing_parameters(self):
+        from ortak.planlama_gorunumu import erlang_summary_values
+        coverage=pd.DataFrame({'Sayaca Dahil':[True],'AHT (sn)':[195],'Hedef SL (%)':[80],'SL (model) (%)':[82.4],'Hedef süre (sn)':[20],'Doluluk (%)':[84.5],'Shrinkage (%)':[25]})
+        values=dict(erlang_summary_values({'coverage':coverage}))
+        self.assertEqual(values['AHT'],'195 sn');self.assertEqual(values['Beklenen servis seviyesi'],'82.4%');self.assertEqual(values['Ortalama doluluk'],'84.5%')
+
+    def test_publication_scope_keeps_transferred_foreign_capacity_out_of_turkish_batch(self):
+        from ortak.yayin_servisi import publication_scope
+        people=[dict(emp('1'),language='tr'),dict(emp('2'),language='en')]
+        result={'staff':people,'plan':[row('1',DAY),dict(row('2',DAY),source='foreign_language_plan')],'issues':[],'breaks':[]}
+        scoped=publication_scope(result,{'tr':True,'en':False,'ar':False})
+        self.assertEqual({person['employee_id'] for person in scoped['staff']},{'1'});self.assertEqual({record['employee_id'] for record in scoped['plan']},{'1'})
+        self.assertEqual({record['employee_id'] for record in result['plan']},{'1','2'})
+
 
 if __name__=='__main__':unittest.main()

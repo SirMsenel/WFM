@@ -7,6 +7,26 @@ from ortak.planlama_gorunumu import blocking_issues
 from modules.vardiya_plani.planlama_verileri import fingerprint
 
 
+def publication_scope(result,languages):
+    """Rapor tam kalsın; kalıcı yayın yalnızca onayın dil kapsamını yazsın."""
+    from copy import deepcopy
+    enabled={key for key,value in (languages or {}).items() if value}
+    if not enabled:return result
+    scoped=deepcopy(result);staff=[person for person in scoped.get('staff',[]) if (person.get('language') or 'tr') in enabled]
+    ids={str(person['employee_id']) for person in staff};scoped['staff']=staff
+    scoped['plan']=[row for row in scoped.get('plan',[]) if str(row.get('employee_id')) in ids]
+    scoped['issues']=[row for row in scoped.get('issues',[]) if not row.get('employee_id') or str(row.get('employee_id')) in ids]
+    breaks=[]
+    for row in scoped.get('breaks',[]):
+        if str(row.get('employee_id')) in ids:breaks.append(row);continue
+        if row.get('employee_id')=='*':
+            eligible=[str(eid) for eid in row.get('eligible_employee_ids',[]) if str(eid) in ids]
+            if eligible:breaks.append({**row,'eligible_employee_ids':eligible,'capacity':min(int(row.get('capacity',len(eligible))),len(eligible)),'remaining_capacity':min(int(row.get('remaining_capacity',row.get('capacity',len(eligible)))),len(eligible))})
+    scoped['breaks']=breaks
+    if 'status_rights' in scoped:scoped['status_rights']=[row for row in scoped['status_rights'] if str(row.get('employee_id')) in ids]
+    return scoped
+
+
 def init_publications(path):
     init_db(path)
     from ortak.sabit_demo import init_history
@@ -15,6 +35,8 @@ def init_publications(path):
 
 
 def publish_plan(state,result,approval_ticket=None):
+    result=publication_scope(result,state.get('planning_languages'))
+    if not result.get('staff'):raise ValueError('Yayın kapsamındaki dil için personel bulunamadı.')
     from ortak.statu_haklari import assert_complete
     assert_complete(state,result)
     gated=state.get("shift_rules",{}).get("publication_approvals",{}).get("enabled",False)
@@ -45,12 +67,13 @@ def publish_plan(state,result,approval_ticket=None):
                 approval=db.execute('SELECT * FROM plan_approvals WHERE id=?',(approval_ticket,)).fetchone()
                 if not approval or approval['status']!='Bekliyor':raise ValueError('Yayın onayı güncel değil.')
                 item=loads(approval['payload'])
-                if not ready(item) or item['fingerprint']!=state['planning_result_fingerprint'] or dumps(item['result']['plan'])!=dumps(result['plan']):raise ValueError('Onaylar bu taslağa ait değil.')
+                approved=publication_scope(item['result'],item.get('context',{}).get('planning_languages'))
+                if not ready(item) or item['fingerprint']!=state['planning_result_fingerprint'] or dumps(approved['plan'])!=dumps(result['plan']):raise ValueError('Onaylar bu taslağa ait değil.')
             stored=db.execute("SELECT payload FROM work_state WHERE key='published_shift_plan'").fetchone()
             current=loads(stored[0]) if stored else previous
             latest_requests=[loads(r[0]) for r in db.execute('SELECT payload FROM requests')]
             check=dict(state,published_shift_plan=current,trk_requests=latest_requests or state.get('trk_requests',[]))
-            if fingerprint(check)!=state.get('planning_result_fingerprint'):raise ValueError('Yayın veya talepler başka bir oturumda değişti. Güncel bilgilerle yeniden oluşturun.')
+            if not approval_ticket and fingerprint(check)!=state.get('planning_result_fingerprint'):raise ValueError('Yayın veya talepler başka bir oturumda değişti. Güncel bilgilerle yeniden oluşturun.')
             assert_can_plan(check,result['staff'])
             published=[r for r in current if not start<=str(r.get('date'))<=end or str(r['employee_id']) not in included]+rows
             db.execute('INSERT INTO publication_batches VALUES(?,?,?,?)',(payload['id'],datetime.now(ZoneInfo('Europe/Istanbul')).isoformat(),'active',dumps(payload)))

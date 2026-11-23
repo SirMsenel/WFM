@@ -44,6 +44,17 @@ class ApprovalTests(Base):
   self.planner('p2')
   with self.assertRaises(ValueError):vote(self.s,ident,False)
   vote(self.s,ident,False,'Eksikleri yeniden değerlendir');self.assertEqual(proposals(self.s)[0]['status'],'Reddedildi')
+ def test_different_language_approvals_can_wait_together_and_first_stays_current(self):
+  from ortak.yayin_onaylari import is_current
+  result=draft(self.s);english_result=copy.deepcopy(result);arabic_result=copy.deepcopy(result)
+  for person in english_result['staff']:person['language']='en'
+  for person in arabic_result['staff']:person['language']='ar'
+  english=submit(self.s,english_result,{'tr':False,'en':True,'ar':False})
+  self.s['foreign_language_plans']={'ar':{'period':result['period']}};save_keys(self.s)
+  arabic=submit(self.s,arabic_result,{'tr':False,'en':False,'ar':True});items={item['id']:item for item in proposals(self.s)}
+  self.assertEqual(items[english]['languages'],['en']);self.assertEqual(items[arabic]['languages'],['ar'])
+  self.assertTrue(is_current(self.s,items[english]));self.assertFalse(vote(self.s,english));self.planner('planner2');self.assertTrue(vote(self.s,english))
+  items={item['id']:item for item in proposals(self.s)};self.assertTrue(is_current(self.s,items[arabic]));self.assertEqual(items[arabic]['status'],'Bekliyor')
  def test_simulated_leave_only_finalized_when_published(self):
   self.s['profile']={'position':'agent','username':'u1','employee_id':'1','team_lead':'Lead'};req=create_request(self.s,{'type':'Yıllık İzin Talebi','start_date':str(DAY),'end_date':str(DAY),'note':'İzin'});self.planner('planner1')
   req=act(self.s,req,'takeover','Planlama üstleniyor');req=act(self.s,req,'simulate');self.assertEqual(req['status'],'Simülasyonda');ident=self.queue();vote(self.s,ident);self.assertEqual(refresh(self.s)[0]['status'],'Simülasyonda');self.planner('planner2');vote(self.s,ident);self.assertEqual(refresh(self.s)[0]['status'],'Onaylandı')

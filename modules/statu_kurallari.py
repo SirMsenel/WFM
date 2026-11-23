@@ -67,12 +67,13 @@ def render():
                     rows=list(s[rows_key]);converted=[]
                     with st.container(border=True):
                         st.markdown('<div style="font-size:12px;font-weight:750;color:#58717c;margin-bottom:8px">ÇALIŞMA SÜRESİNE GÖRE TOPLAM MOLA HAKKI</div>',unsafe_allow_html=True)
+                        h1,h2,h3,_=st.columns([1.35,1.35,1.25,.32],gap='small');h1.caption('Alt sınır');h2.caption('Üst sınır');h3.caption('Toplam mola hakkı')
                         remove=None;updated=[]
                         for index,row in enumerate(rows):
                             rid=int(row['id']);c1,c2,c3,c4=st.columns([1.35,1.35,1.25,.32],vertical_alignment='bottom',gap='small')
-                            lower=c1.selectbox('Alt sınır',hour_values,index=hour_values.index(nearest_hour(row['min_hours'])),format_func=lambda value:hour_labels[value],key=f'break_lower_{group}_{rid}')
-                            upper=c2.selectbox('Üst sınır',hour_values,index=hour_values.index(nearest_hour(row['max_hours'])),format_func=lambda value:hour_labels[value],key=f'break_upper_{group}_{rid}')
-                            total=c3.selectbox('Toplam mola hakkı',minute_values,index=minute_values.index(nearest_minute(row['minutes'])),format_func=lambda value:minute_labels[value],key=f'break_total_{group}_{rid}')
+                            lower=c1.selectbox('Alt sınır',hour_values,index=hour_values.index(nearest_hour(row['min_hours'])),format_func=lambda value:hour_labels[value],key=f'break_lower_{group}_{rid}',label_visibility='collapsed')
+                            upper=c2.selectbox('Üst sınır',hour_values,index=hour_values.index(nearest_hour(row['max_hours'])),format_func=lambda value:hour_labels[value],key=f'break_upper_{group}_{rid}',label_visibility='collapsed')
+                            total=c3.selectbox('Toplam mola hakkı',minute_values,index=minute_values.index(nearest_minute(row['minutes'])),format_func=lambda value:minute_labels[value],key=f'break_total_{group}_{rid}',label_visibility='collapsed')
                             if c4.button('×',key=f'break_delete_{group}_{rid}',help='Satırı sil'):remove=rid
                             updated.append({'id':rid,'min_hours':lower,'max_hours':upper,'minutes':total})
                         if st.button('＋ Yeni aralık',key='break_add_'+group,use_container_width=True):

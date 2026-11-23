@@ -46,9 +46,10 @@ def suggestions(state,day,start_slot,end_slot,source_mode='Her ikisi',allowed_gr
         gain,_,row=best
         base=[r for (i,d),r in existing.items() if i==eid and d!=str(day)]
         ctx=state['plan_ctx'];result=generate_plan([person],__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state),state['shift_rules'],list(state['shift_rules']['work_type']),ctx['start'],ctx['end'],fixed=base+[row],history=[r for r in history if str(r['employee_id'])==eid],unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),reject_invalid_sources=('capacity_candidate',))
-        errors=[r for r in result['issues'] if r.get('source')=='capacity_candidate' and r.get('severity')!='warning'];rejected.extend(errors)
-        if not errors:accepted.append({'row':row,'before':old,'person':person,'kind':kind,'gain':gain/2})
-    return sorted(accepted,key=lambda p:-p['gain']),rejected
+        candidate_issues=[r for r in result['issues'] if r.get('source')=='capacity_candidate'];errors=[r for r in candidate_issues if r.get('severity')!='warning'];rejected.extend(errors)
+        accepted.append({'row':row,'before':old,'person':person,'kind':kind,'gain':gain/2,
+                         'rule_status':'Kural dışı · onay gerekli' if candidate_issues else 'Kurallara uygun','violations':candidate_issues})
+    return sorted(accepted,key=lambda p:(bool(p['violations']),-p['gain'])),rejected
 
 
 def render_actions(state,result,key):
@@ -105,20 +106,29 @@ def render_actions(state,result,key):
         if not data or data['signature']!=signature:return
         options=data['options']
         if not options:
-            st.warning('Bu blok için mevcut kurallarla uygulanabilir ek atama bulunamadı. Daha fazla personel / uygun farklı grup gerekir veya OFF ve süre kuralları yeniden değerlendirilmelidir. Kurallar kendiliğinden esnetilmez.')
+            st.warning('Bu blok için personel veya vardiya adayı üretilemedi. Saat aralığını, personel kaynağını ya da çalışma grubunu genişletin.')
             if data['rejected']:
                 from collections import Counter
                 st.dataframe([{'Neden':r,'Personel sayısı':n} for r,n in Counter(x['Sorun'] for x in data['rejected']).items()],hide_index=True,use_container_width=True)
             return
-        rows=[{'Personel':p['person']['full_name'],'Sicil':p['person'].get('sicil_no',p['row']['employee_id']),'Kullanıcı adı':p['person'].get('username'),'Grup':WORK_LABELS.get(p['person'].get('work_type'),p['person'].get('work_type','—')),'Aksiyon':p['kind'],'Yeni saat':p['row']['start']+'–'+p['row']['end'],'Kapatılacak personel-saat':p['gain']} for p in options]
+        rows=[{'Personel':p['person']['full_name'],'Sicil':p['person'].get('sicil_no',p['row']['employee_id']),'Kullanıcı adı':p['person'].get('username'),'Grup':WORK_LABELS.get(p['person'].get('work_type'),p['person'].get('work_type','—')),'Aksiyon':p['kind'],'Yeni saat':p['row']['start']+'–'+p['row']['end'],'Kapatılacak personel-saat':p['gain'],'Kural':p['rule_status']} for p in options]
         from html import escape
         for offset in range(0,len(rows),3):
             for col,row in zip(st.columns(3),rows[offset:offset+3]):
-                col.markdown('<div style="min-height:175px;background:#f0f7fb;border:1px solid #d5e5ec;border-radius:17px;padding:17px;margin:7px 0"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+escape(row['Personel'])+'</b><span style="font-size:11px;background:#dcecf2;color:#315f73;padding:4px 7px;border-radius:8px">'+escape(row['Grup'])+'</span></div><div style="font-size:23px;color:#277e91;margin:12px 0">'+escape(row['Yeni saat'])+'</div><small>'+escape(row['Aksiyon'])+f" · {row['Kapatılacak personel-saat']:.1f} kişi-saat açık azalır</small></div>",unsafe_allow_html=True)
+                status_color='#2f8d69' if row['Kural']=='Kurallara uygun' else '#c2763d'
+                col.markdown('<div style="min-height:195px;background:#f0f7fb;border:1px solid #d5e5ec;border-radius:17px;padding:17px;margin:7px 0"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+escape(row['Personel'])+'</b><span style="font-size:11px;background:#dcecf2;color:#315f73;padding:4px 7px;border-radius:8px">'+escape(row['Grup'])+'</span></div><div style="font-size:23px;color:#277e91;margin:12px 0">'+escape(row['Yeni saat'])+'</div><div style="display:inline-block;padding:4px 8px;border-radius:999px;background:'+status_color+'18;color:'+status_color+';font-size:11px;font-weight:750">'+escape(row['Kural'])+'</div><div style="margin-top:9px"><small>'+escape(row['Aksiyon'])+f" · {row['Kapatılacak personel-saat']:.1f} kişi-saat açık azalır</small></div></div>",unsafe_allow_html=True)
         choice=st.selectbox('Uygulanacak öneri',list(range(len(options))),format_func=lambda i:rows[i]['Personel']+' · '+rows[i]['Yeni saat'],key=key+'_action_pick')
         reason=st.text_input('Aksiyon gerekçesi',key=key+'_action_reason')
-        if st.button('Öneriyi Taslağa Uygula',disabled=not reason.strip(),key=key+'_action_apply'):
-            from ortak.taslak_degisimleri import edit_shifts
+        selected_option=options[choice]
+        if selected_option['violations']:
+            st.warning('Bu öneri mevcut kuralların dışındadır: '+' · '.join(sorted({str(item.get('Sorun')) for item in selected_option['violations']})))
+            override=st.checkbox('Kural dışı öneriyi planlama sorumluluğuyla uygulamayı onaylıyorum',key=key+'_action_override')
+        else:override=True
+        if st.button('Öneriyi Taslağa Uygula',disabled=not reason.strip() or not override,key=key+'_action_apply'):
             row={**options[choice]['row'],'source':'manual_single','note':reason}
-            try:edit_shifts(state,[row]);st.success('Öneri taslağa işlendi. Güncel karşılaştırma için otomatik taslağı yeniden oluştur veya Vardiya Saatleri ekranını aç.')
+            try:
+                from modules.vardiya_plani.taslak_aksiyonlari import preview_draft_edit,apply_draft_edit
+                checked,hard,soft=preview_draft_edit(state,row)
+                if (hard or soft) and not override:raise ValueError('Kural uyarıları onaylanmadan öneri uygulanamaz.')
+                apply_draft_edit(state,row,(),checked,bool(hard),bool(soft));state.pop(cachekey,None);st.success('Öneri aynı taslağa uygulandı; açık ve kural sonuçları yenilendi.');st.rerun()
             except ValueError as exc:st.error(str(exc))

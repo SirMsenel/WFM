@@ -1,9 +1,32 @@
 """Otomatik taslak sonrası açık kapatma, vardiya inceleme ve onaya gönderme."""
+from copy import deepcopy
 import pandas as pd
 import streamlit as st
 
 from ortak.planlama_gorunumu import period_banner,render_shortages,render_issues,blocking_issues
 from modules.vardiya_plani.planlama_verileri import fingerprint
+
+
+def preview_draft_edit(state,row,deletions=()):
+    """Taslağı kaydetmeden aynı ekranda tüm kurallarla yeniden hesapla."""
+    check=dict(state);rows={(str(r['employee_id']),str(r['date'])):deepcopy(r) for r in state.get('draft_shift_plan',[])}
+    for item in deletions:rows.pop(tuple(map(str,item)),None)
+    rows[(str(row['employee_id']),str(row['date']))]=deepcopy(row);check['draft_shift_plan']=list(rows.values());check.pop('_status_plan_cache',None)
+    from ortak.planlama import preview_plan
+    result=preview_plan(check,True);ctx=state['plan_ctx'];result['period']={'start':str(ctx['start']),'end':str(ctx['end'])}
+    touched={(str(row['employee_id']),str(row['date']))}|{tuple(map(str,item)) for item in deletions}
+    issues=[item for item in result.get('issues',[]) if (str(item.get('employee_id')),str(item.get('date'))) in touched]
+    hard=[item for item in issues if item.get('severity')!='warning'];soft=[item for item in issues if item.get('severity')=='warning']
+    return result,hard,soft
+
+
+def apply_draft_edit(state,row,deletions,result,accept_hard=False,accept_soft=False):
+    from ortak.taslak_degisimleri import edit_shifts
+    from ortak.calisma_alani_deposu import save_keys
+    edit_shifts(state,[row],deletions);state['planning_result']=result
+    if accept_hard:state['planning_accept_hard']=True
+    if accept_soft:state['planning_accept_soft']=True
+    state['planning_result_fingerprint']=fingerprint(state);save_keys(state)
 
 
 def _calendar(result):
@@ -28,13 +51,30 @@ def _shift_editor(state,result):
         codes=['WORK','MESAI','GECE','OFF'];code=st.selectbox('Statü',codes,index=codes.index(old.get('shift_code')) if old.get('shift_code') in codes else 0,key='draft_shift_edit_code')
         times=[f'{m//60:02d}:{m%60:02d}' for m in range(0,1440,30)]
         left,right=st.columns(2);start=left.selectbox('Başlangıç',times,index=times.index(old.get('start')) if old.get('start') in times else 16,key='draft_shift_edit_start',disabled=code=='OFF');end=right.selectbox('Bitiş',times,index=times.index(old.get('end')) if old.get('end') in times else 34,key='draft_shift_edit_end',disabled=code=='OFF')
-        if st.button('Değişikliği Taslağa Uygula',key='draft_shift_edit_apply',type='primary'):
-            from ortak.taslak_degisimleri import edit_shifts
+        if st.button('Değişikliği Kontrol Et ve Uygula',key='draft_shift_edit_apply',type='primary'):
             row={**old,'employee_id':replacement,'full_name':staff[replacement].get('full_name',replacement),'group':staff[replacement].get('work_type'),'shift_code':code,'start':None if code=='OFF' else start,'end':None if code=='OFF' else end,'source':'manual_single','note':'Taslak Aksiyonları ekranında planlama düzeltmesi'}
             try:
-                edit_shifts(state,[row],[(current,old['date'])] if replacement!=current else ());state.pop('planning_result',None);state.pop('planning_result_fingerprint',None)
-                st.success('Değişiklik taslağa işlendi. Kural ve ihtiyaç sonucunu doğrulamak için otomatik taslağı yeniden oluştur.');st.rerun()
+                deletions=[(current,old['date'])] if replacement!=current else []
+                checked,hard,soft=preview_draft_edit(state,row,deletions)
+                if hard or soft:
+                    state['_draft_pending_edit']={'row':row,'deletions':deletions,'result':checked,'hard':hard,'soft':soft};st.rerun()
+                apply_draft_edit(state,row,deletions,checked);state.pop('_draft_pending_edit',None)
+                st.success('Değişiklik aynı taslak üzerinde uygulandı; ihtiyaç ve kural sonuçları yenilendi.');st.rerun()
             except ValueError as exc:st.error(str(exc))
+        pending=state.get('_draft_pending_edit')
+        if pending:
+            hard,soft=pending['hard'],pending['soft'];st.warning(f'Değişiklik {len(hard)} kesin ve {len(soft)} esnek kural uyarısı oluşturuyor. Uygulamadan önce açıkça onayla.')
+            if hard:st.dataframe(pd.DataFrame(hard)[[c for c in ['date','employee_id','Sorun'] if c in pd.DataFrame(hard)]],hide_index=True,use_container_width=True)
+            if soft:st.dataframe(pd.DataFrame(soft)[[c for c in ['date','employee_id','Sorun'] if c in pd.DataFrame(soft)]],hide_index=True,use_container_width=True)
+            hard_ok=st.checkbox('Kesin kural ihlalini planlama sorumluluğuyla onaylıyorum',key='draft_edit_hard_ok') if hard else True
+            soft_ok=st.checkbox('Esnek kural uyarısını onaylıyorum',key='draft_edit_soft_ok') if soft else True
+            yes,no=st.columns(2)
+            if yes.button('Onaylayarak Taslağa Uygula',disabled=not (hard_ok and soft_ok),key='draft_edit_confirm',type='primary'):
+                try:
+                    apply_draft_edit(state,pending['row'],pending['deletions'],pending['result'],bool(hard),bool(soft));state.pop('_draft_pending_edit',None);st.success('Onaylı değişiklik uygulandı.');st.rerun()
+                except ValueError as exc:st.error(str(exc))
+            if no.button('Değişiklikten Vazgeç',key='draft_edit_cancel'):
+                state.pop('_draft_pending_edit',None);st.rerun()
 
 
 def _publish(state,result,stale):
