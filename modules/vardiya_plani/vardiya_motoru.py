@@ -360,15 +360,27 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 if any(not p.startswith('Soft kural:') for p in early_problems):continue
                 plan.append(row);occupied.add((eid,day));by_employee[eid].append(row);covered[ix]+=1;used+=1
                 for problem in early_problems:issue(row,problem)
-    for group in (group_order if auto_fill else []):
+    passes = [(group, False) for group in group_order] if auto_fill else []
+    reserved_off = {}
+    if auto_fill and gap_overstaff_limit is not None:
+        passes.extend((group, True) for group in group_order)
+    for group, recover in passes:
         rule = groups[group]
         max_hours = float(rule.get("shift_total_hours_max", rule.get("shift_total_hours", 0)))
         if not 0 < max_hours <= 24:
             raise ValueError(f"{group}: geçersiz vardiya süresi")
-        durations = (list(range(round(float(rule['shift_total_hours'])*60),round(max_hours*60)+1,30)) if rule.get('allow_flexible_hours') and 'shift_total_hours' in rule else [round(max_hours*60)]) if 'shift_total_hours' in rule else list(range(max(30,round(float(rule.get('min_shift_hours',.5))*60)),round(max_hours*60)+1,30))
+        if 'shift_total_hours' in rule:
+            fixed_minutes = round(float(rule['shift_total_hours']) * 60)
+            durations = range(fixed_minutes, round(max_hours*60)+1, 30) if rule.get('allow_flexible_hours') else [fixed_minutes]
+        else:
+            durations = range(max(30, round(float(rule.get('min_shift_hours', .5))*60)), round(max_hours*60)+1, 30)
         members = [eid for eid, emp in staff.items() if emp["work_type"] == group and eid not in auto_excluded_ids]
         from ortak.off_dagilimi import plan_off_days
-        off_days=plan_off_days(members,staff,days,df,plan,rules)
+        if not recover:
+            reserved_off[group] = plan_off_days(members,staff,days,df,plan,rules)
+        off_days = reserved_off[group]
+        if recover and not off_days:
+            continue
         for day in days:
             potential_start=np.datetime64(datetime.combine(day,time()),'m')
             potential_end=np.datetime64(datetime.combine(day,time())+timedelta(minutes=_limit(general.get('global_latest_end','03:00'))),'m')
@@ -379,7 +391,11 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                 return sum((b[1]-b[0]).total_seconds() for r in by_employee[eid] if (b := bounds(r)))
             for eid in sorted(members, key=lambda e: (0 if friday_priority(e,day) else 1,worked(e),e)):
                 if not np.any(covered[potential_ix]<required[potential_ix]):break
-                if (eid, day) in occupied or (eid,day) in off_days:
+                # Reconsider a provisional OFF if the employee still has enough
+                # other days off. Fixed OFF entries are always occupied.
+                if (eid, day) in occupied or ((eid,day) in off_days) != recover:
+                    continue
+                if recover and day.weekday() in rule.get('preferred_off_days', []):
                     continue
                 earliest = minutes(general.get("weekend_general_start" if day.weekday() >= 5 else "weekday_general_start", "08:00"))
                 starts = list(range(math.ceil(earliest/30)*30, 1440, 30))
@@ -387,13 +403,13 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                     used = sum(r["date"] == day.isoformat() and r.get("group") == "fulltime" and r.get("start") == "07:00" for r in plan)
                     if used < int(boost.get("weekday_0700_fulltime_extra_count", 0)):
                         starts.insert(0, 420)
-                best, best_score = None, (0, 0, 0, 0)
+                candidates = []
                 for begin in starts:
                     for duration in durations:
                         finish = begin + duration
                         if finish > _limit(general.get("global_latest_end", "03:00")):
                             continue
-                        if rule.get("max_end_time") and finish > _limit(rule["max_end_time"]):
+                        if rule.get("max_end_time") and rule.get("max_end_is_hard", True) and finish > _limit(rule["max_end_time"]):
                             continue
                         row = {"employee_id": eid, "date": day.isoformat(), "group": group,
                                "shift_code": "WORK", "start": f"{begin//60:02d}:{begin%60:02d}",
@@ -424,16 +440,17 @@ def generate_plan(employees, demand, rules, group_order, start, end, fixed=(),
                                     and finish <= minutes(rule.get("daytime_window_end", "19:00"))))
                         early_needed=group=='fulltime' and day.weekday()<5 and begin==420 and boost.get('weekday_0700_fulltime_extra_enabled') and sum(r['date']==day.isoformat() and r.get('group')=='fulltime' and r.get('start')=='07:00' for r in plan)<int(boost.get('weekday_0700_fulltime_extra_count',0))
                         score = (gain+len(stamp) if early_needed else gain, -excess, int(daytime), -begin)
-                        problems=violations(row,by_employee[eid])
-                        if score <= best_score or any(not p.startswith('Soft kural:') for p in problems):continue
-                        best, best_score = (row, interval, ix,problems), score
-                if best:
-                    row, interval, ix,problems = best
+                        candidates.append((score, row, ix))
+                for score, row, ix in sorted(candidates, key=lambda item:item[0], reverse=True):
+                    problems=violations(row,by_employee[eid])
+                    if any(not p.startswith('Soft kural:') for p in problems):
+                        continue
                     plan.append(row)
                     by_employee[eid].append(row)
                     occupied.add((eid, day))
                     covered[ix] += 1
                     for problem in problems:issue(row,problem)
+                    break
 
     for eid in staff:
         for day in days:

@@ -62,80 +62,87 @@ def plan(state,rows,coverage,people,used=None):
     coached=dict(coaching_used(state) if used is None else used);by_person={};hour_use={}
     for item in state.get('_status_fixed_baseline',[]):
         a,b=pd.Timestamp(item['start']),pd.Timestamp(item['end']);overlap=np.maximum(0,(np.minimum(np.datetime64(b),stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(a),stamps))/np.timedelta64(30,'m'));loss[:]+=overlap;by_person.setdefault(str(item['employee_id']),[]).append(item)
+    # One seat counter per minute, including slots crossing midnight.
+    if not len(stamps):
+        return scheduled,out,issues
+    epoch = stamps.min().astype('datetime64[m]').astype(int)
+    slot_minutes = stamps.astype('datetime64[m]').astype(int) - epoch
+    room = np.full(int(slot_minutes.max()) + 30, np.inf)
+    counted_slots = out['Sayaca Dahil'].to_numpy(bool) if 'Sayaca Dahil' in out else np.ones(len(out), bool)
+    for ix in np.flatnonzero(counted_slots):
+        start_minute = slot_minutes[ix]
+        room[start_minute:start_minute+30] = np.floor(gross[ix] - net_need[ix] + 1e-8)
+
+    def minute(stamp):
+        return pd.Timestamp(stamp).value / 60_000_000_000 - epoch
+
     def place(row,kind,duration,a,b,mandatory=False,probe=False,target=None,protect_net=True):
         if duration<=0:return True
-        eid=str(row['employee_id']);best=None;rule=cfg.get('groups',{}).get(lookup.get(eid,{}).get('work_type'),{})
-        indices=np.flatnonzero((stamps+np.timedelta64(30,'m')>np.datetime64(a))&(stamps<np.datetime64(b)))
-        local_stamps=stamps[indices];local_need=net_need[indices];local_gross=gross[indices];local_rates=rates[indices];local_loss=loss[indices]
-        counted=out['Sayaca Dahil'].to_numpy(bool)[indices] if 'Sayaca Dahil' in out else np.ones(len(indices),bool)
-        before=np.maximum(0,local_need-net_capacity(local_gross,local_loss,local_rates))
-        for t in pd.date_range(a,b-pd.Timedelta(minutes=duration),freq='5min'):
-            finish=t+pd.Timedelta(minutes=duration)
-            if any(t<pd.Timestamp(x['end']) and pd.Timestamp(x['start'])<finish for x in by_person.get(eid,[])):continue
-            # Yarım saat ortalaması uygun görünse bile iki kişinin statüsü aynı
-            # dakikalarda çakışıp hatta kimseyi bırakmayabilir. Aday aralığı,
-            # mevcut statülerin başlangıç/bitişleriyle parçalayıp her anda
-            # Planlanan - Net kadar eşzamanlı hat dışı kişi sınırını koru.
-            overlapping=[item for item in scheduled if item.get('start') and item.get('end') and t<pd.Timestamp(item['end']) and pd.Timestamp(item['start'])<finish] if explicit_net and protect_net else []
-            boundaries=sorted({t,finish,*[max(t,pd.Timestamp(item['start'])) for item in overlapping],*[min(finish,pd.Timestamp(item['end'])) for item in overlapping]})
-            instant_ok=True
-            for left,right in zip(boundaries,boundaries[1:]):
-                if right<=left:continue
-                middle=left+(right-left)/2;slot_ix=np.flatnonzero((stamps<=np.datetime64(middle))&(np.datetime64(middle)<stamps+np.timedelta64(30,'m')))
-                if not len(slot_ix):continue
-                ix=int(slot_ix[0]);is_counted=bool(out['Sayaca Dahil'].iloc[ix]) if 'Sayaca Dahil' in out else True
-                allowed=max(0,int(np.floor(gross[ix]-net_need[ix]+1e-8)))
-                simultaneous=1+sum(pd.Timestamp(item['start'])<right and left<pd.Timestamp(item['end']) for item in overlapping)
-                if explicit_net and protect_net and is_counted and simultaneous>allowed:instant_ok=False;break
-            if not instant_ok:continue
+        eid=str(row['employee_id'])
+        rule=cfg.get('groups',{}).get(lookup.get(eid,{}).get('work_type'),{})
+        times=pd.date_range(a,b-pd.Timedelta(minutes=duration),freq='5min')
+        starts=np.array([minute(t) for t in times])
+        ends=starts+duration
+        valid=(starts>=0)&(ends<=len(room))
+        indices=np.flatnonzero((slot_minutes+30>minute(a))&(slot_minutes<minute(b)))
+        overlap=np.maximum(0,np.minimum(ends[:,None],slot_minutes[indices]+30)-np.maximum(starts[:,None],slot_minutes[indices]))/30
+        valid &= overlap.sum(axis=1)+1e-8>=duration/30
+        if explicit_net and protect_net:
+            blocked=np.r_[0,np.cumsum(room<1)]
+            first=np.clip(np.floor(starts).astype(int),0,len(room))
+            last=np.clip(np.ceil(ends).astype(int),0,len(room))
+            valid &= blocked[first]==blocked[last]
+        prior=by_person.get(eid,[])
+        spread=np.full(len(starts),minute(b)-minute(a))
+        maximum=min(15,max(1,int(rule.get('break_minutes',15))))
+        gap=int(rule.get('break_min_gap_minutes',15)) if maximum>=5 else 0
+        touches_left = np.zeros(len(times))
+        touches_right = np.zeros(len(times))
+        contiguous = []
+        for item in sorted(prior,key=lambda x:x['start']):
+            x,y=minute(item['start']),minute(item['end'])
+            valid &= (ends<=x)|(starts>=y)
+            if kind=='Mola' and item['kind']=='Mola':
+                valid &= (ends+gap<=x)|(starts>=y+gap)
+                spread=np.minimum(spread,np.maximum(starts-y,x-ends))
+                if contiguous and contiguous[-1][1] == x:
+                    contiguous[-1] = (contiguous[-1][0], y)
+                else:
+                    contiguous.append((x,y))
+        if kind=='Mola':
+            for x,y in contiguous:
+                touches_left[starts==y]=y-x
+                touches_right[ends==x]=y-x
+            valid &= touches_left+duration+touches_right<=maximum
+            limit=int(rule.get('break_per_hour_max',15))
+            for hour in pd.date_range(a.floor('h'),b.floor('h'),freq='h'):
+                x=minute(hour)
+                in_hour=np.maximum(0,np.minimum(ends,x+60)-np.maximum(starts,x))
+                valid &= (in_hour==0)|(hour_use.get((eid,hour),0)+in_hour<=limit)
+        remaining=net_capacity(gross[indices],loss[indices]+overlap,rates[indices])
+        counted=counted_slots[indices]
+        shortage=np.maximum(0,net_need[indices]-remaining)
+        before=np.maximum(0,net_need[indices]-net_capacity(gross[indices],loss[indices],rates[indices]))
+        cost=((shortage-before)*counted).sum(axis=1)
+        if explicit_net and protect_net:
+            valid &= ~((shortage>1e-8)&counted&(overlap>0)).any(axis=1)
+        if not mandatory:valid &= cost<=1e-8
+        ids=np.flatnonzero(valid)
+        best=None
+        if len(ids):
+            center=np.abs(starts+duration/2-(minute(a)+minute(b))/2)
             if kind=='Mola':
-                limit=int(rule.get('break_per_hour_max',15));
-                maximum=min(15,max(1,int(rule.get('break_minutes',15))));left,right=t,finish
-                # Tiny test/legacy fragments (below five minutes) are not
-                # operational break pieces; applying a spacing rule to them
-                # would make a valid entitlement impossible to distribute.
-                min_gap=pd.Timedelta(minutes=max(0,int(rule.get('break_min_gap_minutes',15))) if maximum>=5 else 0)
-                # A complete break entitlement must be spread through the shift;
-                # back-to-back fragments such as 19:30–19:40 and 19:50–20:00
-                # are operationally not treated as separate breaks.
-                if any(old.get('kind')=='Mola' and (t<pd.Timestamp(old['end'])+min_gap and finish>pd.Timestamp(old['start'])-min_gap) for old in by_person.get(eid,[])):continue
-                while True:
-                    before_span=(left,right)
-                    for old in by_person.get(eid,[]):
-                        x,y=pd.Timestamp(old['start']),pd.Timestamp(old['end'])
-                        if old['kind']=='Mola' and x<=right and left<=y:left,right=min(left,x),max(right,y)
-                    if (left,right)==before_span:break
-                if (right-left).total_seconds()/60>maximum:continue
-                buckets={x.floor('h'):0 for x in pd.date_range(t,finish-pd.Timedelta(seconds=1),freq='5min')}
-                for bucket in buckets:buckets[bucket]=max(0,(min(finish,bucket+pd.Timedelta(hours=1))-max(t,bucket)).total_seconds()/60)
-                if any(hour_use.get((eid,k),0)+v>limit for k,v in buckets.items()):continue
-            overlap=np.maximum(0,(np.minimum(np.datetime64(finish),local_stamps+np.timedelta64(30,'m'))-np.maximum(np.datetime64(t),local_stamps))/np.timedelta64(30,'m'))
-            if overlap.sum()+1e-8<duration/30:continue
-            remaining=net_capacity(local_gross,local_loss+overlap,local_rates)
-            # Kullanıcının girdiği/hesaplanan Net Agent, statüler sırasında hatta
-            # korunması gereken alt sınırdır. Zorunlu yemek ve molalar da aynı
-            # anda iki kişiyi hat dışına çıkararak bu sınırın altına inemez.
-            if explicit_net and protect_net and ((remaining+1e-8<local_need)&counted).any():continue
-            after=np.maximum(0,local_need-remaining);cost=float(((after-before)*counted).sum())
-            if not mandatory and cost>1e-8:continue
-            # Önce hat kapasitesi, sonra mola parçalarını vardiyaya yayma
-            # tercih edilir. Böylece eşdeğer iki seçenekten önceki molaya
-            # yapışan değil, en geniş çalışma aralığı bırakan seçilir.
-            preference_penalty=max(0,(right-left).total_seconds()/60-min(maximum,max(1,int(rule.get('break_preferred_minutes',10))))) if kind=='Mola' else 0
-            previous_breaks=[old for old in by_person.get(eid,[]) if old.get('kind')=='Mola'] if kind=='Mola' else []
-            spread=min((max(0,(t-pd.Timestamp(old['end'])).total_seconds()/60,(pd.Timestamp(old['start'])-finish).total_seconds()/60) for old in previous_breaks),default=(b-a).total_seconds()/60)
-            center=abs((t+(finish-t)/2-(a+(b-a)/2)).total_seconds())
-            target_distance=abs((t+(finish-t)/2-target).total_seconds()) if target is not None else center
-            alignment=t.minute%min(30,max(1,duration)) if kind=='Yemek' else 0
-            # Shrinkage butcesi icindeki birden fazla secenek ayni maliyete
-            # sahip olabilir. Bu durumda mevcut kaybi en az yogunlastiran
-            # aralik secilir; ekip molalari tek bir saate yigmaz.
-            concentration=float(np.square(local_loss+overlap).sum())
-            # Mola parçalarında vardiya boyunca eşit aralıklı hedefler önce gelir.
-            # Böylece kapasitesi eşdeğer seçenekler vardiyanın ortasına yığılmaz.
-            score=(cost,target_distance,concentration,preference_penalty,-spread,center) if kind=='Mola' else (cost,alignment,concentration,preference_penalty,-spread,center)
-            candidate=score+(t,finish,overlap)
-            if best is None or candidate[:6]<best[:6]:best=candidate
+                preference=np.abs(starts+duration/2-minute(target)) if target is not None else center
+            elif kind=='Yemek':
+                preference=times.minute.to_numpy()%min(30,max(1,duration))
+            else:
+                preference=np.zeros(len(starts))
+            concentration=np.square(loss[indices]+overlap).sum(axis=1)
+            rank=np.lexsort((ids,center[ids],-spread[ids],concentration[ids],preference[ids],cost[ids]))
+            chosen=ids[rank[0]]
+            t=times[chosen]
+            finish=t+pd.Timedelta(minutes=duration)
+            best=(t,finish,overlap[chosen])
         if best is None:
             # Net Agent korunarak yer bulunamazsa zorunlu yemek/mola hakkını
             # kaybetme. İkinci geçişte hakkı planla; oluşan kapasite açığı
@@ -143,7 +150,8 @@ def plan(state,rows,coverage,people,used=None):
             if mandatory and explicit_net and protect_net:return place(row,kind,duration,a,b,mandatory,probe,target,False)
             if probe:return False
             issues.append({'employee_id':eid,'date':row['date'],'Sorun':kind+' için uygun kapasite/pencere yok; '+('vardiyayı veya ihtiyacı düzenleyin' if mandatory else 'uygun başka döneme ertelendi'),'severity':'error' if mandatory else 'warning','override_required':False});return False
-        _,__,___,____,_____,______,t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
+        t,finish,overlap=best;loss[indices]+=overlap;item={'employee_id':eid,'date':row['date'],'kind':kind,'start':str(t),'end':str(finish),'status':'Planlı'};scheduled.append(item);by_person.setdefault(eid,[]).append(item)
+        room[int(np.floor(minute(t))):int(np.ceil(minute(finish)))]-=1
         if kind=='Mola':
             for bucket in pd.date_range(t.floor('h'),(finish-pd.Timedelta(seconds=1)).floor('h'),freq='h'):hour_use[(eid,bucket)]=hour_use.get((eid,bucket),0)+(min(finish,bucket+pd.Timedelta(hours=1))-max(t,bucket)).total_seconds()/60
         return True

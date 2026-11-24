@@ -115,7 +115,9 @@ def render():
     _calendar(result)
     _shift_editor(state,result)
     st.markdown('### Sistem Önerileri ve Açık Kapatma')
-    render_shortages(result,'draft_action_gaps')
+    from ortak.eksik_aksiyonlari import render_actions
+    render_actions(state,result,'draft_action_gaps')
+    render_shortages(result,'draft_action_gaps',actions=False)
     st.markdown('### Kural Uyuşmazlıkları ve Düzeltme Alanı')
     render_issues(result)
     st.divider();st.markdown('### Yayın Kararı')

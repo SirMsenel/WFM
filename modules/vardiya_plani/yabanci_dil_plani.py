@@ -19,11 +19,40 @@ def _foreign_demand(frame):
     return result
 
 
-def _calendar(result):
+def _calendar(state, result, lang, demand):
     from ortak.planlama import calendar_grid
     from ortak.vardiya_gorunumu import cell_style
     grid=calendar_grid({**result,'source_rows':result['plan'],'exam_keys':set()},result['period'])
-    st.dataframe(grid.style.map(cell_style,subset=[c for c in grid if c not in {'Personel','Sicil no','Kullanıcı adı'}]),hide_index=True,use_container_width=True,height=470)
+    styled = grid.style.map(cell_style, subset=list(grid.columns[1:]))
+    form_key = 'foreign_shift_' + lang
+    with st.form(form_key):
+        edited = st.data_editor(styled, disabled=['Personel'], hide_index=True, use_container_width=True,
+                                height=470, key=form_key + str(state.get(form_key+'_revision', 0)))
+        save = st.form_submit_button('Vardiya düzeltmelerini kaydet')
+    if save:
+        from ortak.yayin_hucre_duzenleyici import changes_from_grid
+        try:
+            changes = changes_from_grid(grid, edited, result['staff'], dict(result['period'], rows=result['plan']))
+            if not changes:
+                st.info('Takvimde değişen hücre yok.')
+                return
+            revised = {(str(row['employee_id']), row['date']):row for row in result['plan']}
+            for change in changes:
+                key = (change['employee_id'], change['date'])
+                if revised[key]['source'] not in {'auto','auto_night','foreign_manual'}:
+                    raise ValueError('Kesin kayıtlar kendi kaynağından düzenlenir.')
+                if change['shift_code']=='MESAI':
+                    change['shift_code']='WORK'
+                if change['shift_code']=='WORK' and not change['start']:
+                    raise ValueError('Çalışma için başlangıç ve bitiş saatini girin.')
+                revised[key] = {**revised[key], **change, 'source':'foreign_manual'}
+            updated = _build(state, lang, demand, list(revised.values()))
+            state['foreign_language_plans'] = {**state['foreign_language_plans'], lang:updated}
+            state[form_key+'_revision'] = state.get(form_key+'_revision', 0)+1
+            save_keys(state)
+            st.rerun()
+        except (ValueError,KeyError,TypeError) as exc:
+            st.error(str(exc))
 
 
 def _interval_result(result,lang):
@@ -42,7 +71,7 @@ def _interval_result(result,lang):
     st.dataframe(styled_coverage_comparison(matrix),use_container_width=True,height=540)
 
 
-def _build(state,lang,demand):
+def _build(state,lang,demand,edited_rows=None):
     from modules.vardiya_plani.planlama_verileri import collect_inputs
     from modules.vardiya_plani.vardiya_motoru import generate_plan
     check=dict(state);check['planning_languages']={'tr':False,'en':lang=='en','ar':lang=='ar'}
@@ -67,9 +96,20 @@ def _build(state,lang,demand):
     base_order=tuple(order)
     alternatives=(candidate for candidate in permutations(order) if candidate!=base_order)
     orders=[base_order]+list(islice(alternatives,5))
+    if edited_rows is not None:
+        fixed_keys = {(str(row['employee_id']),str(row['date'])) for row in fixed}
+        for row in edited_rows:
+            if row.get('source')=='auto' and row['shift_code']=='OFF':
+                continue
+            if (str(row['employee_id']),str(row['date'])) in fixed_keys:
+                if row.get('source')=='foreign_manual':
+                    raise ValueError('Bu hücrede kesin kayıt var.')
+            else:
+                fixed.append(row)
+        orders=[base_order]
     result=None;best_score=None
     for candidate_order in orders:
-        candidate=generate_plan(staff,demand,scoped_rules,list(candidate_order),ctx['start'],ctx['end'],fixed=fixed,history=history,unavailable=unavailable,strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=check['planning_languages'],exclude_early_hours=state.get('planning_exclude_early_hours',False),auto_night=False)
+        candidate=generate_plan(staff,demand,scoped_rules,list(candidate_order),ctx['start'],ctx['end'],fixed=fixed,history=history,unavailable=unavailable,auto_fill=edited_rows is None,strict_capacity=True,hour_targets=state.get('group_hour_targets',[]),languages=check['planning_languages'],exclude_early_hours=state.get('planning_exclude_early_hours',False),auto_night=False)
         counted=candidate['coverage'][candidate['coverage']['Sayaca Dahil']] if 'Sayaca Dahil' in candidate['coverage'] else candidate['coverage']
         hard=sum(row.get('severity')!='warning' for row in candidate.get('issues',[]))
         score=(float(counted['Eksik'].sum()),int((counted['Eksik']>0).sum()),hard,float(counted['Fazla'].sum()))
@@ -134,43 +174,53 @@ def render():
     if saved is None:st.info('Bağımsız vardiya taslağı oluşturmak için önce bu dilin ihtiyacını kaydedin.');return
     header,action=st.columns([4,1.25],vertical_alignment='center')
     header.markdown(f'<div style="padding:15px 17px;border-radius:16px;background:linear-gradient(120deg,#edf8f8,#f5f1fa);border:1px solid #dbe8ed"><b style="color:#315f6d">{LABELS[lang]} · Bağımsız Vardiya Taslağı</b><br><small>Yalnızca bu dildeki personel ve bu dilin ihtiyacı kullanılır.</small></div>',unsafe_allow_html=True)
-    if action.button('Taslağı Oluştur',key='foreign_generate_'+lang,type='primary',use_container_width=True):
+    if action.button('Otomatik Vardiya Yaz',key='foreign_generate_'+lang,type='primary',use_container_width=True):
         try:
             with st.spinner(LABELS[lang]+' vardiyaları oluşturuluyor…'):result=_build(s,lang,saved)
+            revision_key='foreign_shift_'+lang+'_revision'
+            s[revision_key]=s.get(revision_key,0)+1
             plans=dict(s.get('foreign_language_plans') or {});plans[lang]=result;s['foreign_language_plans']=plans;save_keys(s);st.rerun()
         except (ValueError,TypeError,KeyError) as exc:st.error('Dil planı oluşturulamadı: '+str(exc))
     result=(s.get('foreign_language_plans') or {}).get(lang)
     if not result:return
+    if result.get('period') != {'start':str(ctx['start']),'end':str(ctx['end'])}:
+        st.info('Seçili dönem için bu dilin vardiya taslağını oluşturun.')
+        return
     from ortak.planlama_gorunumu import coverage_summary,roster_summary,blocking_issues,render_issues
-    roster_summary(result,LABELS[lang]+' Taslak Özeti');_calendar(result);coverage_summary(result,LABELS[lang]+' İhtiyaç Sonucu');_interval_result(result,lang)
+    roster_summary(result,LABELS[lang]+' Taslak Özeti');_calendar(s,result,lang,saved);coverage_summary(result,LABELS[lang]+' İhtiyaç Sonucu');_interval_result(result,lang)
     hard=blocking_issues(result)
     if result.get('issues'):
         with st.expander('Kural kontrolleri',expanded=bool(hard)):render_issues(result)
     accepted=True
+    soft_required = any(issue.get('severity')=='warning' and issue.get('override_required',True) for issue in result.get('issues',[]))
+    soft_accepted = not soft_required or st.checkbox('Esnek kural uyarılarını inceledim ve onaylıyorum',key='foreign_accept_soft_'+lang)
     if hard:accepted=st.checkbox('Kesin kural uyarılarını gördüm; bu dil planını Planlama onayıyla göndermek istiyorum',key='foreign_accept_hard_'+lang)
     people={str(p['employee_id']):p for p in result['staff']};current=(s.get('foreign_language_transferred_ids') or {}).get(lang,[])
     chosen=st.multiselect('Türkçe ihtiyacından düşülecek personeller',list(people),default=[eid for eid in current if eid in people],format_func=lambda eid:people[eid].get('full_name',eid),key='foreign_transfer_people_'+lang)
     st.caption('Dil planındaki personeller korunur ve ana motor vardiyalarını değiştiremez. Yalnızca burada seçtiklerinin vardiya kapasitesi ana plandaki Türkçe ihtiyacından düşülür.')
+    notice = s.pop('foreign_transfer_notice_'+lang, None)
+    if notice:
+        st.success(notice)
     a,b=st.columns(2)
     if a.button('Seçili Kapasiteyi Ana Plana Aktar',disabled=not chosen,key='foreign_transfer_selected_'+lang,use_container_width=True):
-        _transfer(s,lang,result,chosen);st.success(f'{len(chosen)} personelin 30 dakikalık kapasitesi Türkçe ihtiyacından düşülecek; vardiya ve statüleri bağımsız kalacak.');st.rerun()
+        _transfer(s,lang,result,chosen);s['foreign_transfer_notice_'+lang]=(f'{len(chosen)} personelin 30 dakikalık kapasitesi Türkçe ihtiyacından düşülecek; vardiya ve statüleri bağımsız kalacak.');st.rerun()
     if b.button('Tüm Dil Kapasitesini Ana Plana Aktar',key='foreign_transfer_all_'+lang,use_container_width=True):
-        _transfer(s,lang,result,list(people));st.success(f'{LABELS[lang]} planının 30 dakikalık kişi kapasitesi Türkçe ihtiyacına işlendi.');st.rerun()
+        _transfer(s,lang,result,list(people));s['foreign_transfer_notice_'+lang]=(f'{LABELS[lang]} planının 30 dakikalık kişi kapasitesi Türkçe ihtiyacına işlendi.');st.rerun()
     st.markdown('#### Bağımsız Dil Planı Yayını')
     st.caption('Bu seçenek planı ana Türkçe motoruna yeniden hesaplatmadan yalnızca seçili dil için onaylar/yayınlar.')
     approvals=s.get('shift_rules',{}).get('publication_approvals',{}).get('enabled')
     label='Dil Planını Yayın Onayına Gönder' if approvals else 'Dil Planını Doğrudan Yayınla'
-    if st.button(label,key='foreign_publish_'+lang,type='primary',use_container_width=True,disabled=not accepted):
+    if st.button(label,key='foreign_publish_'+lang,type='primary',use_container_width=True,disabled=not (accepted and soft_accepted)):
         scope={'tr':False,'en':lang=='en','ar':lang=='ar'}
         try:
             if approvals:
                 from ortak.yayin_onaylari import submit
-                approval_state=dict(s);approval_state['planning_accept_hard']=accepted
+                approval_state=dict(s);approval_state.update(planning_accept_hard=accepted,planning_accept_soft=soft_accepted)
                 ident=submit(approval_state,result,planning_languages=scope);s['workspace_baseline']=approval_state.get('workspace_baseline',s.get('workspace_baseline',{}));st.success('Bağımsız dil planı onaya gönderildi: '+ident)
             else:
                 from modules.vardiya_plani.planlama_verileri import fingerprint
                 from ortak.yayin_servisi import publish_plan
-                original=deepcopy(s.get('planning_languages'));check=dict(s);check['planning_languages']=scope;check['planning_accept_hard']=accepted;check['planning_result_fingerprint']=fingerprint(check)
+                original=deepcopy(s.get('planning_languages'));check=dict(s);check['planning_languages']=scope;check.update(planning_accept_hard=accepted,planning_accept_soft=soft_accepted);check['planning_result_fingerprint']=fingerprint(check)
                 publish_plan(check,result)
                 for key in ('published_shift_plan','last_publication','trk_requests','workspace_baseline'):
                     if key in check:s[key]=check[key]

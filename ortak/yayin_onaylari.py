@@ -64,6 +64,64 @@ def source_signature(state,languages=None):
     return hashlib.sha256(dumps(data).encode()).hexdigest()
 
 
+def approval_signature(state, languages, reviewed=None):
+    """Match only the sources used by this language's plan, in stable order."""
+    scoped = dict(state)
+    people = [p for p in state.get('employees_cache', []) if (p.get('language') or 'tr') in languages]
+    identities = {str(p.get(field)) for p in people for field in ('employee_id', 'username') if p.get(field)}
+    scoped['employees_cache'] = sorted(people, key=lambda p: str(p['employee_id']))
+    for key in ('fixed_shift_records', 'shift_overrides', 'trk_requests', 'plan_overrides'):
+        def belongs(row):
+            owner = row.get('request') or row
+            return any(str(owner.get(f, '')) in identities for f in ('employee_id','created_by','employee')) or any(
+                str(target.get('employee_id')) in identities for target in owner.get('targets', []))
+        scoped[key] = sorted((row for row in state.get(key, []) if belongs(row)), key=dumps)
+    for key in ('acad_schedules', 'acad_exam_calendar'):
+        scoped[key] = {k:v for k,v in state.get(key, {}).items() if str(k) in identities}
+    if 'tr' in languages:
+        from ortak.plan_ihtiyaci import demand
+        staffing = demand(dict(state, planning_demand_language=None))
+        if staffing is not None:
+            scoped['sp_staffing_result_df'] = staffing.sort_values(['Tarih','Slot']).reset_index(drop=True)
+    signature = source_signature(scoped, languages)
+    if 'tr' in languages:
+        return signature
+    sources = []
+    for lang in sorted(languages):
+        need = (state.get('language_demands') or {}).get(lang)
+        if need is not None:
+            import pandas as pd
+            need = need.assign(Tarih=pd.to_datetime(need['Tarih'])).sort_values(['Tarih','Slot'])
+            need = need.reset_index(drop=True).to_json(orient='split',date_format='iso')
+        plan = (state.get('foreign_language_plans') or {}).get(lang) or reviewed or {}
+        sources.append((lang, need, plan.get('plan') or []))
+    return hashlib.sha256(dumps([signature,sources]).encode()).hexdigest()
+
+
+def approval_is_current(state, item, db):
+    languages = approval_languages(item)
+    if not state.get('employees_cache'):
+        from ortak.personel import planner_people
+        planner_people(state)
+    current = dict(state)
+    for row in db.execute('SELECT key,payload FROM work_state'):
+        if row['key'] in STATE_KEYS:
+            current[row['key']] = loads(row['payload'])
+    current['trk_requests'] = [loads(row[0]) for row in db.execute('SELECT payload FROM requests ORDER BY id')]
+    if item.get('signature_version') == 2:
+        return approval_signature(current, languages, item['result']) == item['source_signature']
+    if 'source_signature' in item:
+        legacy_languages = item.get('source_signature_languages')
+        if source_signature(current, legacy_languages) == item['source_signature']:
+            return True
+        # For pending older tickets verify the archived sources against the
+        # original signature before comparing their language-specific subset.
+        original = {**current, **item.get('context', {})}
+        return (source_signature(original, legacy_languages) == item['source_signature']
+                and approval_signature(original, languages) == approval_signature(current, languages))
+    return fingerprint(current_context(state,item,db)) == item['fingerprint']
+
+
 def init(path):
     init_governance(path)
     with connect(path) as db:db.execute('CREATE TABLE IF NOT EXISTS plan_approvals(id TEXT PRIMARY KEY,status TEXT NOT NULL,payload TEXT NOT NULL)')
@@ -101,7 +159,7 @@ def submit(state,result,planning_languages=None):
     # kopya saklanmazsa son yayın adımı sonradan değişen Türkçe hesabı görür.
     context_keys=set(SOURCE_KEYS)|{'sp_staffing_result_df','planning_accept_soft','planning_accept_hard'}
     context={k:deepcopy(scoped[k]) for k in context_keys if k in scoped}
-    item={'id':'APR-'+uuid4().hex[:12],'fingerprint':scoped_fingerprint,'source_signature':source_signature(state,languages),'source_signature_languages':sorted(languages),'languages':sorted(languages),'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
+    item={'id':'APR-'+uuid4().hex[:12],'fingerprint':scoped_fingerprint,'signature_version':2,'source_signature':approval_signature(state,languages,result),'source_signature_languages':sorted(languages),'languages':sorted(languages),'result':result,'context':context,'rate':rate,'votes':[],'manager':None,'created_by':state['profile']['username'],'created_at':now()}
     baseline=dict(state.get('workspace_baseline',{}))
     with connect(path) as db:
         db.execute('BEGIN IMMEDIATE')
@@ -132,14 +190,7 @@ def current_context(state,item,db):
 
 def is_current(state,item):
     with connect(state['workspace_db_path']) as db:
-        current=dict(state)
-        for r in db.execute('SELECT key,payload FROM work_state'):
-            if r['key'] in STATE_KEYS:current[r['key']]=loads(r['payload'])
-        current['trk_requests']=[loads(r[0]) for r in db.execute('SELECT payload FROM requests')]
-        revision=db.execute("SELECT value FROM metadata WHERE key='directory_revision'").fetchone() if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone() else None
-        current['_directory_revision']=revision[0] if revision else None
-        if 'source_signature' not in item:return fingerprint(current_context(state,item,db))==item['fingerprint']
-    return source_signature(current,item.get('source_signature_languages'))==item['source_signature']
+        return approval_is_current(state,item,db)
 
 
 def vote(state,ident,approve=True,reason=''):
@@ -153,14 +204,8 @@ def vote(state,ident,approve=True,reason=''):
         if not approve:
             if not reason.strip():raise ValueError('Ret gerekçesi gerekli.')
             db.execute("UPDATE plan_approvals SET status='Reddedildi' WHERE id=?",(ident,));append_audit(db,'Plan yayını reddedildi',profile,{'id':ident,'reason':reason});return False
-        current=dict(state)
-        for source in db.execute('SELECT key,payload FROM work_state'):
-            if source['key'] in STATE_KEYS:current[source['key']]=loads(source['payload'])
-        current['trk_requests']=[loads(source[0]) for source in db.execute('SELECT payload FROM requests')]
-        revision=db.execute("SELECT value FROM metadata WHERE key='directory_revision'").fetchone() if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone() else None
-        current['_directory_revision']=revision[0] if revision else None
-        current_ok=source_signature(current,item.get('source_signature_languages'))==item['source_signature'] if 'source_signature' in item else fingerprint(current_context(state,item,db))==item['fingerprint']
-        if not current_ok:raise ValueError('Taslak güncel değil. Kaynaklar değişti; bu taslağı reddedip güncel planı yeniden oluşturun.')
+        if not approval_is_current(state,item,db):
+            raise ValueError('Taslak güncel değil. Kaynaklar değişti; bu taslağı reddedip güncel planı yeniden oluşturun.')
         if actor in {v['actor'] for v in item['votes']} or (item.get('manager') or {}).get('actor')==actor:raise ValueError('Aynı gerçek kullanıcı ikinci onayı veremez; hesap görünümü değiştirmek bağımsız onay sayılmaz.')
         entry={'actor':actor,'as':profile['username'],'name':profile.get('full_name') or profile['username'],'role':role,'at':now()}
         if role=='wfm':item['votes'].append(entry)
@@ -172,10 +217,13 @@ def vote(state,ident,approve=True,reason=''):
             for r in db.execute('SELECT key,payload FROM work_state'):
                 if r['key'] in STATE_KEYS:check[r['key']]=loads(r['payload'])
             check['trk_requests']=[loads(r[0]) for r in db.execute('SELECT payload FROM requests')]
-        check.update(item['context']);check['planning_result_fingerprint']=item['fingerprint']
+        for key in ('plan_ctx','planning_languages','planning_accept_hard','planning_accept_soft'):
+            if key in item['context']:
+                check[key] = item['context'][key]
+        check['planning_result_fingerprint'] = item['fingerprint']
         from ortak.yayin_servisi import publish_plan
         publish_plan(check,item['result'],approval_ticket=ident)
-        for key in ('published_shift_plan','last_publication','planning_result_fingerprint','workspace_baseline','trk_requests'): 
+        for key in ('published_shift_plan','last_publication','workspace_baseline','trk_requests'):
             if key in check:state[key]=check[key]
         return True
     return False

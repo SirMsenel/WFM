@@ -98,6 +98,8 @@ def render():
     st.subheader('Vardiya Saatleri ve Yerleştirmeler')
     context=period_banner(state)
     if not context:return
+    if state.get('foreign_language_plans'):
+        state['planning_languages']={'tr':True,'en':False,'ar':False}
     coverage_controls(state)
     state['planning_exam_hours']=st.toggle('Sınav saatleri dışında vardiya yazılabilsin',value=state.get('planning_exam_hours',False),key='manual_exam_hours_toggle')
     from ortak.calisma_alani_deposu import save_keys

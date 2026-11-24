@@ -6,12 +6,19 @@ from modules.vardiya_plani.planlama_verileri import collect_inputs,fingerprint
 from modules.vardiya_plani.vardiya_motoru import generate_plan,bounds
 
 
-def suggestions(state,day,start_slot,end_slot,source_mode='Her ikisi',allowed_groups=None):
+def suggestions(state,day,start_slot,end_slot,source_mode='Her ikisi',allowed_groups=None,partial_block=False):
     from ortak.donem_kilitleri import assert_can_plan
     assert_can_plan(state);current=preview_plan(state,True)
     staff,fixed,history,unavailable,_=collect_inputs(state)
     existing={(str(r['employee_id']),str(r['date'])):r for r in current['source_rows'] if not(r.get('source')=='auto' and r.get('shift_code')=='OFF')}
     capacity=state.get('shift_rules',{}).get('capacity',{});allow=max(int(capacity.get('max_overstaff',0)),int(capacity.get('recommendation_overstaff_limit',5)));minimum=float(capacity.get('min_overtime_hours',.5));a=(int(start_slot)-1)*30;b=int(end_slot)*30;accepted=[];rejected=[]
+    target_day = pd.Timestamp(day).normalize()
+    daily = current['coverage'][pd.to_datetime(current['coverage']['Tarih']).dt.normalize()==target_day]
+    slot_minutes = (daily.Slot.to_numpy()-1)*30
+    available = daily['Atanan'].to_numpy()
+    needed = daily['İhtiyaç'].to_numpy()
+    deficit = daily['Eksik'].clip(upper=1).to_numpy()
+    demand = __import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state)
     for person in staff:
         eid=str(person['employee_id']);old=existing.get((eid,str(day)));rule=state['shift_rules']['work_type'][person['work_type']]
         if allowed_groups and person['work_type'] not in allowed_groups:continue
@@ -26,26 +33,23 @@ def suggestions(state,day,start_slot,end_slot,source_mode='Her ikisi',allowed_gr
             begin=min(a,oa);finish=max(ob,finish);kind='Mevcut vardiyaya ek mesai'
             if person['work_type']=='fulltime' and capacity:maximum=max(maximum,round((float(rule.get('shift_total_hours',9))+float(capacity.get('max_extension_hours',3)))*60))
         if finish-begin>maximum:finish=begin+maximum
-        if finish<b or finish<=begin:continue
+        if finish<=begin or (finish<b and not partial_block):continue
         # Aynı başlangıçla, grubun izin verdiği en uzun süreye kadar alternatif
         # bitişler denenir. Böylece akademi gibi esnek gruplar yalnızca ilk açık
         # kapanınca durmaz; +5 kişiye kadar kontrollü fazlayla bloğu tamamlar.
         oldspan=bounds(old) if old else None;best=None
         for candidate_finish in range(finish,min(1440,begin+maximum)+1,30):
             row={'employee_id':eid,'date':str(day),'shift_code':'MESAI','start':f'{begin//60:02d}:{begin%60:02d}','end':f'{candidate_finish//60%24:02d}:{candidate_finish%60:02d}','source':'capacity_candidate','note':'Eksik ihtiyaç için blok mesai'}
-            span=bounds(row);gain=0;bad=False
-            for r in current['coverage'].itertuples():
-                t=pd.Timestamp(r.Tarih)+pd.Timedelta(minutes=(int(r.Slot)-1)*30)
-                was=oldspan and pd.Timestamp(oldspan[0])<=t and t+pd.Timedelta(minutes=30)<=pd.Timestamp(oldspan[1])
-                added=pd.Timestamp(span[0])<=t and t+pd.Timedelta(minutes=30)<=pd.Timestamp(span[1]) and not was
-                if added:
-                    if r.Atanan+1>r.İhtiyaç+allow:bad=True;break
-                    if r.Eksik>0:gain+=min(1.,float(r.Eksik))
+            added = (slot_minutes>=begin)&(slot_minutes+30<=candidate_finish)
+            if oldspan:
+                added &= (slot_minutes<oa)|(slot_minutes+30>ob)
+            gain = float(deficit[added].sum())
+            bad = (available[added]+1>needed[added]+allow).any()
             if not bad and gain and (best is None or gain>best[0] or gain==best[0] and candidate_finish>best[1]):best=(gain,candidate_finish,row)
         if best is None:continue
         gain,_,row=best
         base=[r for (i,d),r in existing.items() if i==eid and d!=str(day)]
-        ctx=state['plan_ctx'];result=generate_plan([person],__import__('ortak.plan_ihtiyaci',fromlist=['demand']).demand(state),state['shift_rules'],list(state['shift_rules']['work_type']),ctx['start'],ctx['end'],fixed=base+[row],history=[r for r in history if str(r['employee_id'])==eid],unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),reject_invalid_sources=('capacity_candidate',))
+        ctx=state['plan_ctx'];result=generate_plan([person],demand,state['shift_rules'],list(state['shift_rules']['work_type']),ctx['start'],ctx['end'],fixed=base+[row],history=[r for r in history if str(r['employee_id'])==eid],unavailable=unavailable,auto_fill=False,hour_targets=state.get('group_hour_targets',[]),reject_invalid_sources=('capacity_candidate',))
         candidate_issues=[r for r in result['issues'] if r.get('source')=='capacity_candidate'];errors=[r for r in candidate_issues if r.get('severity')!='warning'];rejected.extend(errors)
         accepted.append({'row':row,'before':old,'person':person,'kind':kind,'gain':gain/2,
                          'rule_status':'Kural dışı · onay gerekli' if candidate_issues else 'Kurallara uygun','violations':candidate_issues})
@@ -56,7 +60,8 @@ def render_actions(state,result,key):
     import streamlit as st
     missing=result['coverage'];missing=missing[missing.Eksik>0]
     if missing.empty:return
-    with st.expander('Eksik için ne yapabilirim? · Uygun aksiyon bul',expanded=True):
+    cards = st.container()
+    with st.expander('Uygun personel bul · Gün ve saat seçimi',expanded=True):
         daily=missing.groupby('Tarih').Eksik.agg(['sum','max'])
         limit=int(state.get('shift_rules',{}).get('capacity',{}).get('recommendation_overstaff_limit',5))
         st.caption(f'Öneri, eksik bloğu kapatırken dilim başına en fazla +{limit} fazla personele geçebilir. Boş gün ve mevcut vardiya seçenekleri; okul, 11 saat dinlenme, 6 gün üst üste çalışma ve dönem saat sınırlarını korur.')
@@ -99,7 +104,7 @@ def render_actions(state,result,key):
         current=state.get(cachekey)
         if find_clicked or not current or current.get('signature')!=signature:
             try:
-                with st.spinner('Uygunluklar kontrol ediliyor…'):options,rejected=suggestions(state,day,*gap,source_mode=source_mode,allowed_groups=set(allowed))
+                with st.spinner('Uygunluklar kontrol ediliyor…'):options,rejected=suggestions(state,day,*gap,source_mode=source_mode,allowed_groups=set(allowed),partial_block=mode=='Otomatik eksik blok')
                 state[cachekey]={'signature':signature,'options':options,'rejected':rejected}
             except ValueError as exc:st.error(str(exc))
         data=state.get(cachekey)
@@ -113,10 +118,11 @@ def render_actions(state,result,key):
             return
         rows=[{'Personel':p['person']['full_name'],'Sicil':p['person'].get('sicil_no',p['row']['employee_id']),'Kullanıcı adı':p['person'].get('username'),'Grup':WORK_LABELS.get(p['person'].get('work_type'),p['person'].get('work_type','—')),'Aksiyon':p['kind'],'Yeni saat':p['row']['start']+'–'+p['row']['end'],'Kapatılacak personel-saat':p['gain'],'Kural':p['rule_status']} for p in options]
         from html import escape
-        for offset in range(0,len(rows),3):
-            for col,row in zip(st.columns(3),rows[offset:offset+3]):
-                status_color='#2f8d69' if row['Kural']=='Kurallara uygun' else '#c2763d'
-                col.markdown('<div style="min-height:195px;background:#f0f7fb;border:1px solid #d5e5ec;border-radius:17px;padding:17px;margin:7px 0"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+escape(row['Personel'])+'</b><span style="font-size:11px;background:#dcecf2;color:#315f73;padding:4px 7px;border-radius:8px">'+escape(row['Grup'])+'</span></div><div style="font-size:23px;color:#277e91;margin:12px 0">'+escape(row['Yeni saat'])+'</div><div style="display:inline-block;padding:4px 8px;border-radius:999px;background:'+status_color+'18;color:'+status_color+';font-size:11px;font-weight:750">'+escape(row['Kural'])+'</div><div style="margin-top:9px"><small>'+escape(row['Aksiyon'])+f" · {row['Kapatılacak personel-saat']:.1f} kişi-saat açık azalır</small></div></div>",unsafe_allow_html=True)
+        with cards:
+            for offset in range(0,len(rows),3):
+                for col,row in zip(st.columns(3),rows[offset:offset+3]):
+                    status_color='#2f8d69' if row['Kural']=='Kurallara uygun' else '#c2763d'
+                    col.markdown('<div style="min-height:195px;background:#f0f7fb;border:1px solid #d5e5ec;border-radius:17px;padding:17px;margin:7px 0"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+escape(row['Personel'])+'</b><span style="font-size:11px;background:#dcecf2;color:#315f73;padding:4px 7px;border-radius:8px">'+escape(row['Grup'])+'</span></div><div style="font-size:23px;color:#277e91;margin:12px 0">'+escape(row['Yeni saat'])+'</div><div style="display:inline-block;padding:4px 8px;border-radius:999px;background:'+status_color+'18;color:'+status_color+';font-size:11px;font-weight:750">'+escape(row['Kural'])+'</div><div style="margin-top:9px"><small>'+escape(row['Aksiyon'])+f" · {row['Kapatılacak personel-saat']:.1f} kişi-saat açık azalır</small></div></div>",unsafe_allow_html=True)
         choice=st.selectbox('Uygulanacak öneri',list(range(len(options))),format_func=lambda i:rows[i]['Personel']+' · '+rows[i]['Yeni saat'],key=key+'_action_pick')
         reason=st.text_input('Aksiyon gerekçesi',key=key+'_action_reason')
         selected_option=options[choice]

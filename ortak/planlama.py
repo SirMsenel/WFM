@@ -32,7 +32,7 @@ def preview_plan(state,include_auto=False):
     if include_auto:
         fixed_keys={(str(r['employee_id']),str(r['date'])) for r in fixed}
         included_ids={str(e['employee_id']) for e in staff}
-        actual_auto=[r for r in state.get('draft_shift_plan',[]) if r.get('source')=='auto' and str(r['employee_id']) in included_ids
+        actual_auto=[r for r in state.get('draft_shift_plan',[]) if r.get('source') in {'auto','auto_night'} and str(r['employee_id']) in included_ids
                      and str(context['start'])<=str(r.get('date'))<=str(context['end'])
                      and (str(r['employee_id']),str(r['date'])) not in fixed_keys]
         fixed=fixed+actual_auto

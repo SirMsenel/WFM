@@ -45,7 +45,7 @@ def publish_plan(state,result,approval_ticket=None):
     if state.get("workspace_db_path"):
         from ortak.talep_servisi import refresh
         refresh(state)
-    if state.get('planning_result_fingerprint')!=fingerprint(state):raise ValueError('Taslak güncel değil. Yeniden oluşturun.')
+    if not approval_ticket and state.get('planning_result_fingerprint')!=fingerprint(state):raise ValueError('Taslak güncel değil. Yeniden oluşturun.')
     if blocking_issues(result) and not state.get('planning_accept_hard'):raise ValueError('Kesin kural ihlallerini düzeltin veya planlama onayıyla devam seçeneğini açıkça onaylayın.')
     if any(r.get('severity')=='warning' and r.get('override_required',True) for r in result.get('issues',[])) and not state.get('planning_accept_soft'):raise ValueError('Esnek kural aşımlarını inceleyip onaylayın.')
     path=state.get('workspace_db_path');previous=state.get('published_shift_plan',[])
@@ -67,6 +67,9 @@ def publish_plan(state,result,approval_ticket=None):
                 approval=db.execute('SELECT * FROM plan_approvals WHERE id=?',(approval_ticket,)).fetchone()
                 if not approval or approval['status']!='Bekliyor':raise ValueError('Yayın onayı güncel değil.')
                 item=loads(approval['payload'])
+                from ortak.yayin_onaylari import approval_is_current
+                if not approval_is_current(state,item,db):
+                    raise ValueError('Yayın öncesi ilgili dilin kaynakları değişti.')
                 approved=publication_scope(item['result'],item.get('context',{}).get('planning_languages'))
                 if not ready(item) or item['fingerprint']!=state['planning_result_fingerprint'] or dumps(approved['plan'])!=dumps(result['plan']):raise ValueError('Onaylar bu taslağa ait değil.')
             stored=db.execute("SELECT payload FROM work_state WHERE key='published_shift_plan'").fetchone()
@@ -95,7 +98,14 @@ def publish_plan(state,result,approval_ticket=None):
         state['publication_batches']=state.get('publication_batches',[])+[dict(payload,status='active')]
         from ortak.talep_simulasyonu import finalize_in_memory
         finalize_in_memory(state,rows,start,end,(state.get('profile') or {}).get('username'))
-    save_keys(state)
+    if approval_ticket:
+        # Publication rows were already committed under BEGIN IMMEDIATE.
+        # Do not write that snapshot back over a second concurrent publication.
+        import hashlib
+        state['workspace_baseline'] = {**state.get('workspace_baseline', {}),
+            'published_shift_plan': hashlib.sha256(dumps(state['published_shift_plan']).encode()).hexdigest()}
+    else:
+        save_keys(state)
     state['planning_result_fingerprint']=fingerprint(state)
     state['last_publication']={'id':payload['id'],'start':start,'end':end,'count':len(rows),'at':datetime.now(ZoneInfo('Europe/Istanbul')).isoformat(),'fingerprint':state['planning_result_fingerprint']}
 

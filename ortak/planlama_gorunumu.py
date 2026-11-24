@@ -66,16 +66,19 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
         breaks=[r for r in result['breaks'] if r.get('kind')=='Mola']
         coaching=[r for r in result['breaks'] if r.get('kind')=='Koçluk Alanı']
         counted=coverage[coverage['Sayaca Dahil']] if 'Sayaca Dahil' in coverage else coverage
-        counted_intervals=[]
+        counted_intervals=set()
         for raw in counted.to_dict('records'):
             begin=pd.Timestamp(raw['Tarih']).normalize()+pd.Timedelta(minutes=(int(raw['Slot'])-1)*30)
-            counted_intervals.append((begin,begin+pd.Timedelta(minutes=30)))
+            counted_intervals.add(begin)
         def scoped(items):
             output=[]
             for row in items:
                 if not row.get('start') or not row.get('end'):continue
                 begin,end=pd.Timestamp(row['start']),pd.Timestamp(row['end']);parts={}
-                for left,right in counted_intervals:
+                for left in pd.date_range(begin.floor('30min'), end, freq='30min'):
+                    if left not in counted_intervals:
+                        continue
+                    right = left + pd.Timedelta(minutes=30)
                     minutes=max(0.,(min(end,right)-max(begin,left)).total_seconds()/60)
                     if minutes:parts[str(left.date())]=parts.get(str(left.date()),0.)+minutes
                 if parts:output.append({**row,'_minutes':sum(parts.values()),'_days':parts})
@@ -276,6 +279,9 @@ def coverage_comparison_matrix(coverage,start):
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     week=pd.Timestamp(start).normalize();days=pd.date_range(week,periods=7);df=coverage.copy()
     df['Tarih']=pd.to_datetime(df['Tarih']).dt.normalize();assigned='Brüt Atanan' if 'Brüt Atanan' in df else 'Atanan'
+    if 'Aktarılan kişi' in df and 'Toplam brüt ihtiyaç' in df:
+        df[assigned] = df[assigned] + df['Aktarılan kişi']
+        df['İhtiyaç'] = df['Toplam brüt ihtiyaç']
     if 'Sayaca Dahil' not in df:df['Sayaca Dahil']=True
     grouped=df.groupby(['Slot','Tarih'],as_index=False).agg({'İhtiyaç':'sum',assigned:'sum','Sayaca Dahil':'all'})
     values={(int(r['Slot']),pd.Timestamp(r['Tarih'])):(float(r[assigned]),float(r['İhtiyaç'])) for r in grouped.to_dict('records') if bool(r['Sayaca Dahil'])}
@@ -315,6 +321,12 @@ def render_shortages(result,key='gap',actions=True):
     selected_days=pd.date_range(week,periods=7)
     daily_coverage_summary({'coverage':coverage[coverage['Tarih'].astype(str).str[:10].isin({str(d.date()) for d in selected_days})]},'Günlük İhtiyaç Karşılama')
     matrix=coverage_comparison_matrix(coverage,week)
+    if 'Aktarılan kişi' in coverage:
+        counted = dates.dt.normalize().isin(selected_days)
+        if 'Sayaca Dahil' in coverage:
+            counted &= coverage['Sayaca Dahil']
+        hours = coverage.loc[counted,'Aktarılan kişi'].sum()/2
+        st.caption(f'Bu haftanın sayacına giren yabancı dil katkısı {hours:g} saat. Hücrelerde Türkçe vardiyalar ve aktarılan kişiler birlikte gösterilir.')
     st.caption('Hücre biçimi: atanan/ihtiyaç · fark. Kırmızı eksik, yeşil fazla, gri tam karşılanan dilimdir; — sayaca dahil değildir veya veri yoktur.')
     st.dataframe(styled_coverage_comparison(matrix),height=540,use_container_width=True)
     if missing.empty:st.success('Seçili dönemde tüm yarım saatlik ihtiyaç karşılanmış.');return

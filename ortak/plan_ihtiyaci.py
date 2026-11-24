@@ -34,6 +34,9 @@ def demand(state):
         result=base.copy();keys=list(zip(pd.to_datetime(result['Tarih']).dt.strftime('%Y-%m-%d'),pd.to_numeric(result['Slot']).astype(int)))
         capacity=transferred_capacity(state,result)
         deduction=pd.Series([capacity.get(key,0) for key in keys],index=result.index,dtype=float)
+        if deduction.any():
+            result['Aktarılan kişi'] = deduction.astype(int)
+            result['Toplam brüt ihtiyaç'] = result['Planlanan Agent']
         result['Planlanan Agent']=(pd.to_numeric(result['Planlanan Agent'],errors='coerce').fillna(0)-deduction).clip(lower=0)
         if 'Net Agent' in result:
             net=(pd.to_numeric(result['Net Agent'],errors='coerce').fillna(0)-deduction).clip(lower=0)

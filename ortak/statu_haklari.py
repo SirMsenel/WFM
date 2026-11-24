@@ -19,11 +19,16 @@ def entitlements(state,row,person):
 
 def balance(state,rows,people,items):
     lookup={str(p['employee_id']):p for p in people};output=[]
+    booked_by_day = {}
+    for item in items:
+        if item.get('status') != 'İptal':
+            key = (str(item['employee_id']), str(item.get('date') or item['start'][:10]))
+            booked_by_day.setdefault(key, []).append(item)
     for row in rows:
         span=bounds(row)
         if not span:continue
         eid=str(row['employee_id']);day=str(row['date']);person=lookup.get(eid,{});base={'Personel':person.get('full_name',eid),'employee_id':eid,'date':day}
-        booked=[x for x in items if x.get('status')!='İptal' and str(x['employee_id'])==eid and str(x.get('date') or x['start'][:10])==day]
+        booked=booked_by_day.get((eid,day), [])
         try:rights=entitlements(state,row,person)
         except MolaKuralHatasi as exc:
             actual=sum((pd.Timestamp(x['end'])-pd.Timestamp(x['start'])).total_seconds()/60 for x in booked if x['kind']=='Mola')
