@@ -4,14 +4,14 @@ from datetime import timedelta
 from modules.vardiya_plani.vardiya_motoru import bounds
 
 
-def plan_off_days(members,staff,days,demand,existing,rules):
+def plan_off_days(members,staff,days,demand,existing,rules,*,remaining_load=None):
     policy=rules.get('off_rules',{})
     if policy.get('distribution','Mevcut sıra')!='İhtiyaca göre dağıt':return set()
     result=set();byweek={}
     for day in days:byweek.setdefault(day.isocalendar()[:2],[]).append(day)
     for _,week in byweek.items():
         if len(week)!=7:continue
-        load={day:float(demand.loc[demand.Tarih==day,'Planlanan Agent'].max()) if (demand.Tarih==day).any() else 0. for day in week}
+        load=remaining_load if remaining_load is not None else demand.groupby('Tarih')['Planlanan Agent'].max().to_dict()
         reserved={day:0 for day in week};count=max(1,len(members))
         for eid in members:
             group=staff[eid]['work_type'];rule=rules['work_type'][group]
@@ -24,7 +24,7 @@ def plan_off_days(members,staff,days,demand,existing,rules):
                 candidates=[d for d in week if d not in chosen and d.isoformat() not in fixed_work]
                 if not candidates:break
                 preferred=set(rule.get('preferred_off_days',[]))
-                day=min(candidates,key=lambda d:(0 if d.weekday() in preferred else 1,load[d]/max(1,count-reserved[d]),reserved[d],(d.weekday()-int(eid) if eid.isdigit() else d.weekday())%7))
+                day=min(candidates,key=lambda d:(0 if d.weekday() in preferred else 1,load.get(d,0.)/max(1,count-reserved[d]),reserved[d],(d.weekday()-int(eid) if eid.isdigit() else d.weekday())%7))
                 chosen.add(day);reserved[day]+=1
             result.update((eid,d) for d in chosen)
     return result

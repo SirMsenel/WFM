@@ -40,11 +40,14 @@ def render():
     if item['status']=='Yayınlandı':st.success('Vardiya otomatik yayınlandı. Tüm Vardiyalar ekranından inceleyebilirsin.')
     if item['status']!='Bekliyor':return
     if s['profile'].get('position') not in {'wfm','planning_manager'}:st.info('Bu hesap bu aşamada yalnızca görüntüleyebilir.');return
-    from ortak.yayin_onaylari import is_current
+    from ortak.donem_kilitleri import render_guard
+    from ortak.yayin_onaylari import approval_languages,is_current,ready
+    scope={lang:lang in approval_languages(item) for lang in ('tr','en','ar')}
+    allowed=render_guard(s,scope,result['period'],result['staff'])
     fresh=is_current(s,item)
     if not fresh:st.warning('Bu taslak kontrol edildikten sonra kaynaklar değişmiş. Reddedip güncel planı yeniden oluşturun.')
     reason=st.text_input('Ret gerekçesi',key='approval_reason');a,b=st.columns(2)
-    if a.button('İnceledim ve Yayına Onay Veriyorum',key='approval_yes',disabled=not fresh):
+    if a.button('Onayları Tamamlanan Planı Yayınla' if ready(item) else 'İnceledim ve Yayına Onay Veriyorum',key='approval_yes',disabled=not (fresh and allowed)):
         try:
             completed=vote(s,ident);s['approval_notice']='Plan yayınlandı.' if completed else 'Onay kaydedildi; diğer onaylar bekleniyor.';st.rerun()
         except ValueError as e:st.error(str(e))

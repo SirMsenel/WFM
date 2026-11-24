@@ -32,29 +32,78 @@ def planning_problem(state,context=None,employees=None):
         if not a and r.get('type')=='Ders Programı':relevant=any(t in str(r.get('generated_ref','')) for t in terms)
         if relevant:requests.append({'Kayıt':r['id'],'Personel':r.get('created_by_name',r.get('created_by')),'Talep':r.get('type'),'Başlangıç':a or 'Dönemlik','Bitiş':b or 'Dönemlik','Durum':r.get('status'),'Onay beklenen':(', '.join(t for t in r.get('assigned_tls',[]) if t not in r.get('tl_approvals',[])) if r.get('queue') in {'TL','TL_SWAP'} else 'Planlama')})
     bypass=state.get('planning_bypass',{}).get(start+'|'+end)
-    if requests and bypass and (state.get('profile') or {}).get('position') in {'wfm','planning_manager'}:return None
+    acknowledged = set((bypass or {}).get('requests', []))
+    if bypass and str(bypass.get('reason','')).strip():
+        requests = [row for row in requests if row['Kayıt'] not in acknowledged]
     if requests:return {'kind':'requests','message':'Bu dönemde bekleyen talepler var. Planlama bunları değerlendirebilir veya gerekçeyle es geçebilir.','rows':requests}
     return None
 
 
+def refresh_guard(state):
+    path=state.get('workspace_db_path')
+    if not path:return
+    from ortak.calisma_alani_deposu import connect,loads
+    refresh(state)
+    with connect(path) as db:
+        row=db.execute("SELECT payload FROM work_state WHERE key='planning_bypass'").fetchone()
+        if row:state['planning_bypass']=loads(row[0])
+
+
+def assert_transaction_can_plan(db,state,context,employees,languages):
+    from ortak.calisma_alani_deposu import loads
+    scope=dict(state,plan_ctx=context,planning_languages=languages)
+    for key in ('planning_bypass','published_shift_plan'):
+        row=db.execute('SELECT payload FROM work_state WHERE key=?',(key,)).fetchone()
+        if row:scope[key]=loads(row[0])
+    scope['trk_requests']=[loads(r[0]) for r in db.execute('SELECT payload FROM requests')]
+    problem=planning_problem(scope,employees=employees)
+    if problem:raise ValueError(problem['message'])
+
+
 def assert_can_plan(state,employees=None):
-    if state.get("workspace_db_path"):refresh(state)
+    refresh_guard(state)
     problem=planning_problem(state,employees=employees)
     if problem:raise ValueError(problem['message'])
 
 
-def render_guard(state):
+def record_bypass(state,context,problem,reason):
+    from ortak.calisma_alani_deposu import connect,dumps,loads
+    profile=state.get('profile') or {}
+    if profile.get('position') not in {'wfm','planning_manager'} or not reason.strip():
+        raise ValueError('Planlama yetkisi ve es geçme gerekçesi gerekli.')
+    key='|'.join(str(pd.Timestamp(context[k]).date()) for k in ('start','end'))
+    ids={row['Kayıt'] for row in problem['rows']}
+    def merge(decisions):
+        decisions=dict(decisions)
+        previous=decisions.get(key) or {}
+        event={'requests':sorted(ids),'reason':reason.strip(),'actor':profile['username']}
+        decisions[key]={**event,'requests':sorted(ids.union(previous.get('requests',[]))),
+                        'events':previous.get('events',[])+[event]}
+        return decisions
+    if state.get('workspace_db_path'):
+        with connect(state['workspace_db_path']) as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute("SELECT payload FROM work_state WHERE key='planning_bypass'").fetchone()
+            decisions=merge(loads(row[0]) if row else state.get('planning_bypass') or {})
+            payload=dumps(decisions)
+            db.execute("INSERT INTO work_state VALUES('planning_bypass',?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",(payload,))
+        state['workspace_baseline']={**state.get('workspace_baseline',{}),'planning_bypass':hashlib.sha256(payload.encode()).hexdigest()}
+    else:decisions=merge(state.get('planning_bypass') or {})
+    state['planning_bypass']=decisions
+
+
+def render_guard(state,languages=None,context=None,employees=None,*,requests_only=False):
     import streamlit as st
-    if state.get("workspace_db_path"):refresh(state)
-    problem=planning_problem(state)
-    if not problem:return True
+    refresh_guard(state)
+    context=context or state.get('plan_ctx') or {}
+    scoped=dict(state,planning_languages=languages) if languages is not None else state
+    problem=planning_problem(scoped,context,employees)
+    if not problem or requests_only and problem['kind']=='published':return True
     st.warning(problem['message']);st.dataframe(problem['rows'],hide_index=True,use_container_width=True)
-    if problem['kind']=='requests' and (state.get('profile') or {}).get('position')=='wfm':
+    if problem['kind']=='requests' and (state.get('profile') or {}).get('position') in {'wfm','planning_manager'}:
         reason=st.text_input('Bekleyen talepleri es geçme gerekçesi',key='guard_bypass_reason')
         if st.button('Talepleri Şimdilik Es Geç ve Planla',disabled=not reason.strip(),key='guard_bypass'):
-            from ortak.calisma_alani_deposu import save_keys
-            ctx=state['plan_ctx'];state.setdefault('planning_bypass',{})[str(ctx['start'])+'|'+str(ctx['end'])]={'actor':state['profile']['username'],'reason':reason}
-            save_keys(state);st.rerun()
+            record_bypass(state,context,problem,reason);st.rerun()
     destination='Yayın Yönetimi' if problem['kind']=='published' else 'Talepler'
     def open_page():
         from ortak.gezinme import navigate
@@ -66,13 +115,12 @@ def render_guard(state):
         @st.dialog('Vardiya planlaması durduruldu')
         def warning():
             st.warning(problem['message']);st.dataframe(problem['rows'][:15],hide_index=True,use_container_width=True)
-            if problem['kind']=='requests' and state.get('profile',{}).get('position')=='wfm':
+            if problem['kind']=='requests' and state.get('profile',{}).get('position') in {'wfm','planning_manager'}:
                 reason=st.text_input('Es geçme gerekçesi',key='guard_modal_reason')
                 if st.button('Talepleri Es Geç ve Devam Et',key='guard_modal_bypass'):
                     if not reason.strip():st.warning('Es geçme gerekçesini doldurun.')
                     else:
-                        from ortak.calisma_alani_deposu import save_keys
-                        ctx=state['plan_ctx'];state.setdefault('planning_bypass',{})[str(pd.Timestamp(ctx['start']).date())+'|'+str(pd.Timestamp(ctx['end']).date())]={'actor':state['profile']['username'],'reason':reason.strip()};save_keys(state);st.rerun()
+                        record_bypass(state,context,problem,reason);st.rerun()
             if st.button('Anladım',key='guard_ack'):st.rerun()
         warning()
     return False

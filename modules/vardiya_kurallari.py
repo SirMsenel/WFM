@@ -50,7 +50,8 @@ def render():
         st.caption('Bu kurallar ihtiyacı kapatırken sistemin ne kadar esneyebileceğini belirler; personelin çalışma süresi ve dinlenme kuralları yine korunur.')
         x,y=st.columns(2)
         with x:
-            capacity['max_overstaff']=number('Otomatik planda dilim başına en fazla fazla kişi',0,100,int(capacity.get('max_overstaff',2)),help='İhtiyaç 10 ise ve değer 2 ise o yarım saatte en fazla 12 kişi planlanabilir.')
+            capacity['max_overstaff']=number('Türkçe planda dilim başına izin verilen fazla personel',0,100,int(capacity.get('max_overstaff',2)),help='İhtiyaç 10 ise ve değer 2 ise o yarım saatte en fazla 12 kişi planlanabilir.')
+            capacity['foreign_max_overstaff']=number('Yabancı dil planında dilim başına izin verilen fazla personel',0,100,int(capacity.get('foreign_max_overstaff',0)),key='foreign_overstaff_limit')
             capacity['min_overtime_hours']=number('Yeni ek mesainin en kısa süresi (saat)',.5,10.,float(capacity.get('min_overtime_hours',4)),.5,help='Boş güne önerilecek yeni çalışma bloğu bundan kısa olamaz.')
         with y:
             capacity['recommendation_overstaff_limit']=number('Açık kapatma önerisinde izin verilen fazla kişi',0,5,int(capacity.get('recommendation_overstaff_limit',5)),1,help='Öneri sistemi parçalı eksikleri birleştirirken bu sınıra kadar artıya geçebilir.')

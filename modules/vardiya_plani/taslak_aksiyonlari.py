@@ -106,6 +106,10 @@ def render():
     if (state.get('profile') or {}).get('position') not in {'wfm','manager','assistant_manager','moderator','planning_manager'}:
         st.info('Bu alan planlama ve yönetim rolleri içindir.');return
     if not period_banner(state):return
+    from ortak.donem_kilitleri import render_guard
+    from ortak.personel import planner_people
+    planner_people(state)
+    if not render_guard(state,{'tr':True,'en':False,'ar':False}):return
     result=state.get('planning_result')
     if result is None:
         st.info('Önce Oluştur & Kontrol ekranında otomatik vardiya taslağı oluşturun.');return

@@ -104,12 +104,12 @@ def coverage_summary(result,title='Yerleştirmelerin İhtiyaca Etkisi'):
         if missing_rights:st.dataframe(pd.DataFrame(missing_rights).drop(columns=['employee_id']).rename(columns={'date':'Tarih'}),hide_index=True,use_container_width=True)
     if 'Shrinkage statü bütçesi' in coverage and 'Mola kaybı' in coverage:
         from ortak.modern_kartlar import metric_cards
-        budget_units=float(coverage['Shrinkage statü bütçesi'].sum());planned_units=float(coverage['Mola kaybı'].sum());assigned_units=max(0.,float(pd.to_numeric(coverage['Atanan'],errors='coerce').fillna(0).sum()))
+        budget_units=float(coverage['Shrinkage statü bütçesi'].sum());planned_units=float(coverage['Mola kaybı'].sum());assigned_units=max(0.,float(pd.to_numeric(coverage.get('Brüt Atanan',coverage['Atanan']),errors='coerce').fillna(0).sum()))
         over=(coverage['Mola kaybı']-coverage['Shrinkage statü bütçesi']).clip(lower=0)
         st.markdown('#### Statü Planı Ayrılan Kapasiteye Uygun mu?')
         budget_rate=100*budget_units/assigned_units if assigned_units else 0;use_rate=100*planned_units/budget_units if budget_units else (100 if planned_units else 0)
-        metric_cards([('Statülere ayrılan pay',f'%{budget_rate:.1f}'),('Ayrılan payın kullanımı',f'%{use_rate:.1f}'),('Kapasite aşımı','Yok' if not (over>1e-8).any() else f'{int((over>1e-8).sum())} zaman aralığı')])
-        if (over>1e-8).any():st.warning('Bazı yarım saatlerde statü süresi shrinkage bütçesini aşıyor. Bu aşım kapasiteden ayrıca düşüldü; yukarıdaki eksik hesabına dahildir.')
+        metric_cards([('Statülere ayrılan pay',f'%{budget_rate:.1f}'),('Ayrılan payın kullanımı',f'%{use_rate:.1f}'),('Statü süresi bütçeyi aşan dilimler',f'{int((over>1e-8).sum())} / {len(over)}')])
+        if (over>1e-8).any():st.warning(f'{int((over>1e-8).sum())} yarım saatte planlanan statülerin süresi, o dilime ayrılan süreyi aştı. Bu dilimlerde toplam {30*over.sum():.0f} dakika daha az çağrı karşılama süresi kaldı.')
         else:st.caption('Planlanan statüler seçilen shrinkage bütçesi içinde; kapasiteden ikinci kez düşülmez.')
     workload_efficiency_summary(result)
 
@@ -199,7 +199,7 @@ def erlang_summary_cards(result):
     if not values:return
     st.markdown('### Erlang C · Planlama Parametreleri')
     from ortak.modern_kartlar import metric_cards
-    metric_cards(values)
+    metric_cards(values,equal_height=True)
 
 
 def daily_coverage_summary(result,title='Günlük İhtiyaç Karşılama'):
@@ -223,14 +223,14 @@ def daily_gap_summary(result,title='Günlük Eksik ve Fazla Özeti'):
     from ortak.cagri_tahmin_servisi import DAY_NAMES
     coverage=result.get('coverage',pd.DataFrame()).copy()
     if coverage.empty:return
-    if 'Sayaca Dahil' in coverage:coverage=coverage[coverage['Sayaca Dahil']]
-    coverage['Tarih']=pd.to_datetime(coverage['Tarih']).dt.normalize()
+    coverage=comparison_slots(coverage)
+    coverage=coverage[coverage['Sayaca Dahil']]
     st.markdown('### '+title)
     days=sorted(coverage['Tarih'].unique())
     for offset in range(0,len(days),7):
         for col,raw_day in zip(st.columns(min(7,len(days[offset:offset+7]))),days[offset:offset+7]):
             day=pd.Timestamp(raw_day);frame=coverage[coverage['Tarih']==day]
-            need=pd.to_numeric(frame['İhtiyaç'],errors='coerce').fillna(0);assigned=pd.to_numeric(frame['Atanan'],errors='coerce').fillna(0)
+            need=pd.to_numeric(frame['İhtiyaç'],errors='coerce').fillna(0);assigned=frame['Karşılaştırılan personel']
             missing=float((need-assigned).clip(lower=0).sum());excess=float((assigned-need).clip(lower=0).sum());scale=max(1.,float(need.sum())+excess)
             missing_deg=min(360.,360*missing/scale);excess_deg=min(360.-missing_deg,360*excess/scale);end=missing_deg+excess_deg
             col.markdown(f'<div style="min-height:215px;padding:13px 8px;border:1px solid #dce7ec;border-radius:17px;background:#fbfdfe;text-align:center"><b style="font-size:13px;color:#365a69">{escape(DAY_NAMES[day.weekday()])}</b><div style="font-size:11px;color:#71828b">{day:%d.%m.%Y}</div><div style="width:112px;height:112px;margin:9px auto;border-radius:50%;background:conic-gradient(#d66c63 0deg {missing_deg:.1f}deg,#3d9a6b {missing_deg:.1f}deg {end:.1f}deg,#e9eef2 {end:.1f}deg 360deg);display:grid;place-items:center"><div style="width:80px;height:80px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;color:#36515d"><span><span style="color:#b9524b">−{math.ceil(missing)}</span><br><span style="color:#2d8659">+{math.ceil(excess)}</span></span></div></div><div style="font-size:10px;color:#71828b">Kırmızı eksik · Yeşil fazla<br>30 dakikalık personel toplamı</div></div>',unsafe_allow_html=True)
@@ -274,17 +274,23 @@ def styled_shortage_matrix(matrix,excess=False,human=False):
     return display.style.apply(lambda _:styles,axis=None)
 
 
-def coverage_comparison_matrix(coverage,start):
-    """Brüt atanan/ihtiyaç ve farkı aynı hücrede gösteren haftalık matris."""
-    from ortak.cagri_tahmin_servisi import DAY_NAMES
-    week=pd.Timestamp(start).normalize();days=pd.date_range(week,periods=7);df=coverage.copy()
+def comparison_slots(coverage):
+    df=coverage.copy()
     df['Tarih']=pd.to_datetime(df['Tarih']).dt.normalize();assigned='Brüt Atanan' if 'Brüt Atanan' in df else 'Atanan'
     if 'Aktarılan kişi' in df and 'Toplam brüt ihtiyaç' in df:
         df[assigned] = df[assigned] + df['Aktarılan kişi']
         df['İhtiyaç'] = df['Toplam brüt ihtiyaç']
     if 'Sayaca Dahil' not in df:df['Sayaca Dahil']=True
-    grouped=df.groupby(['Slot','Tarih'],as_index=False).agg({'İhtiyaç':'sum',assigned:'sum','Sayaca Dahil':'all'})
-    values={(int(r['Slot']),pd.Timestamp(r['Tarih'])):(float(r[assigned]),float(r['İhtiyaç'])) for r in grouped.to_dict('records') if bool(r['Sayaca Dahil'])}
+    df['Karşılaştırılan personel']=df[assigned]
+    return df.groupby(['Slot','Tarih'],as_index=False).agg({'İhtiyaç':'sum','Karşılaştırılan personel':'sum','Sayaca Dahil':'all'})
+
+
+def coverage_comparison_matrix(coverage,start):
+    """Brüt atanan/ihtiyaç ve farkı aynı hücrede gösteren haftalık matris."""
+    from ortak.cagri_tahmin_servisi import DAY_NAMES
+    days=pd.date_range(pd.Timestamp(start).normalize(),periods=7)
+    grouped=comparison_slots(coverage)
+    values={(int(r['Slot']),pd.Timestamp(r['Tarih'])):(float(r['Karşılaştırılan personel']),float(r['İhtiyaç'])) for r in grouped.to_dict('records') if bool(r['Sayaca Dahil'])}
     table=pd.DataFrame(index=range(1,49),columns=days,dtype=object)
     for slot in table.index:
         for day in days:table.at[slot,day]=values.get((slot,pd.Timestamp(day)))

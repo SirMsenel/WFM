@@ -134,7 +134,13 @@ def plan(state,rows,coverage,people,used=None):
             if kind=='Mola':
                 preference=np.abs(starts+duration/2-minute(target)) if target is not None else center
             elif kind=='Yemek':
-                preference=times.minute.to_numpy()%min(30,max(1,duration))
+                distance=np.abs(starts+duration/2-minute(target))
+                # Tek kişi hattan ayrılabiliyorsa arka arkaya yemek pencerelerini koru.
+                alignment=(starts-minute(a)) % duration
+                preference=distance
+                window=room[max(0,int(minute(a))):max(0,int(minute(b)))]
+                if explicit_net and np.any(window<=1):
+                    preference=distance+(alignment>0)*(len(room)+duration)
             else:
                 preference=np.zeros(len(starts))
             concentration=np.square(loss[indices]+overlap).sum(axis=1)
@@ -167,7 +173,7 @@ def plan(state,rows,coverage,people,used=None):
             if cfg.get('automatic',False):left=a+pd.Timedelta(minutes=min(60,hours*15));right=b-pd.Timedelta(minutes=30)
             elif rule.get('relative',True):left=a+pd.Timedelta(hours=float(rule.get('after_start',3)));right=min(b-pd.Timedelta(minutes=30),a+pd.Timedelta(hours=float(rule.get('before_start',6))))
             else:left=max(a+pd.Timedelta(hours=1),a.normalize()+pd.Timedelta(rule.get('meal_start','12:00')+':00'));right=min(b-pd.Timedelta(minutes=30),a.normalize()+pd.Timedelta(rule.get('meal_end','15:00')+':00'))
-            place(row,'Yemek',duration,left,right,True)
+            place(row,'Yemek',duration,left,right,True,target=a+(b-a)/2)
         friday=cfg.get('friday',{})
         if a.weekday()==4 and friday.get('enabled') and (not friday.get('male_only') or lookup.get(eid,{}).get('gender')=='Erkek'):
             left=max(a,a.normalize()+pd.Timedelta(friday.get('start','12:00')+':00'));right=min(b,a.normalize()+pd.Timedelta(friday.get('end','14:00')+':00'))

@@ -81,14 +81,17 @@ def _build(state,lang,demand,edited_rows=None):
     # Bağımsız dil planı ana taslaktaki otomatik/elle vardiyalardan etkilenmez.
     # İzin, gece, talep ve okul kayıtları kendi kaynaklarından yine korunur.
     check['draft_shift_plan']=[]
+    from ortak.donem_kilitleri import assert_can_plan
+    assert_can_plan(check)
     staff,fixed,history,unavailable,issues=collect_inputs(check)
     demand=_foreign_demand(demand)
     order=[g for g in state.get('plan_group_priority',[]) if g in state['shift_rules']['work_type']]
     if set(order)!=set(state['shift_rules']['work_type']):order=list(state['shift_rules']['work_type'])
     ctx=state['plan_ctx']
-    # Dil planı kendi ihtiyaç tablosuna birebir uyar; ana plandaki kontrollü
-    # fazla personel ve 07:00/gece kotaları ikinci bir kişiyi ekleyemez.
-    scoped_rules=deepcopy(state['shift_rules']);scoped_rules.setdefault('capacity',{})['max_overstaff']=0
+    # Her dil taslağı yabancı dil için kaydedilen toleransı kullanır.
+    scoped_rules=deepcopy(state['shift_rules'])
+    capacity=scoped_rules.setdefault('capacity',{})
+    capacity['max_overstaff']=int(capacity.get('foreign_max_overstaff',0))
     scoped_rules.setdefault('boosts',{})['weekday_0700_fulltime_extra_enabled']=False
     # Bir grubun geç saatleri önce doldurması, sonraki grubun uzun vardiyasını
     # tamamen reddedip gün başında yapay açık bırakabiliyordu. En fazla altı
@@ -152,6 +155,10 @@ def render():
     lang=st.segmented_control('Planlanacak dil',['en','ar'],default='en',format_func=LABELS.get,key='foreign_plan_language') or 'en'
     ctx=s.get('plan_ctx') or {}
     if not s.get('plan_ctx_confirmed') or not ctx.get('start') or not ctx.get('end'):st.info('Önce Plan Dönem Seçimi ekranında dönemi onaylayın.');return
+    from ortak.donem_kilitleri import render_guard
+    from ortak.personel import planner_people
+    planner_people(s)
+    if not render_guard(s,{'tr':False,'en':lang=='en','ar':lang=='ar'},requests_only=True):return
     source=s.get('sp_staffing_result_df')
     if source is None:st.info('Önce Personel Hesap ekranında ihtiyaç hesaplayın.');return
     saved=s.setdefault('language_demands',{}).get(lang);base=_foreign_demand(source if saved is None else saved)

@@ -66,9 +66,24 @@ def render():
         def confirm(value):
             from ortak.donem_uyarisi import existing_range
             if value and existing_range(st.session_state,start,end):st.session_state['period_existing_warning']=True;return
+            if value:
+                from ortak.donem_kilitleri import planning_problem,refresh_guard
+                from ortak.personel import planner_people
+                planner_people(st.session_state)
+                refresh_guard(st.session_state)
+                problem=planning_problem(st.session_state,{'start':start,'end':end})
+                if problem and problem['kind']=='requests':
+                    st.session_state['period_request_guard']=(str(start),str(end))
+                    st.session_state['plan_ctx_confirmed']=False
+                    save_keys(st.session_state)
+                    return
+            st.session_state.pop('period_request_guard',None)
             st.session_state['plan_ctx_confirmed']=value;save_keys(st.session_state)
         c1.button('Dönemi Onayla',type='primary',key='vp_confirm',on_click=confirm,args=(True,))
         c2.button('Onayı Kaldır',disabled=not confirmed,key='vp_unconfirm',on_click=confirm,args=(False,))
+    if st.session_state.get('period_request_guard')==(str(start),str(end)):
+        from ortak.donem_kilitleri import render_guard
+        if not render_guard(st.session_state):return
     if st.session_state.pop('period_existing_warning',False):
         from ortak.donem_uyarisi import popup
         popup(st.session_state,start,end)

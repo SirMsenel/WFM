@@ -83,7 +83,7 @@ def publish_plan(state,result,approval_ticket=None):
             db.execute("INSERT INTO work_state VALUES('published_shift_plan',?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",(dumps(published),))
             if gated:db.execute("UPDATE plan_approvals SET status='Yayınlandı' WHERE id=?",(approval_ticket,))
             from ortak.talep_simulasyonu import finalize
-            finalize(db,rows,start,end,(state.get('profile') or {}).get('username'))
+            finalize(db,rows,start,end,(state.get('profile') or {}).get('username'),result['staff'])
             if result.get('breaks'):
                 db.execute('CREATE TABLE IF NOT EXISTS planned_breaks(id TEXT PRIMARY KEY,publication_id TEXT,payload TEXT)')
                 for i,r in enumerate(result['breaks']):
@@ -97,7 +97,7 @@ def publish_plan(state,result,approval_ticket=None):
         state['published_shift_plan']=[r for r in previous if not start<=str(r.get('date'))<=end or str(r['employee_id']) not in included]+rows
         state['publication_batches']=state.get('publication_batches',[])+[dict(payload,status='active')]
         from ortak.talep_simulasyonu import finalize_in_memory
-        finalize_in_memory(state,rows,start,end,(state.get('profile') or {}).get('username'))
+        finalize_in_memory(state,rows,start,end,(state.get('profile') or {}).get('username'),result['staff'])
     if approval_ticket:
         # Publication rows were already committed under BEGIN IMMEDIATE.
         # Do not write that snapshot back over a second concurrent publication.

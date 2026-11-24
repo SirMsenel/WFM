@@ -109,7 +109,16 @@ def approval_is_current(state, item, db):
             current[row['key']] = loads(row['payload'])
     current['trk_requests'] = [loads(row[0]) for row in db.execute('SELECT payload FROM requests ORDER BY id')]
     if item.get('signature_version') == 2:
-        return approval_signature(current, languages, item['result']) == item['source_signature']
+        if approval_signature(current,languages,item['result'])==item['source_signature']:
+            return True
+        # A pending request is reviewed by the live guard. Only its pending
+        # state can be disregarded here; simulated or applied changes invalidate a draft.
+        from ortak.talep_servisi import is_terminal
+        def pending(row):return not is_terminal(row) and row.get('queue')!='SIMULATION'
+        archived=item.get('context',{}).get('trk_requests',[])
+        current['trk_requests']=([r for r in current['trk_requests'] if not pending(r)]
+                                 +[r for r in archived if pending(r)])
+        return approval_signature(current,languages,item['result'])==item['source_signature']
     if 'source_signature' in item:
         legacy_languages = item.get('source_signature_languages')
         if source_signature(current, legacy_languages) == item['source_signature']:
@@ -142,6 +151,8 @@ def submit(state,result,planning_languages=None):
     approval_result=publication_scope(result,scoped.get('planning_languages'))
     from ortak.statu_haklari import assert_complete
     assert_complete(state,approval_result)
+    from ortak.donem_kilitleri import assert_can_plan
+    assert_can_plan(dict(scoped,plan_ctx=approval_result['period']),approval_result['staff'])
     scoped_fingerprint=fingerprint(scoped)
     if planning_languages is None and state.get('planning_result_fingerprint')!=scoped_fingerprint:raise ValueError('Taslak değişti; yeniden kontrol edin.')
     from ortak.planlama_gorunumu import blocking_issues
@@ -163,6 +174,9 @@ def submit(state,result,planning_languages=None):
     baseline=dict(state.get('workspace_baseline',{}))
     with connect(path) as db:
         db.execute('BEGIN IMMEDIATE')
+        from ortak.donem_kilitleri import assert_transaction_can_plan
+        scope={lang:lang in languages for lang in ('tr','en','ar')}
+        assert_transaction_can_plan(db,state,result['period'],result['staff'],scope)
         for row in db.execute("SELECT payload FROM plan_approvals WHERE status='Bekliyor'"):
             pending=loads(row[0]);old=pending['result'];new=item['result']
             if old['period']['start']<=new['period']['end'] and new['period']['start']<=old['period']['end']:
@@ -206,11 +220,15 @@ def vote(state,ident,approve=True,reason=''):
             db.execute("UPDATE plan_approvals SET status='Reddedildi' WHERE id=?",(ident,));append_audit(db,'Plan yayını reddedildi',profile,{'id':ident,'reason':reason});return False
         if not approval_is_current(state,item,db):
             raise ValueError('Taslak güncel değil. Kaynaklar değişti; bu taslağı reddedip güncel planı yeniden oluşturun.')
-        if actor in {v['actor'] for v in item['votes']} or (item.get('manager') or {}).get('actor')==actor:raise ValueError('Aynı gerçek kullanıcı ikinci onayı veremez; hesap görünümü değiştirmek bağımsız onay sayılmaz.')
-        entry={'actor':actor,'as':profile['username'],'name':profile.get('full_name') or profile['username'],'role':role,'at':now()}
-        if role=='wfm':item['votes'].append(entry)
-        else:item['manager']=entry
-        db.execute('UPDATE plan_approvals SET payload=? WHERE id=?',(dumps(item),ident));append_audit(db,'Plan yayın onayı',profile,{'id':ident,**entry})
+        from ortak.donem_kilitleri import assert_transaction_can_plan
+        scope={lang:lang in approval_languages(item) for lang in ('tr','en','ar')}
+        assert_transaction_can_plan(db,state,item['result']['period'],item['result']['staff'],scope)
+        if not ready(item):
+            if actor in {v['actor'] for v in item['votes']} or (item.get('manager') or {}).get('actor')==actor:raise ValueError('Aynı gerçek kullanıcı ikinci onayı veremez; hesap görünümü değiştirmek bağımsız onay sayılmaz.')
+            entry={'actor':actor,'as':profile['username'],'name':profile.get('full_name') or profile['username'],'role':role,'at':now()}
+            if role=='wfm':item['votes'].append(entry)
+            else:item['manager']=entry
+            db.execute('UPDATE plan_approvals SET payload=? WHERE id=?',(dumps(item),ident));append_audit(db,'Plan yayın onayı',profile,{'id':ident,**entry})
     if ready(item):
         check=dict(state)
         with connect(path) as db:
@@ -220,6 +238,8 @@ def vote(state,ident,approve=True,reason=''):
         for key in ('plan_ctx','planning_languages','planning_accept_hard','planning_accept_soft'):
             if key in item['context']:
                 check[key] = item['context'][key]
+        check['plan_ctx'] = item['result']['period']
+        check['planning_languages'] = {lang:lang in approval_languages(item) for lang in ('tr','en','ar')}
         check['planning_result_fingerprint'] = item['fingerprint']
         from ortak.yayin_servisi import publish_plan
         publish_plan(check,item['result'],approval_ticket=ident)

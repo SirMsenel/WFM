@@ -65,7 +65,11 @@ class PublicationFlowTests(Base):
  def test_pending_requests_can_be_bypassed_by_planning(self):
   from ortak.talep_servisi import create_request
   from ortak.donem_kilitleri import planning_problem,assert_can_plan
-  self.s['profile']={'position':'agent','username':'u1','employee_id':'1','team_lead':'Lead'};create_request(self.s,{'type':'Yıllık İzin Talebi','start_date':str(DAY)});self.planner('p1');self.assertEqual(planning_problem(self.s)['kind'],'requests');self.s['planning_bypass']={str(DAY)+'|'+str(DAY):{'actor':'p1','reason':'Sonra değerlendirilecek'}};save_keys(self.s);assert_can_plan(self.s)
+  self.s['profile']={'position':'agent','username':'u1','employee_id':'1','team_lead':'Lead'};create_request(self.s,{'type':'Yıllık İzin Talebi','start_date':str(DAY)});self.planner('p1');self.assertEqual(planning_problem(self.s)['kind'],'requests');
+  from ortak.donem_kilitleri import record_bypass
+  record_bypass(self.s,self.s['plan_ctx'],planning_problem(self.s),'Sonra değerlendirilecek');assert_can_plan(self.s)
+  self.s['profile']={'position':'agent','username':'u1','employee_id':'1','team_lead':'Lead'};create_request(self.s,{'type':'Mazeret İzni Talebi','start_date':str(DAY)})
+  with self.assertRaisesRegex(ValueError,'bekleyen talepler'):assert_can_plan(self.s)
 
 class StatusTests(Base):
  def setup_status(self,days=1):
